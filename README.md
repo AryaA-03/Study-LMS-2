@@ -2,6 +2,8 @@
 
 A lightweight, local-first personal LMS and exam-prep web application built for college students preparing for high-stakes exams. Designed for **macOS Apple Silicon (M-series, arm64)** with cross-platform Python compatibility, pure SQLite + FTS5 full-text search, and **zero video downloads** (streamed directly via YouTube IFrame Player API).
 
+> 📖 **Comprehensive Documentation**: For full technical and non-technical details, system architecture, database ER diagrams, mathematical formulas, and directory breakdowns, see [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md).
+
 ---
 
 ## 🌟 Key Capabilities
