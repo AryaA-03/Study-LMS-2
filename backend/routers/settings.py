@@ -4,8 +4,10 @@ import os
 import shutil
 import sqlite3
 from pathlib import Path
+from datetime import datetime
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from backend.database import get_db
 from backend.config import DATA_DIR, DB_PATH, TIMEZONE_STR, ENV_VARS, update_env_file
 from backend.models.schemas import SystemSettingsResponse, UpdateSettingsRequest
@@ -109,3 +111,32 @@ def update_api_keys(keys: Dict[str, str]):
     if filtered_updates:
         update_env_file(filtered_updates)
     return {"success": True, "message": "API keys updated securely in .env"}
+
+
+@router.get("/backup")
+def download_sqlite_backup():
+    """One-click download of the raw SQLite database for offline backup and portability."""
+    if not DB_PATH.exists():
+        raise HTTPException(status_code=404, detail="Database file not found")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return FileResponse(
+        path=str(DB_PATH),
+        filename=f"learn_lms_backup_{ts}.db",
+        media_type="application/vnd.sqlite3",
+    )
+
+
+@router.post("/vacuum")
+def vacuum_database(db: sqlite3.Connection = Depends(get_db)):
+    """Runs SQLite VACUUM to reclaim free space on disk."""
+    try:
+        db.execute("VACUUM;")
+        db_size = DB_PATH.stat().st_size if DB_PATH.exists() else 0
+        return {
+            "success": True,
+            "message": "Database vacuumed successfully.",
+            "db_size_bytes": db_size,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"VACUUM failed: {str(e)}")
+

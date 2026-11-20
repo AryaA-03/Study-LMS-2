@@ -479,6 +479,47 @@
         }
       }
     },
+    "/api/courses/{course_id}/export": {
+      "get": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Export Course Bundle",
+        "description": "Exports full course study bundle (metadata, lessons, notes, flashcards, quizzes) as JSON.",
+        "operationId": "export_course_bundle_api_courses__course_id__export_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/courses/{course_id}/schedule/generate": {
       "post": {
         "tags": [
@@ -896,6 +937,46 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/backup": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Download Sqlite Backup",
+        "description": "One-click download of the raw SQLite database for offline backup and portability.",
+        "operationId": "download_sqlite_backup_api_settings_backup_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/vacuum": {
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Vacuum Database",
+        "description": "Runs SQLite VACUUM to reclaim free space on disk.",
+        "operationId": "vacuum_database_api_settings_vacuum_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           }

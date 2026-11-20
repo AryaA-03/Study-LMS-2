@@ -231,6 +231,21 @@ const inputCardFront = document.getElementById('input-card-front');
 const inputCardBack = document.getElementById('input-card-back');
 const inputCardQuote = document.getElementById('input-card-quote');
 
+// Pyodide Web Worker & Storage Guard Elements
+const tabPyodideScratchpad = document.getElementById('tab-pyodide-scratchpad');
+const panePyodideScratchpad = document.getElementById('pane-pyodide-scratchpad');
+const pyodideStatusPill = document.getElementById('pyodide-status-pill');
+const pyodidePresets = document.getElementById('pyodide-presets');
+const btnRunPyodide = document.getElementById('btn-run-pyodide');
+const btnClearCode = document.getElementById('btn-clear-code');
+const pyodideCodeInput = document.getElementById('pyodide-code-input');
+const pyodideOutput = document.getElementById('pyodide-output');
+const pyodideExecTime = document.getElementById('pyodide-exec-time');
+
+const btnVacuumDb = document.getElementById('btn-vacuum-db');
+const btnDownloadDb = document.getElementById('btn-download-db');
+const btnExportBundle = document.getElementById('btn-export-bundle');
+
 // --- YouTube IFrame API Initialization ---
 window.onYouTubeIframeAPIReady = function() {
   Logger.player('API Ready', 'Initializing YouTube IFrame API instance');
@@ -410,6 +425,17 @@ function setupEventListeners() {
 
   // Global Keyboard Shortcuts
   document.addEventListener('keydown', handleFlashcardKeydown);
+
+  // Pyodide Web Worker Listeners
+  tabPyodideScratchpad.addEventListener('click', () => switchNotesTab('pyodide'));
+  btnRunPyodide.addEventListener('click', runPythonCode);
+  btnClearCode.addEventListener('click', () => { pyodideCodeInput.value = ''; pyodideOutput.textContent = ''; });
+  pyodidePresets.addEventListener('change', handlePyodidePresetChange);
+
+  // Storage Vacuum, Backup & Export
+  btnVacuumDb.addEventListener('click', handleVacuumDb);
+  btnDownloadDb.addEventListener('click', handleDownloadDbBackup);
+  btnExportBundle.addEventListener('click', handleExportCourseBundle);
 }
 
 // --- Layout Collapsing ---
@@ -1175,12 +1201,15 @@ function switchNotesTab(tab) {
   tabQuizMastery.classList.add('text-slate-400');
   tabFlashcardsFsrs.classList.remove('bg-surface-800', 'text-white');
   tabFlashcardsFsrs.classList.add('text-slate-400');
+  tabPyodideScratchpad.classList.remove('bg-surface-800', 'text-white');
+  tabPyodideScratchpad.classList.add('text-slate-400');
 
   paneGroundedNotes.classList.add('hidden');
   panePersonalNotes.classList.add('hidden');
   paneQaNotebook.classList.add('hidden');
   paneQuizMastery.classList.add('hidden');
   paneFlashcardsFsrs.classList.add('hidden');
+  panePyodideScratchpad.classList.add('hidden');
 
   if (tab === 'grounded') {
     tabGroundedNotes.classList.add('bg-surface-800', 'text-white');
@@ -1209,6 +1238,11 @@ function switchNotesTab(tab) {
     tabFlashcardsFsrs.classList.remove('text-slate-400');
     paneFlashcardsFsrs.classList.remove('hidden');
     loadFlashcards();
+  } else if (tab === 'pyodide') {
+    tabPyodideScratchpad.classList.add('bg-surface-800', 'text-white');
+    tabPyodideScratchpad.classList.remove('text-slate-400');
+    panePyodideScratchpad.classList.remove('hidden');
+    initPyodide();
   }
 }
 
@@ -2290,6 +2324,183 @@ async function handleSubmitMockExam() {
     alert('Submission failed: ' + err.message);
   }
 }
+
+// ==========================================
+// PYODIDE IN-BROWSER WEB WORKER (M5)
+// ==========================================
+let pyodideWorker = null;
+let isWorkerReady = false;
+
+function initPyodide() {
+  if (pyodideWorker) return;
+  pyodideStatusPill.textContent = 'Initializing Pyodide...';
+  pyodideWorker = new Worker('/static/js/pyodide_worker.js');
+  pyodideWorker.postMessage({ type: 'init' });
+
+  pyodideWorker.onmessage = function(e) {
+    const msg = e.data;
+    if (msg.type === 'ready') {
+      isWorkerReady = true;
+      pyodideStatusPill.textContent = 'Worker: Ready';
+      pyodideStatusPill.className = 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800';
+      Logger.api('WORKER', 'pyodide_worker.js', 200, 0, 'Pyodide ready in client thread');
+    } else if (msg.type === 'result') {
+      pyodideExecTime.textContent = `${msg.executionMs} ms`;
+      btnRunPyodide.disabled = false;
+      btnRunPyodide.innerHTML = `
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span>Run Python</span>
+      `;
+
+      let output = '';
+      if (msg.stdout) output += msg.stdout + '\n';
+      if (msg.result) output += `=> ${msg.result}\n`;
+      if (msg.stderr) output += `[stderr]: ${msg.stderr}\n`;
+      if (!msg.success && msg.error) {
+        output += `[Error]: ${msg.error}\n`;
+      }
+      pyodideOutput.textContent = output.trim() || '[Execution finished with no output]';
+      if (!msg.success) {
+        pyodideOutput.className = 'flex-1 overflow-y-auto text-red-400 whitespace-pre-wrap';
+      } else {
+        pyodideOutput.className = 'flex-1 overflow-y-auto text-slate-200 whitespace-pre-wrap';
+      }
+    } else if (msg.type === 'error') {
+      pyodideStatusPill.textContent = 'Worker: Error';
+      pyodideStatusPill.className = 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800';
+      pyodideOutput.textContent = msg.error;
+    }
+  };
+}
+
+function runPythonCode() {
+  const code = pyodideCodeInput.value;
+  if (!code.trim()) return;
+
+  if (!pyodideWorker) {
+    initPyodide();
+  }
+
+  btnRunPyodide.disabled = true;
+  btnRunPyodide.innerHTML = `
+    <div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+    <span>Executing...</span>
+  `;
+  pyodideOutput.textContent = 'Executing locally inside in-browser Web Worker...';
+  pyodideWorker.postMessage({ type: 'run', code, id: Date.now() });
+}
+
+function handlePyodidePresetChange(e) {
+  const val = e.target.value;
+  if (val === 'dfa') {
+    pyodideCodeInput.value = `# DFA Simulator in Python
+class DFA:
+    def __init__(self):
+        self.state = 'q0'
+    def transition(self, char):
+        if self.state == 'q0':
+            self.state = 'q1' if char == '0' else 'q0'
+        elif self.state == 'q1':
+            self.state = 'q2' if char == '1' else 'q1'
+        elif self.state == 'q2':
+            self.state = 'q1' if char == '0' else 'q0'
+    def accepts(self, s):
+        self.state = 'q0'
+        for c in s:
+            self.transition(c)
+        return self.state == 'q2'
+
+dfa = DFA()
+for s in ['101', '0101', '100', '11101', '00']:
+    print(f"String '{s}' accepted? {dfa.accepts(s)}")
+`;
+  } else if (val === 'math') {
+    pyodideCodeInput.value = `# Exam Formula Calculator
+import math
+
+# Pacing calculation
+target_days = 20
+total_hours = 18.5
+speed = 1.25
+
+effective_hours = total_hours / speed
+daily_hours = effective_hours / target_days
+daily_mins = daily_hours * 60
+
+print(f"Total raw: {total_hours}h")
+print(f"At {speed}x speed: {effective_hours:.2f}h")
+print(f"Required study time per day: {daily_mins:.1f} minutes")
+`;
+  } else if (val === 'regex') {
+    pyodideCodeInput.value = `# Regex Pattern Tester
+import re
+
+pattern = r'^(0|1(01*0)*1)*$'
+test_cases = ['0', '11', '1001', '10101', '10']
+
+for tc in test_cases:
+    match = bool(re.match(pattern, tc))
+    print(f"Binary string '{tc}' matches divisible-by-3? {match}")
+`;
+  }
+}
+
+// ==========================================
+// STORAGE VACUUM, BACKUP & EXPORT (M5)
+// ==========================================
+async function handleVacuumDb() {
+  btnVacuumDb.disabled = true;
+  const t0 = performance.now();
+  try {
+    const res = await fetch('/api/settings/vacuum', { method: 'POST' });
+    const data = await res.json();
+    Logger.api('POST', '/api/settings/vacuum', res.status, Math.round(performance.now() - t0), data);
+    alert(data.message || 'SQLite database vacuumed successfully.');
+    loadSettingsData();
+  } catch (err) {
+    Logger.error('Vacuum failed', err);
+    alert('Vacuum failed: ' + err.message);
+  } finally {
+    btnVacuumDb.disabled = false;
+  }
+}
+
+function handleDownloadDbBackup() {
+  Logger.api('GET', '/api/settings/backup', 200, 0, 'Downloading SQLite backup');
+  window.open('/api/settings/backup', '_blank');
+}
+
+async function handleExportCourseBundle() {
+  if (!currentCourseId) {
+    alert('Select a course first to export its study bundle.');
+    return;
+  }
+  btnExportBundle.disabled = true;
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/export`);
+    if (!res.ok) throw new Error('Export failed with status ' + res.status);
+    const bundle = await res.json();
+    Logger.api('GET', `/api/courses/${currentCourseId}/export`, res.status, Math.round(performance.now() - t0), bundle);
+
+    // Trigger download of JSON bundle
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${bundle.course.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_study_bundle.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    Logger.error('Export failed', err);
+    alert('Export failed: ' + err.message);
+  } finally {
+    btnExportBundle.disabled = false;
+  }
+}
+
 
 
 

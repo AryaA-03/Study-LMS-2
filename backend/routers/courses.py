@@ -517,3 +517,35 @@ def get_source_by_id(source_id: str, db: sqlite3.Connection) -> SourceResponse:
         is_approved=bool(r["is_approved"]),
         created_at=str(r["created_at"]),
     )
+
+
+@router.get("/{course_id}/export")
+def export_course_bundle(
+    course_id: str,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Exports full course study bundle (metadata, lessons, notes, flashcards, quizzes) as JSON."""
+    course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    sources = [dict(r) for r in db.execute("SELECT * FROM sources WHERE course_id = ?;", (course_id,)).fetchall()]
+    lessons = [dict(r) for r in db.execute("SELECT * FROM lessons WHERE course_id = ?;", (course_id,)).fetchall()]
+    allocations = [dict(r) for r in db.execute("SELECT * FROM schedule_allocations WHERE course_id = ?;", (course_id,)).fetchall()]
+    notes = [dict(r) for r in db.execute("SELECT * FROM notes WHERE course_id = ?;", (course_id,)).fetchall()]
+    flashcards = [dict(r) for r in db.execute("SELECT * FROM flashcards WHERE course_id = ?;", (course_id,)).fetchall()]
+    quizzes = [dict(r) for r in db.execute("SELECT * FROM quizzes WHERE course_id = ?;", (course_id,)).fetchall()]
+
+    bundle = {
+        "version": "1.0",
+        "exported_at": default_clock().isoformat(),
+        "course": dict(course),
+        "sources": sources,
+        "lessons": lessons,
+        "schedule_allocations": allocations,
+        "notes": notes,
+        "flashcards": flashcards,
+        "quizzes": quizzes,
+    }
+    return bundle
+
