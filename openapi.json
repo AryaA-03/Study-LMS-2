@@ -110,6 +110,56 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Update Course",
+        "operationId": "update_course_api_courses__course_id__patch",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourseUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/courses/{course_id}/discover": {
@@ -386,6 +436,67 @@
         }
       }
     },
+    "/api/courses/{course_id}/lessons/{lesson_id}": {
+      "patch": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Update Lesson",
+        "operationId": "update_lesson_api_courses__course_id__lessons__lesson_id__patch",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LessonUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LessonResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/courses/{course_id}/sources": {
       "get": {
         "tags": [
@@ -487,6 +598,139 @@
         "summary": "Export Course Bundle",
         "description": "Exports full course study bundle (metadata, lessons, notes, flashcards, quizzes) as JSON.",
         "operationId": "export_course_bundle_api_courses__course_id__export_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/export-markdown": {
+      "get": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Export Course Markdown",
+        "description": "Exports complete Subject Markdown Bundle containing all formatted notes, citations, and study state.",
+        "operationId": "export_course_markdown_api_courses__course_id__export_markdown_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/sources/manual-transcript": {
+      "post": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Import Manual Transcript",
+        "description": "Fallback manual transcript paste or local file import when YouTube URL is unavailable.",
+        "operationId": "import_manual_transcript_api_courses__course_id__sources_manual_transcript_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualTranscriptRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/sources/discover-web": {
+      "get": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Discover Web Candidates",
+        "description": "Suggests curated web documentation and guides for the course topic with an approval step.",
+        "operationId": "discover_web_candidates_api_courses__course_id__sources_discover_web_get",
         "parameters": [
           {
             "name": "course_id",
@@ -706,6 +950,67 @@
         }
       }
     },
+    "/api/courses/{course_id}/schedule/allocations/{allocation_id}/reschedule": {
+      "post": {
+        "tags": [
+          "schedule"
+        ],
+        "summary": "Reschedule Allocation",
+        "operationId": "reschedule_allocation_api_courses__course_id__schedule_allocations__allocation_id__reschedule_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "allocation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Allocation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocationRescheduleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/courses/{course_id}/schedule/replan": {
       "post": {
         "tags": [
@@ -859,6 +1164,47 @@
         }
       }
     },
+    "/api/settings/test-connection": {
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Test Connection",
+        "operationId": "test_connection_api_settings_test_connection_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestConnectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestConnectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/settings/update-ytdlp": {
       "post": {
         "tags": [
@@ -905,7 +1251,7 @@
           "settings"
         ],
         "summary": "Update Api Keys",
-        "description": "Safely writes API keys into .env only (never in SQLite).",
+        "description": "Safely writes API keys and LLM model presets into .env only (never in SQLite).",
         "operationId": "update_api_keys_api_settings_keys_post",
         "requestBody": {
           "content": {
@@ -1140,6 +1486,58 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "notes"
+        ],
+        "summary": "Update Full Notes",
+        "operationId": "update_full_notes_api_lessons__lesson_id__notes_put",
+        "parameters": [
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Payload"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2154,6 +2552,65 @@
       }
     },
     "/api/courses/{course_id}/flashcards/{card_id}": {
+      "put": {
+        "tags": [
+          "flashcards"
+        ],
+        "summary": "Update Flashcard",
+        "operationId": "update_flashcard_api_courses__course_id__flashcards__card_id__put",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "card_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Card Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlashcardUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlashcardResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": [
           "flashcards"
@@ -2240,6 +2697,20 @@
   },
   "components": {
     "schemas": {
+      "AllocationRescheduleRequest": {
+        "properties": {
+          "target_date": {
+            "type": "string",
+            "title": "Target Date",
+            "description": "Target date for this allocation (YYYY-MM-DD)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_date"
+        ],
+        "title": "AllocationRescheduleRequest"
+      },
       "AllocationResponse": {
         "properties": {
           "id": {
@@ -2621,6 +3092,98 @@
         ],
         "title": "CourseResponse"
       },
+      "CourseUpdateRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          },
+          "minutes_per_day": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 720.0,
+                "minimum": 10.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes Per Day"
+          },
+          "playback_speed": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 3.0,
+                "minimum": 0.5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Playback Speed"
+          },
+          "rest_days": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rest Days"
+          },
+          "revision_buffer_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 14.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Buffer Days"
+          },
+          "schedule_strategy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Strategy"
+          }
+        },
+        "type": "object",
+        "title": "CourseUpdateRequest"
+      },
       "DayScheduleResponse": {
         "properties": {
           "date": {
@@ -2936,6 +3499,34 @@
         ],
         "title": "FlashcardReviewResponse"
       },
+      "FlashcardUpdateRequest": {
+        "properties": {
+          "front": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Front"
+          },
+          "back": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Back"
+          }
+        },
+        "type": "object",
+        "title": "FlashcardUpdateRequest"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3101,6 +3692,80 @@
           "order_index"
         ],
         "title": "LessonResponse"
+      },
+      "LessonUpdateRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          }
+        },
+        "type": "object",
+        "title": "LessonUpdateRequest"
+      },
+      "ManualTranscriptRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "transcript_text": {
+            "type": "string",
+            "title": "Transcript Text"
+          },
+          "raw_duration_sec": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Duration Sec",
+            "default": 1200
+          },
+          "priority": {
+            "type": "string",
+            "title": "Priority",
+            "default": "core"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "transcript_text"
+        ],
+        "title": "ManualTranscriptRequest"
       },
       "NoteResponse": {
         "properties": {
@@ -3647,6 +4312,16 @@
             "type": "number",
             "title": "Effective Daily Target Minutes",
             "default": 0.0
+          },
+          "minutes_per_day": {
+            "type": "integer",
+            "title": "Minutes Per Day",
+            "default": 90
+          },
+          "playback_speed": {
+            "type": "number",
+            "title": "Playback Speed",
+            "default": 1.25
           }
         },
         "type": "object",
@@ -3861,6 +4536,63 @@
           "has_openrouter_key": {
             "type": "boolean",
             "title": "Has Openrouter Key"
+          },
+          "has_ollama": {
+            "type": "boolean",
+            "title": "Has Ollama",
+            "default": false
+          },
+          "gemini_model": {
+            "type": "string",
+            "title": "Gemini Model",
+            "default": "gemini-2.5-flash"
+          },
+          "groq_model": {
+            "type": "string",
+            "title": "Groq Model",
+            "default": "llama-3.3-70b-versatile"
+          },
+          "openrouter_model": {
+            "type": "string",
+            "title": "Openrouter Model",
+            "default": "google/gemini-2.5-flash"
+          },
+          "openrouter_base_url": {
+            "type": "string",
+            "title": "Openrouter Base Url",
+            "default": "https://openrouter.ai/api/v1"
+          },
+          "ollama_base_url": {
+            "type": "string",
+            "title": "Ollama Base Url",
+            "default": "http://localhost:11434"
+          },
+          "ollama_model": {
+            "type": "string",
+            "title": "Ollama Model",
+            "default": "llama3.2"
+          },
+          "default_minutes_per_day": {
+            "type": "integer",
+            "title": "Default Minutes Per Day",
+            "default": 90
+          },
+          "default_playback_speed": {
+            "type": "number",
+            "title": "Default Playback Speed",
+            "default": 1.25
+          },
+          "default_rest_days": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Default Rest Days"
+          },
+          "default_revision_buffer_days": {
+            "type": "integer",
+            "title": "Default Revision Buffer Days",
+            "default": 2
           }
         },
         "type": "object",
@@ -3877,6 +4609,87 @@
         ],
         "title": "SystemSettingsResponse"
       },
+      "TestConnectionRequest": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "description": "'gemini', 'groq', 'openrouter', or 'ollama'"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider"
+        ],
+        "title": "TestConnectionRequest"
+      },
+      "TestConnectionResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "guide": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guide"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "provider",
+          "message"
+        ],
+        "title": "TestConnectionResponse"
+      },
       "UpdateSettingsRequest": {
         "properties": {
           "cookies_browser": {
@@ -3890,6 +4703,125 @@
             ],
             "title": "Cookies Browser",
             "description": "Browser name for --cookies-from-browser (e.g. 'chrome', 'firefox', 'safari', 'brave')"
+          },
+          "minutes_per_day": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 720.0,
+                "minimum": 10.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes Per Day"
+          },
+          "playback_speed": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 3.0,
+                "minimum": 0.5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Playback Speed"
+          },
+          "rest_days": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rest Days"
+          },
+          "revision_buffer_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 14.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Buffer Days"
+          },
+          "gemini_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gemini Model"
+          },
+          "groq_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groq Model"
+          },
+          "openrouter_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openrouter Model"
+          },
+          "openrouter_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openrouter Base Url"
+          },
+          "ollama_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ollama Base Url"
+          },
+          "ollama_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ollama Model"
           }
         },
         "type": "object",

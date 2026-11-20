@@ -370,3 +370,102 @@ def test_ui_window_inspection_and_console_logger(ui_test_server):
         assert theme_after in ["light", "dark"]
 
         browser.close()
+
+def test_ui_edit_course_modal_and_replan(ui_test_server):
+    """Verifies that user can open Edit Course modal, update course settings, and trigger instant replan."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        page.goto(ui_test_server)
+        page.wait_for_selector("#btn-edit-course")
+
+        # 1. Open Edit Course Modal
+        page.click("#btn-edit-course")
+        page.wait_for_selector("#edit-course-modal:not(.hidden)")
+
+        # 2. Verify pre-populated title
+        title_val = page.input_value("#edit-course-title")
+        assert "Theory of Computation" in title_val
+
+        # 3. Change title and playback speed
+        page.fill("#edit-course-title", "TOC Exam Masterclass 2026")
+        page.select_option("#edit-course-speed", "1.5")
+
+        # 4. Save and verify replan
+        page.click("#btn-submit-edit-course")
+        page.wait_for_selector("#edit-course-modal", state="hidden", timeout=5000)
+        page.wait_for_timeout(1000)
+
+        # 5. Check updated speed in KPI bar
+        spd_text = page.inner_text("#kpi-speed-display")
+        assert "1.5x" in spd_text
+
+        browser.close()
+
+def test_ui_edit_lesson_and_priority_toggle(ui_test_server):
+    """Verifies inline priority toggle and full lesson editor modal."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        page.goto(ui_test_server)
+        page.wait_for_selector(".allocation-card")
+
+        # 1. Test inline priority toggle on active lesson bar
+        btn_priority = page.locator("#btn-toggle-active-priority")
+        initial_priority = page.inner_text("#active-lesson-priority").strip()
+        btn_priority.click()
+        page.wait_for_timeout(1000)
+        new_priority = page.inner_text("#active-lesson-priority").strip()
+        assert initial_priority != new_priority
+
+        # 2. Click pencil edit button on active lesson
+        page.click("#btn-edit-active-title")
+        page.wait_for_selector("#edit-lesson-modal:not(.hidden)")
+
+        # 3. Change lesson title in modal
+        page.fill("#edit-lesson-title-input", "Automata Theory Foundation & Proofs")
+        page.click("#btn-submit-edit-lesson")
+        page.wait_for_selector("#edit-lesson-modal", state="hidden", timeout=5000)
+        page.wait_for_timeout(1000)
+
+        # 4. Verify updated title appears in active lesson bar
+        updated_title = page.inner_text("#active-lesson-title")
+        assert "Automata Theory Foundation" in updated_title
+
+        browser.close()
+
+def test_ui_personal_notes_toolbar_and_save(ui_test_server):
+    """Verifies Markdown editor toolbar, character counting, and manual save in Personal Notes."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        page.goto(ui_test_server)
+        page.wait_for_selector("#tab-personal-notes")
+
+        # 1. Switch to Personal Notes tab
+        page.click("#tab-personal-notes")
+        page.wait_for_selector("#pane-personal-notes:not(.hidden)")
+
+        # 2. Click bold format button
+        page.click("button[data-format='bold']")
+        page.wait_for_timeout(200)
+
+        # 3. Type text into personal notes textarea
+        page.fill("#input-personal-notes", "## Key Exam Formulas\n- DFA M = (Q, Sigma, delta, q0, F)\n- NFA allows epsilon transitions")
+        page.wait_for_timeout(300)
+
+        # 4. Verify word counter
+        word_count_text = page.inner_text("#personal-notes-word-count")
+        assert "word" in word_count_text
+
+        # 5. Click Save Notes button
+        page.click("#btn-save-personal-notes")
+        page.wait_for_timeout(1000)
+
+        save_status = page.inner_text("#personal-note-save-status")
+        assert "Saved" in save_status or "✓" in save_status
+
+        browser.close()

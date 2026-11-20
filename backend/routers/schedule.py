@@ -12,6 +12,7 @@ from backend.models.schemas import (
     ScheduleResponse,
     DayScheduleResponse,
     AllocationResponse,
+    AllocationRescheduleRequest,
     ReplanRequest,
     ReplanResponse,
     DiffSummary,
@@ -246,6 +247,8 @@ def get_course_schedule(course_id: str, db: sqlite3.Connection = Depends(get_db)
         revision_buffer_days=rev_buffer,
         schedule_strategy=strategy,
         effective_daily_target_minutes=daily_target,
+        minutes_per_day=course["minutes_per_day"],
+        playback_speed=course["playback_speed"],
     )
 
 @router.post("/allocations/{allocation_id}/toggle", response_model=AllocationResponse)
@@ -330,6 +333,32 @@ def skip_allocation(
 
     replan_req = ReplanRequest(mode="normal")
     replan_schedule(course_id, replan_req, db)
+    return get_course_schedule(course_id, db)
+
+@router.post("/allocations/{allocation_id}/reschedule", response_model=ScheduleResponse)
+def reschedule_allocation(
+    course_id: str,
+    allocation_id: str,
+    req: AllocationRescheduleRequest,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    target_alloc = db.execute(
+        "SELECT * FROM schedule_allocations WHERE id = ? AND course_id = ?;",
+        (allocation_id, course_id),
+    ).fetchone()
+    if not target_alloc:
+        raise HTTPException(status_code=404, detail="Allocation not found")
+
+    logger.info(f"[Schedule] Moving allocation {allocation_id} to {req.target_date}")
+    db.execute(
+        "UPDATE schedule_allocations SET scheduled_date = ? WHERE id = ? AND course_id = ?;",
+        (req.target_date, allocation_id, course_id),
+    )
+    db.commit()
     return get_course_schedule(course_id, db)
 
 @router.post("/replan", response_model=ReplanResponse)

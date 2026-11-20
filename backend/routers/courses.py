@@ -5,7 +5,7 @@ import json
 import sqlite3
 import logging
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from backend.database import get_db
 from backend.models.schemas import (
     CourseCreateRequest,
@@ -15,8 +15,10 @@ from backend.models.schemas import (
     SourceApprovalRequest,
     SourceResponse,
     LessonResponse,
+    LessonUpdateRequest,
     CandidateDiscoveryResponse,
     LessonFilterRequest,
+    ManualTranscriptRequest,
 )
 from backend.services.youtube import (
     discover_candidates,
@@ -74,6 +76,47 @@ def get_course(course_id: str, db: sqlite3.Connection = Depends(get_db)):
     if not row:
         raise HTTPException(status_code=404, detail="Course not found")
     return compute_course_stats(row, db)
+
+@router.patch("/{course_id}", response_model=CourseResponse)
+def update_course(
+    course_id: str,
+    req: CourseUpdateRequest,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    updates = []
+    params = []
+    if req.title is not None:
+        updates.append("title = ?")
+        params.append(req.title)
+    if req.target_date is not None:
+        updates.append("target_date = ?")
+        params.append(req.target_date)
+    if req.minutes_per_day is not None:
+        updates.append("minutes_per_day = ?")
+        params.append(req.minutes_per_day)
+    if req.playback_speed is not None:
+        updates.append("playback_speed = ?")
+        params.append(req.playback_speed)
+    if req.rest_days is not None:
+        updates.append("rest_days = ?")
+        params.append(json.dumps(req.rest_days))
+    if req.revision_buffer_days is not None:
+        updates.append("revision_buffer_days = ?")
+        params.append(req.revision_buffer_days)
+    if req.schedule_strategy is not None:
+        updates.append("schedule_strategy = ?")
+        params.append(req.schedule_strategy)
+
+    if updates:
+        params.append(course_id)
+        db.execute(f"UPDATE courses SET {', '.join(updates)} WHERE id = ?;", params)
+        db.commit()
+
+    return get_course(course_id, db)
 
 def compute_course_stats(course_row: sqlite3.Row, db: sqlite3.Connection) -> CourseResponse:
     cid = course_row["id"]
@@ -228,6 +271,8 @@ def import_source(
 
     try:
         meta = extract_metadata(req.url, cookies_browser=cookies_browser)
+        if not meta or not meta.get("id"):
+            raise ValueError("Could not extract video or playlist information. URL may be unavailable, private, or invalid.")
     except Exception as e:
         logger.error(f"[Courses] Metadata extraction failed for {req.url}: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to fetch metadata from URL: {str(e)}")
@@ -354,6 +399,7 @@ def approve_sources(
     # Handle rejections
     for sid in req.source_ids_to_reject:
         db.execute("DELETE FROM sources WHERE id = ? AND course_id = ?;", (sid, course_id))
+    db.commit()
 
     approved_sources = []
     for sid in req.source_ids_to_approve:
@@ -362,12 +408,14 @@ def approve_sources(
             continue
 
         db.execute("UPDATE sources SET is_approved = 1 WHERE id = ?;", (sid,))
+        db.commit()
 
         existing_lessons = db.execute("SELECT count(*) as c FROM lessons WHERE source_id = ?;", (sid,)).fetchone()
         if existing_lessons["c"] == 0 and s_row["url"]:
             try:
                 meta = extract_metadata(s_row["url"], cookies_browser=cookies_browser)
                 create_lessons_from_meta(course_id, sid, meta, db)
+                db.commit()
             except Exception as e:
                 logger.error(f"[Courses] Fallback placeholder created for {s_row['url']}: {e}")
                 lid = str(uuid.uuid4())
@@ -380,6 +428,7 @@ def approve_sources(
                     """,
                     (lid, course_id, sid, s_row["title"], "", s_row["external_id"], s_row["url"]),
                 )
+                db.commit()
 
         approved_sources.append(get_source_by_id(sid, db))
 
@@ -438,6 +487,60 @@ def toggle_lesson_exclusion(
     logger.info(f"[Courses] Toggled lesson {lesson_id} exclusion: is_excluded={new_val}")
 
     updated = db.execute("SELECT * FROM lessons WHERE id = ?;", (lesson_id,)).fetchone()
+    return LessonResponse(
+        id=updated["id"],
+        course_id=updated["course_id"],
+        source_id=updated["source_id"],
+        title=updated["title"],
+        summary=updated["summary"] or "",
+        video_id=updated["video_id"],
+        video_url=updated["video_url"],
+        start_sec=updated["start_sec"],
+        end_sec=updated["end_sec"],
+        raw_duration_sec=updated["raw_duration_sec"],
+        priority=updated["priority"],
+        order_index=updated["order_index"],
+        chapter_title=updated["chapter_title"],
+        is_tested_out=bool(updated["is_tested_out"]),
+        is_excluded=bool(updated["is_excluded"]),
+    )
+
+@router.patch("/{course_id}/lessons/{lesson_id}", response_model=LessonResponse)
+def update_lesson(
+    course_id: str,
+    lesson_id: str,
+    req: LessonUpdateRequest,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    lesson = db.execute(
+        "SELECT * FROM lessons WHERE id = ? AND course_id = ?;", (lesson_id, course_id)
+    ).fetchone()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    updates = []
+    params = []
+    if req.title is not None:
+        updates.append("title = ?")
+        params.append(req.title)
+    if req.summary is not None:
+        updates.append("summary = ?")
+        params.append(req.summary)
+    if req.priority is not None:
+        updates.append("priority = ?")
+        params.append(req.priority)
+
+    if updates:
+        params.extend([lesson_id, course_id])
+        db.execute(
+            f"UPDATE lessons SET {', '.join(updates)} WHERE id = ? AND course_id = ?;",
+            params,
+        )
+        db.commit()
+
+    updated = db.execute(
+        "SELECT * FROM lessons WHERE id = ? AND course_id = ?;", (lesson_id, course_id)
+    ).fetchone()
     return LessonResponse(
         id=updated["id"],
         course_id=updated["course_id"],
@@ -548,4 +651,175 @@ def export_course_bundle(
         "quizzes": quizzes,
     }
     return bundle
+
+
+@router.get("/{course_id}/export-markdown")
+def export_course_markdown(
+    course_id: str,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Exports complete Subject Markdown Bundle containing all formatted notes, citations, and study state."""
+    import re
+    course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    lessons = [dict(r) for r in db.execute("SELECT * FROM lessons WHERE course_id = ? ORDER BY order_index ASC;", (course_id,)).fetchall()]
+    notes = {r["lesson_id"]: dict(r) for r in db.execute("SELECT * FROM notes WHERE course_id = ?;", (course_id,)).fetchall()}
+    sources = [dict(r) for r in db.execute("SELECT * FROM sources WHERE course_id = ?;", (course_id,)).fetchall()]
+
+    md_lines = []
+    md_lines.append(f"# {course['title']} • Subject Study Bundle")
+    md_lines.append(f"\n> **Goal**: {course['goal_query']}  ")
+    md_lines.append(f"> **Target Date**: {course['target_date']} | **Pacing**: {course['schedule_strategy']} | **Daily Budget**: {course['minutes_per_day']}m @ {course['playback_speed']}x\n")
+    md_lines.append("## Table of Contents")
+    for i, les in enumerate(lessons, 1):
+        md_lines.append(f"{i}. [{les['title']}](#lesson-{les['id']})")
+
+    md_lines.append("\n---\n")
+    md_lines.append("## Course Sources")
+    for s in sources:
+        md_lines.append(f"- **{s['title']}** ({s['source_type']}) - {s.get('url') or 'Local / Attached'}")
+
+    md_lines.append("\n---\n")
+    md_lines.append("## Detailed Lesson Notes & Citations\n")
+    for i, les in enumerate(lessons, 1):
+        md_lines.append(f"### <a id='lesson-{les['id']}'></a>{i}. {les['title']}")
+        raw_min = round(les['raw_duration_sec'] / 60, 1)
+        md_lines.append(f"- **Duration**: ~{raw_min} min | **Priority**: `{les['priority']}`")
+        if les.get('video_url'):
+            md_lines.append(f"- **Stream Link**: [{les['video_url']}]({les['video_url']})")
+
+        les_note = notes.get(les["id"])
+        if les_note and les_note.get("content_markdown"):
+            md_lines.append("\n#### Grounded Structured Notes & Timestamps")
+            md_lines.append(les_note["content_markdown"])
+        if les_note and les_note.get("personal_notes"):
+            md_lines.append("\n#### Personal Notes")
+            md_lines.append(les_note["personal_notes"])
+        md_lines.append("\n---\n")
+
+    md_content = "\n".join(md_lines)
+    clean_title = re.sub(r"[^a-zA-Z0-9_-]", "_", course['title'])
+    return Response(
+        content=md_content,
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{clean_title}_notes_bundle.md"'}
+    )
+
+
+@router.post("/{course_id}/sources/manual-transcript")
+def import_manual_transcript(
+    course_id: str,
+    req: ManualTranscriptRequest,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Fallback manual transcript paste or local file import when YouTube URL is unavailable."""
+    from datetime import datetime
+    from backend.config import get_now
+    from backend.scheduler.engine import generate_schedule
+
+    course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    source_id = str(uuid.uuid4())
+    title = req.title or "Manual Source Material"
+    db.execute(
+        """
+        INSERT INTO sources (id, course_id, source_type, title, url, metadata_json, is_approved)
+        VALUES (?, ?, 'manual_text', ?, '', ?, 1);
+        """,
+        (source_id, course_id, title, json.dumps({"raw_chars": len(req.transcript_text)})),
+    )
+
+    lesson_id = str(uuid.uuid4())
+    raw_dur = req.raw_duration_sec or max(600, len(req.transcript_text.split()) * 3)
+    db.execute(
+        """
+        INSERT INTO lessons (id, course_id, source_id, title, summary, video_id, video_url, start_sec, end_sec, raw_duration_sec, priority, order_index)
+        VALUES (?, ?, ?, ?, ?, '', '', 0, ?, ?, ?, (SELECT COALESCE(MAX(order_index) + 1, 0) FROM lessons WHERE course_id = ?));
+        """,
+        (lesson_id, course_id, source_id, title, f"Manual Transcript ({len(req.transcript_text)} chars)", raw_dur, raw_dur, req.priority, course_id),
+    )
+
+    # Chunk into FTS5 chunks
+    from backend.services.qa_engine import chunk_text
+    chunks = chunk_text(req.transcript_text, chunk_size=400, overlap=50)
+    for idx, c in enumerate(chunks):
+        cid = str(uuid.uuid4())
+        db.execute(
+            """
+            INSERT INTO chunks (id, course_id, source_id, lesson_id, chunk_index, content, token_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?);
+            """,
+            (cid, course_id, source_id, lesson_id, idx, c, len(c.split())),
+        )
+        db.execute("INSERT INTO chunks_fts (id, course_id, lesson_id, content) VALUES (?, ?, ?, ?);", (cid, course_id, lesson_id, c))
+
+    # Save note
+    note_id = str(uuid.uuid4())
+    db.execute(
+        """
+        INSERT INTO notes (id, course_id, lesson_id, content_markdown, is_generated)
+        VALUES (?, ?, ?, ?, 1);
+        """,
+        (note_id, course_id, lesson_id, f"## {title}\n\n{req.transcript_text[:1200]}...\n\n_Manual Transcript Ingested Successfully._"),
+    )
+
+    # Reflow schedule
+    rows = db.execute("SELECT * FROM lessons WHERE course_id = ? AND is_excluded = 0 ORDER BY order_index ASC;", (course_id,)).fetchall()
+    lessons_list = [dict(r) for r in rows]
+    sched = generate_schedule(
+        course_id=course_id,
+        lessons=lessons_list,
+        start_date=get_now().date(),
+        target_date=datetime.strptime(course["target_date"], "%Y-%m-%d").date(),
+        minutes_per_day=course["minutes_per_day"],
+        playback_speed=course["playback_speed"],
+        rest_days=json.loads(course["rest_days"]),
+        revision_buffer_days=course["revision_buffer_days"],
+        schedule_strategy=course["schedule_strategy"],
+    )
+    db.execute("DELETE FROM schedule_allocations WHERE course_id = ?;", (course_id,))
+    for a in sched["allocations"]:
+        db.execute(
+            """
+            INSERT INTO schedule_allocations (
+                id, course_id, lesson_id, scheduled_date, split_index, split_count,
+                allocated_start_sec, allocated_end_sec, effective_minutes, is_completed, is_skipped
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0);
+            """,
+            (a.id, course_id, a.lesson_id, a.scheduled_date, a.split_index, a.split_count, a.allocated_start_sec, a.allocated_end_sec, a.effective_minutes),
+        )
+    db.commit()
+
+    return {"success": True, "source_id": source_id, "lesson_id": lesson_id, "message": "Manual transcript ingested and schedule regenerated."}
+
+
+@router.get("/{course_id}/sources/discover-web")
+def discover_web_candidates(course_id: str, db: sqlite3.Connection = Depends(get_db)):
+    """Suggests curated web documentation and guides for the course topic with an approval step."""
+    course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    query = f"{course['title']} {course['goal_query'] or ''}".lower()
+
+    if "dbms" in query or "database" in query:
+        candidates = [
+            {"id": "web-dbms-1", "title": "GeeksforGeeks DBMS Complete Guide & Architecture", "url": "https://www.geeksforgeeks.org/introduction-of-dbms-database-management-system-set-1/", "site": "GeeksforGeeks", "summary": "Relational models, ACID properties, ER diagrams, normalization (1NF-BCNF)."},
+            {"id": "web-dbms-2", "title": "Wikipedia: Database Management System Overview", "url": "https://en.wikipedia.org/wiki/Database", "site": "Wikipedia", "summary": "Formal definitions, transaction management, indexing, and SQL standards."},
+            {"id": "web-dbms-3", "title": "PostgreSQL Official Documentation: Concurrency & Transactions", "url": "https://www.postgresql.org/docs/current/mvcc.html", "site": "PostgreSQL", "summary": "Transaction isolation, Multi-Version Concurrency Control (MVCC), and locking."},
+        ]
+    elif "toc" in query or "automata" in query or "computation" in query:
+        candidates = [
+            {"id": "web-toc-1", "title": "GeeksforGeeks Theory of Computation Guide", "url": "https://www.geeksforgeeks.org/theory-of-computation-automata-tutorials/", "site": "GeeksforGeeks", "summary": "DFA, NFA, Regular Expressions, Pumping Lemma, Turing Machines."},
+            {"id": "web-toc-2", "title": "Wikipedia: Deterministic Finite Automaton", "url": "https://en.wikipedia.org/wiki/Deterministic_finite_automaton", "site": "Wikipedia", "summary": "Formal definition 5-tuple (Q, Sigma, delta, q0, F) and minimization."},
+        ]
+    else:
+        candidates = [
+            {"id": "web-gen-1", "title": f"Wikipedia: {course['title']}", "url": f"https://en.wikipedia.org/wiki/{course['title'].replace(' ', '_')}", "site": "Wikipedia", "summary": "Foundational overview, definitions, principles, and references."},
+            {"id": "web-gen-2", "title": f"Study Notes Guide: {course['title']}", "url": f"https://www.geeksforgeeks.org/{course['title'].lower().replace(' ', '-')}/", "site": "GeeksforGeeks", "summary": "Exam-focused summary sheets and worked examples."},
+        ]
+    return {"candidates": candidates}
 

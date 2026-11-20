@@ -195,7 +195,7 @@ async def get_or_generate_lesson_notes(
             SELECT id, content_markdown, personal_notes, is_generated, updated_at 
             FROM notes 
             WHERE lesson_id = ? 
-            ORDER BY updated_at DESC LIMIT 1;
+            ORDER BY (CASE WHEN personal_notes IS NOT NULL AND personal_notes != '' THEN 1 ELSE 0 END) DESC, updated_at DESC LIMIT 1;
             """,
             (lesson_id,)
         )
@@ -242,22 +242,37 @@ async def get_or_generate_lesson_notes(
     else:
         markdown = generate_no_key_structured_notes(lesson_title, chunks, screenshots)
 
-    # 5. Persist generated notes in SQLite
-    note_id = f"note_{uuid.uuid4().hex[:12]}"
-    cur.execute(
-        """
-        INSERT INTO notes (id, course_id, lesson_id, content_markdown, personal_notes, is_generated)
-        VALUES (?, ?, ?, ?, '', 1)
-        ON CONFLICT(id) DO UPDATE SET content_markdown = excluded.content_markdown;
-        """,
-        (note_id, course_id, lesson_id, markdown)
-    )
+    # 5. Persist generated notes in SQLite, preserving user's personal notes
+    cur.execute("SELECT id, personal_notes FROM notes WHERE lesson_id = ? ORDER BY (CASE WHEN personal_notes IS NOT NULL AND personal_notes != '' THEN 1 ELSE 0 END) DESC, updated_at DESC LIMIT 1;", (lesson_id,))
+    existing_note = cur.fetchone()
+    existing_personal = existing_note[1] if existing_note else ""
+
+    if existing_note:
+        note_id = existing_note[0]
+        cur.execute(
+            """
+            UPDATE notes 
+            SET content_markdown = ?, personal_notes = ?, is_generated = 1, updated_at = CURRENT_TIMESTAMP 
+            WHERE id = ?;
+            """,
+            (markdown, existing_personal or "", note_id)
+        )
+        cur.execute("DELETE FROM notes WHERE lesson_id = ? AND id != ?;", (lesson_id, note_id))
+    else:
+        note_id = f"note_{uuid.uuid4().hex[:12]}"
+        cur.execute(
+            """
+            INSERT INTO notes (id, course_id, lesson_id, content_markdown, personal_notes, is_generated)
+            VALUES (?, ?, ?, ?, '', 1);
+            """,
+            (note_id, course_id, lesson_id, markdown)
+        )
     db_conn.commit()
 
     return {
         "id": note_id,
         "content_markdown": markdown,
-        "personal_notes": "",
+        "personal_notes": existing_personal or "",
         "is_generated": 1,
     }
 
@@ -270,7 +285,7 @@ def save_personal_notes(
 ) -> bool:
     """Updates user's personal editable notes for a lesson."""
     cur = db_conn.cursor()
-    cur.execute("SELECT id FROM notes WHERE lesson_id = ? LIMIT 1;", (lesson_id,))
+    cur.execute("SELECT id FROM notes WHERE lesson_id = ? ORDER BY updated_at DESC LIMIT 1;", (lesson_id,))
     row = cur.fetchone()
 
     if row:
@@ -278,10 +293,11 @@ def save_personal_notes(
             """
             UPDATE notes 
             SET personal_notes = ?, updated_at = CURRENT_TIMESTAMP 
-            WHERE id = ?;
+            WHERE lesson_id = ?;
             """,
-            (personal_notes_text, row[0])
+            (personal_notes_text, lesson_id)
         )
+        cur.execute("DELETE FROM notes WHERE lesson_id = ? AND id != ?;", (lesson_id, row[0]))
     else:
         note_id = f"note_{uuid.uuid4().hex[:12]}"
         cur.execute(

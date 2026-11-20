@@ -70,6 +70,11 @@ class SourceResponse(BaseModel):
     created_at: str
 
 # --- Lesson Schemas ---
+class LessonUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    summary: Optional[str] = None
+    priority: Optional[str] = None  # 'core' vs 'deep-dive'
+
 class LessonResponse(BaseModel):
     id: str
     course_id: str
@@ -111,6 +116,9 @@ class AllocationResponse(BaseModel):
     is_skipped: bool
     priority: str
 
+class AllocationRescheduleRequest(BaseModel):
+    target_date: str = Field(..., description="Target date for this allocation (YYYY-MM-DD)")
+
 class DayScheduleResponse(BaseModel):
     date: str
     day_name: str
@@ -131,6 +139,8 @@ class ScheduleResponse(BaseModel):
     revision_buffer_days: int
     schedule_strategy: str = "paced"
     effective_daily_target_minutes: float = 0.0
+    minutes_per_day: int = 90
+    playback_speed: float = 1.25
 
 # --- Replan, Diff & Undo Schemas ---
 class ReplanRequest(BaseModel):
@@ -169,9 +179,48 @@ class SystemSettingsResponse(BaseModel):
     has_gemini_key: bool
     has_groq_key: bool
     has_openrouter_key: bool
+    has_ollama: bool = False
+    gemini_model: str = "gemini-2.5-flash"
+    groq_model: str = "llama-3.3-70b-versatile"
+    openrouter_model: str = "google/gemini-2.5-flash"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3.2"
+    default_minutes_per_day: int = 90
+    default_playback_speed: float = 1.25
+    default_rest_days: List[str] = Field(default_factory=lambda: ["Sunday"])
+    default_revision_buffer_days: int = 2
 
 class UpdateSettingsRequest(BaseModel):
     cookies_browser: Optional[str] = Field(None, description="Browser name for --cookies-from-browser (e.g. 'chrome', 'firefox', 'safari', 'brave')")
+    minutes_per_day: Optional[int] = Field(None, ge=10, le=720)
+    playback_speed: Optional[float] = Field(None, ge=0.5, le=3.0)
+    rest_days: Optional[List[str]] = None
+    revision_buffer_days: Optional[int] = Field(None, ge=0, le=14)
+    gemini_model: Optional[str] = None
+    groq_model: Optional[str] = None
+    openrouter_model: Optional[str] = None
+    openrouter_base_url: Optional[str] = None
+    ollama_base_url: Optional[str] = None
+    ollama_model: Optional[str] = None
+
+class TestConnectionRequest(BaseModel):
+    provider: str = Field(..., description="'gemini', 'groq', 'openrouter', or 'ollama'")
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+    base_url: Optional[str] = None
+
+class TestConnectionResponse(BaseModel):
+    success: bool
+    provider: str
+    message: str
+    guide: Optional[str] = None
+
+class ManualTranscriptRequest(BaseModel):
+    title: str
+    transcript_text: str
+    raw_duration_sec: Optional[int] = 1200
+    priority: str = "core"
 
 # --- Notes & Screenshot Schemas ---
 class PersonalNotesUpdate(BaseModel):
@@ -266,6 +315,10 @@ class FlashcardCreateRequest(BaseModel):
     lesson_id: Optional[str] = None
     chunk_id: Optional[str] = None
     source_quote: Optional[str] = None
+
+class FlashcardUpdateRequest(BaseModel):
+    front: Optional[str] = None
+    back: Optional[str] = None
 
 class FlashcardResponse(BaseModel):
     id: str

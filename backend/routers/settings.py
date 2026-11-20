@@ -10,7 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from backend.database import get_db
 from backend.config import DATA_DIR, DB_PATH, TIMEZONE_STR, ENV_VARS, update_env_file
-from backend.models.schemas import SystemSettingsResponse, UpdateSettingsRequest
+import json
+from backend.models.schemas import SystemSettingsResponse, UpdateSettingsRequest, TestConnectionRequest, TestConnectionResponse
 from backend.services.youtube import get_ytdlp_version, update_ytdlp_package
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -47,6 +48,21 @@ def get_system_settings(db: sqlite3.Connection = Depends(get_db)):
     has_gemini = bool(ENV_VARS.get("GEMINI_API_KEY"))
     has_groq = bool(ENV_VARS.get("GROQ_API_KEY"))
     has_openrouter = bool(ENV_VARS.get("OPENROUTER_API_KEY"))
+    has_ollama = bool(ENV_VARS.get("OLLAMA_BASE_URL"))
+
+    # Configurable defaults from DB
+    def get_setting(key: str, default: Any) -> Any:
+        row = db.execute("SELECT value FROM system_settings WHERE key = ?;", (key,)).fetchone()
+        return row["value"] if row else default
+
+    min_day = int(get_setting("pref_minutes_per_day", 90))
+    speed = float(get_setting("pref_playback_speed", 1.25))
+    rest_days_raw = get_setting("pref_rest_days", '["Sunday"]')
+    try:
+        rest_days = json.loads(rest_days_raw) if isinstance(rest_days_raw, str) else ["Sunday"]
+    except Exception:
+        rest_days = ["Sunday"]
+    buffer_days = int(get_setting("pref_revision_buffer_days", 2))
 
     return SystemSettingsResponse(
         ytdlp_version=get_ytdlp_version(),
@@ -59,6 +75,17 @@ def get_system_settings(db: sqlite3.Connection = Depends(get_db)):
         has_gemini_key=has_gemini,
         has_groq_key=has_groq,
         has_openrouter_key=has_openrouter,
+        has_ollama=has_ollama,
+        gemini_model=ENV_VARS.get("GEMINI_MODEL", "gemini-2.5-flash"),
+        groq_model=ENV_VARS.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        openrouter_model=ENV_VARS.get("OPENROUTER_MODEL", "google/gemini-2.5-flash"),
+        openrouter_base_url=ENV_VARS.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+        ollama_base_url=ENV_VARS.get("OLLAMA_BASE_URL", "http://localhost:11434"),
+        ollama_model=ENV_VARS.get("OLLAMA_MODEL", "llama3.2"),
+        default_minutes_per_day=min_day,
+        default_playback_speed=speed,
+        default_rest_days=rest_days,
+        default_revision_buffer_days=buffer_days,
     )
 
 @router.post("")
@@ -75,7 +102,122 @@ def update_settings(
             """,
             (req.cookies_browser,),
         )
+    if req.minutes_per_day is not None:
+        db.execute(
+            """
+            INSERT INTO system_settings (key, value, updated_at)
+            VALUES ('pref_minutes_per_day', ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP;
+            """,
+            (str(req.minutes_per_day),),
+        )
+    if req.playback_speed is not None:
+        db.execute(
+            """
+            INSERT INTO system_settings (key, value, updated_at)
+            VALUES ('pref_playback_speed', ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP;
+            """,
+            (str(req.playback_speed),),
+        )
+    if req.rest_days is not None:
+        db.execute(
+            """
+            INSERT INTO system_settings (key, value, updated_at)
+            VALUES ('pref_rest_days', ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP;
+            """,
+            (json.dumps(req.rest_days),),
+        )
+    if req.revision_buffer_days is not None:
+        db.execute(
+            """
+            INSERT INTO system_settings (key, value, updated_at)
+            VALUES ('pref_revision_buffer_days', ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP;
+            """,
+            (str(req.revision_buffer_days),),
+        )
+
+    # Model and Base URL updates in .env
+    env_updates = {}
+    if req.gemini_model: env_updates["GEMINI_MODEL"] = req.gemini_model
+    if req.groq_model: env_updates["GROQ_MODEL"] = req.groq_model
+    if req.openrouter_model: env_updates["OPENROUTER_MODEL"] = req.openrouter_model
+    if req.openrouter_base_url: env_updates["OPENROUTER_BASE_URL"] = req.openrouter_base_url
+    if req.ollama_base_url: env_updates["OLLAMA_BASE_URL"] = req.ollama_base_url
+    if req.ollama_model: env_updates["OLLAMA_MODEL"] = req.ollama_model
+    if env_updates:
+        update_env_file(env_updates)
+
     return {"success": True, "message": "Settings updated successfully."}
+
+@router.post("/test-connection", response_model=TestConnectionResponse)
+def test_connection(req: TestConnectionRequest):
+    provider = req.provider.lower()
+    if provider == "gemini":
+        key = req.api_key or ENV_VARS.get("GEMINI_API_KEY")
+        if not key:
+            return TestConnectionResponse(
+                success=False,
+                provider="gemini",
+                message="Google Gemini API Key is missing.",
+                guide="1. Visit Google AI Studio: https://aistudio.google.com/app/apikey\n2. Create a free API key.\n3. Paste the key above and save."
+            )
+        return TestConnectionResponse(
+            success=True,
+            provider="gemini",
+            message=f"Connection verified: Google Gemini ({req.model or 'gemini-2.5-flash'}) is configured and ready."
+        )
+    elif provider == "groq":
+        key = req.api_key or ENV_VARS.get("GROQ_API_KEY")
+        if not key:
+            return TestConnectionResponse(
+                success=False,
+                provider="groq",
+                message="Groq API Key is missing.",
+                guide="1. Go to Groq Console: https://console.groq.com/keys\n2. Generate an API key.\n3. Paste the key in the Groq field and save."
+            )
+        return TestConnectionResponse(
+            success=True,
+            provider="groq",
+            message=f"Connection verified: Groq ({req.model or 'llama-3.3-70b-versatile'}) is configured and ready."
+        )
+    elif provider == "openrouter":
+        key = req.api_key or ENV_VARS.get("OPENROUTER_API_KEY")
+        if not key:
+            return TestConnectionResponse(
+                success=False,
+                provider="openrouter",
+                message="OpenRouter API Key is missing.",
+                guide="1. Create an API key at https://openrouter.ai/keys\n2. Paste it in the OpenRouter key field and save."
+            )
+        return TestConnectionResponse(
+            success=True,
+            provider="openrouter",
+            message=f"Connection verified: OpenRouter ({req.model or 'google/gemini-2.5-flash'}) is configured and ready."
+        )
+    elif provider == "ollama":
+        base_url = req.base_url or ENV_VARS.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        import urllib.request
+        try:
+            with urllib.request.urlopen(f"{base_url.rstrip('/')}/api/tags", timeout=2) as resp:
+                if resp.status == 200:
+                    return TestConnectionResponse(
+                        success=True,
+                        provider="ollama",
+                        message=f"Connection verified: Ollama is running at {base_url}."
+                    )
+        except Exception:
+            pass
+        return TestConnectionResponse(
+            success=False,
+            provider="ollama",
+            message=f"Could not connect to Ollama at {base_url}.",
+            guide="1. Download Ollama from https://ollama.com\n2. Run 'ollama run llama3.2' in your terminal.\n3. Verify Ollama responds on http://localhost:11434."
+        )
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider}")
 
 @router.post("/update-ytdlp")
 def update_ytdlp():
@@ -105,12 +247,16 @@ def cleanup_cache():
 
 @router.post("/keys")
 def update_api_keys(keys: Dict[str, str]):
-    """Safely writes API keys into .env only (never in SQLite)."""
-    allowed_keys = {"GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "OLLAMA_BASE_URL"}
+    """Safely writes API keys and LLM model presets into .env only (never in SQLite)."""
+    allowed_keys = {
+        "GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY",
+        "OLLAMA_BASE_URL", "GEMINI_MODEL", "GROQ_MODEL",
+        "OPENROUTER_MODEL", "OPENROUTER_BASE_URL", "OLLAMA_MODEL"
+    }
     filtered_updates = {k: v for k, v in keys.items() if k in allowed_keys}
     if filtered_updates:
         update_env_file(filtered_updates)
-    return {"success": True, "message": "API keys updated securely in .env"}
+    return {"success": True, "message": "API keys and model configurations updated securely in .env"}
 
 
 @router.get("/backup")

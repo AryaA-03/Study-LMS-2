@@ -56,6 +56,11 @@ async def log_requests(request: Request, call_next):
             
             query = f"?{request.url.query}" if request.url.query else ""
             logger.info(f"{request.method} {request.url.path}{query} -> {status_badge} ({duration_ms}ms)")
+        
+        # Ensure browser never uses stale cached assets during development
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
         return response
     except Exception as exc:
         duration_ms = round((time.time() - start_time) * 1000, 1)

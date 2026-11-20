@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from backend.database import get_db
 from backend.models.schemas import (
     FlashcardCreateRequest,
+    FlashcardUpdateRequest,
     FlashcardResponse,
     FlashcardReviewRequest,
     FlashcardReviewResponse,
@@ -114,6 +115,66 @@ def review_card(
     except Exception as e:
         logger.error(f"Flashcard review failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Review failed: {str(e)}")
+
+
+@router.put("/{card_id}", response_model=FlashcardResponse)
+def update_flashcard(
+    course_id: str,
+    card_id: str,
+    req: FlashcardUpdateRequest,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    cur = db.cursor()
+    cur.execute("SELECT * FROM flashcards WHERE id = ? AND course_id = ?;", (card_id, course_id))
+    row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Flashcard not found")
+
+    col_names = [d[0] for d in cur.description]
+    row_dict = dict(zip(col_names, row))
+
+    updates = []
+    params = []
+    if req.front is not None:
+        updates.append("front = ?")
+        params.append(req.front)
+        row_dict["front"] = req.front
+    if req.back is not None:
+        updates.append("back = ?")
+        params.append(req.back)
+        row_dict["back"] = req.back
+
+    if updates:
+        params.extend([card_id, course_id])
+        cur.execute(f"UPDATE flashcards SET {', '.join(updates)} WHERE id = ? AND course_id = ?;", params)
+        db.commit()
+
+    import fsrs
+    import datetime
+    from datetime import timezone
+    from backend.services.fsrs_engine import get_fsrs_scheduler, card_to_fsrs, preview_intervals
+    scheduler = get_fsrs_scheduler()
+    as_of = datetime.datetime.now(timezone.utc)
+    fsrs_card = card_to_fsrs(row_dict)
+    intervals = preview_intervals(fsrs_card, scheduler, as_of)
+    state_enum = fsrs.State(row_dict.get("state", 1))
+
+    return {
+        "id": row_dict["id"],
+        "course_id": row_dict["course_id"],
+        "lesson_id": row_dict.get("lesson_id"),
+        "chunk_id": row_dict.get("chunk_id"),
+        "front": row_dict["front"],
+        "back": row_dict["back"],
+        "state": state_enum.value,
+        "state_name": state_enum.name,
+        "due_date": row_dict["due_date"],
+        "stability": row_dict.get("stability", 0.0),
+        "difficulty": row_dict.get("difficulty", 0.0),
+        "reps": row_dict.get("reps", 0),
+        "source_quote": row_dict.get("source_quote"),
+        "intervals": intervals,
+    }
 
 
 @router.delete("/{card_id}")

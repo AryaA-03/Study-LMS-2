@@ -5,37 +5,48 @@
  */
 
 let pyodide = null;
-let isInitializing = false;
+let initPromise = null;
 
 async function initPyodideWorker() {
-  if (pyodide) return;
-  if (isInitializing) return;
-  isInitializing = true;
+  if (pyodide) return pyodide;
+  if (initPromise) return initPromise;
 
-  try {
-    importScripts('https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js');
-    pyodide = await loadPyodide({
-      indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/',
-    });
-    postMessage({ type: 'ready' });
-  } catch (err) {
-    postMessage({ type: 'error', error: 'Failed to load Pyodide runtime: ' + err.message });
-  } finally {
-    isInitializing = false;
-  }
+  initPromise = (async () => {
+    try {
+      importScripts('https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js');
+      pyodide = await loadPyodide({
+        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/',
+      });
+      postMessage({ type: 'ready' });
+      return pyodide;
+    } catch (err) {
+      postMessage({ type: 'error', error: 'Failed to load Pyodide runtime: ' + err.message });
+      initPromise = null; // allow retry if failed
+      throw err;
+    }
+  })();
+
+  return initPromise;
 }
 
 self.onmessage = async function(e) {
   const { type, code, id } = e.data;
 
   if (type === 'init') {
-    await initPyodideWorker();
+    try {
+      await initPyodideWorker();
+    } catch (_) {}
     return;
   }
 
   if (type === 'run') {
     if (!pyodide) {
-      await initPyodideWorker();
+      try {
+        await initPyodideWorker();
+      } catch (err) {
+        postMessage({ type: 'result', id, success: false, error: 'Pyodide runtime initialization failed: ' + err.message });
+        return;
+      }
     }
 
     if (!pyodide) {

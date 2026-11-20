@@ -18,6 +18,20 @@ logger = logging.getLogger("learn_lms.qa_engine")
 settings = get_settings()
 
 
+def chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> List[str]:
+    """Splits plain text into overlapping word chunks."""
+    words = text.split()
+    if not words:
+        return []
+    chunks = []
+    step = max(1, chunk_size - overlap)
+    for i in range(0, len(words), step):
+        chunk = " ".join(words[i:i + chunk_size])
+        if chunk:
+            chunks.append(chunk)
+    return chunks
+
+
 def search_chunks_fts(
     db_conn,
     course_id: str,
@@ -177,8 +191,8 @@ async def generate_llm_grounded_answer(
                     parts = candidates[0].get("content", {}).get("parts", [])
                     if parts:
                         raw_answer = parts[0].get("text", "")
-                        # Parse citations present in answer
-                        cited_ids = re.findall(r"\[ref:\s*([a-zA-Z0-9_]+)\]", raw_answer) + re.findall(r"\[(chk_[a-zA-Z0-9_]+)\]", raw_answer)
+                        # Parse citations present in answer (supporting UUID and chk_ identifiers)
+                        cited_ids = re.findall(r"\[ref:\s*([a-zA-Z0-9_\-]+)\]", raw_answer) + re.findall(r"\[(chk_[a-zA-Z0-9_\-]+)\]", raw_answer)
                         citations = []
                         for cid in set(cited_ids):
                             if cid in chunk_map:

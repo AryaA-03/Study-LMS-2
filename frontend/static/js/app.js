@@ -73,6 +73,51 @@ const pillBufferZero = document.getElementById('pill-buffer-zero');
 const pillBufferTwo = document.getElementById('pill-buffer-two');
 const pacingNoteDetail = document.getElementById('pacing-note-detail');
 
+// Edit Course & KPI Elements
+const btnEditCourse = document.getElementById('btn-edit-course');
+const kpiCardExamDate = document.getElementById('kpi-card-exam-date');
+const kpiCardPaceSpeed = document.getElementById('kpi-card-pace-speed');
+const kpiMinutesDisplay = document.getElementById('kpi-minutes-display');
+const kpiSpeedDisplay = document.getElementById('kpi-speed-display');
+
+const editCourseModal = document.getElementById('edit-course-modal');
+const formEditCourse = document.getElementById('form-edit-course');
+const btnCloseEditCourse = document.getElementById('btn-close-edit-course');
+const btnCancelEditCourse = document.getElementById('btn-cancel-edit-course');
+
+// Edit Lesson Elements
+const btnEditActiveTitle = document.getElementById('btn-edit-active-title');
+const btnEditActiveLesson = document.getElementById('btn-edit-active-lesson');
+const btnToggleActivePriority = document.getElementById('btn-toggle-active-priority');
+
+const editLessonModal = document.getElementById('edit-lesson-modal');
+const formEditLesson = document.getElementById('form-edit-lesson');
+const btnCloseEditLesson = document.getElementById('btn-close-edit-lesson');
+const btnCancelEditLesson = document.getElementById('btn-cancel-edit-lesson');
+const editLessonId = document.getElementById('edit-lesson-id');
+const editLessonAllocId = document.getElementById('edit-lesson-alloc-id');
+const editLessonTitleInput = document.getElementById('edit-lesson-title-input');
+const editLessonPriorityInput = document.getElementById('edit-lesson-priority-input');
+const editLessonRescheduleDate = document.getElementById('edit-lesson-reschedule-date');
+const editLessonSummaryInput = document.getElementById('edit-lesson-summary-input');
+
+// Edit Flashcard Elements
+const editCardModal = document.getElementById('edit-card-modal');
+const formEditCard = document.getElementById('form-edit-card');
+const btnCloseEditCard = document.getElementById('btn-close-edit-card');
+const btnCancelEditCard = document.getElementById('btn-cancel-edit-card');
+const btnDeleteCardFromModal = document.getElementById('btn-delete-card-from-modal');
+const editCardId = document.getElementById('edit-card-id');
+const editCardFrontInput = document.getElementById('edit-card-front-input');
+const editCardBackInput = document.getElementById('edit-card-back-input');
+const btnEditActiveCard = document.getElementById('btn-edit-active-card');
+
+// Personal Notes & Toast Elements
+const btnSavePersonalNotes = document.getElementById('btn-save-personal-notes');
+const personalNotesWordCount = document.getElementById('personal-notes-word-count');
+const toastContainer = document.getElementById('toast-container');
+let currentCardUnderReview = null;
+
 // DOM Elements
 const courseSelector = document.getElementById('course-selector');
 const btnNewCourse = document.getElementById('btn-new-course');
@@ -382,6 +427,50 @@ function setupEventListeners() {
     if (currentCourseId) showWorkspaceView();
   });
 
+  // Preset Cards & Chips
+  const populatePreset = (title, query) => {
+    inputCourseTitle.value = title;
+    inputGoalQuery.value = query;
+    inputCourseTitle.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    inputCourseTitle.classList.add('ring-2', 'ring-blue-500');
+    setTimeout(() => inputCourseTitle.classList.remove('ring-2', 'ring-blue-500'), 1500);
+  };
+
+  const selectExistingOrPopulate = (titleMatch, query, fallbackTitle) => {
+    const opts = Array.from(courseSelector.options);
+    const found = opts.find(o => o.textContent.toLowerCase().includes(titleMatch.toLowerCase()));
+    if (found && found.value) {
+      courseSelector.value = found.value;
+      loadCourse(found.value);
+      showWorkspaceView();
+      return;
+    }
+    populatePreset(fallbackTitle, query);
+  };
+
+  document.getElementById('card-preset-dbms')?.addEventListener('click', () => {
+    selectExistingOrPopulate('dbms', 'https://youtu.be/YRnjGeQbsHQ', 'Complete DBMS Marathon • One Shot Semester Prep');
+  });
+
+  document.getElementById('card-preset-toc')?.addEventListener('click', () => {
+    selectExistingOrPopulate('theory of computation', 'https://youtube.com/playlist?list=PLBlnK6fEyqRgp46KUv4ZY69yXmpwKOIev&si=rlyiJ9fIMBnIWFnj', 'Theory of Computation • Neso Academy Complete Playlist');
+  });
+
+  document.getElementById('chip-dbms-video')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    populatePreset('Complete DBMS Marathon • One Shot Semester Prep', 'https://youtu.be/YRnjGeQbsHQ');
+  });
+
+  document.getElementById('chip-toc-playlist')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    populatePreset('Theory of Computation • Neso Academy Complete Playlist', 'https://youtube.com/playlist?list=PLBlnK6fEyqRgp46KUv4ZY69yXmpwKOIev&si=rlyiJ9fIMBnIWFnj');
+  });
+
+  document.getElementById('chip-goal-text')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    populatePreset('DBMS Comprehensive Exam Prep', 'DBMS end-term in 2 weeks, I know basics, 90 min/day');
+  });
+
   courseCreateForm.addEventListener('submit', handleCourseCreate);
   btnApproveSelected.addEventListener('click', handleApproveSources);
 
@@ -427,10 +516,56 @@ function setupEventListeners() {
   // Settings Modal
   btnSettings.addEventListener('click', () => settingsModal.classList.remove('hidden'));
   btnCloseSettings.addEventListener('click', () => settingsModal.classList.add('hidden'));
-  document.getElementById('btn-update-ytdlp').addEventListener('click', handleUpdateYtdlp);
-  document.getElementById('btn-cleanup-cache').addEventListener('click', handleCleanupCache);
-  document.getElementById('btn-save-keys').addEventListener('click', handleSaveKeys);
-  document.getElementById('settings-browser-cookies').addEventListener('change', handleUpdateBrowserCookies);
+  document.getElementById('settings-llm-provider')?.addEventListener('change', handleLlmProviderChange);
+  document.getElementById('btn-test-connection')?.addEventListener('click', handleTestConnection);
+  document.getElementById('btn-save-keys')?.addEventListener('click', handleSaveKeys);
+  document.getElementById('btn-save-study-defaults')?.addEventListener('click', handleSaveStudyDefaults);
+  document.getElementById('btn-update-ytdlp')?.addEventListener('click', handleUpdateYtdlp);
+  document.getElementById('btn-cleanup-cache')?.addEventListener('click', handleCleanupCache);
+  document.getElementById('settings-browser-cookies')?.addEventListener('change', handleUpdateBrowserCookies);
+  document.getElementById('btn-export-markdown')?.addEventListener('click', handleExportMarkdown);
+  document.getElementById('btn-submit-manual-fallback')?.addEventListener('click', handleManualFallbackSubmit);
+
+  // Edit Course Listeners
+  btnEditCourse?.addEventListener('click', openEditCourseModal);
+  kpiCardExamDate?.addEventListener('click', openEditCourseModal);
+  kpiCardPaceSpeed?.addEventListener('click', openEditCourseModal);
+  btnCloseEditCourse?.addEventListener('click', () => editCourseModal.classList.add('hidden'));
+  btnCancelEditCourse?.addEventListener('click', () => editCourseModal.classList.add('hidden'));
+  formEditCourse?.addEventListener('submit', handleSaveCourse);
+
+  // Edit Lesson Listeners
+  btnEditActiveTitle?.addEventListener('click', () => {
+    if (activeAllocation) openEditLessonModal(activeAllocation.lesson_id, activeAllocation.id);
+  });
+  activeLessonTitle?.addEventListener('click', () => {
+    if (activeAllocation) openEditLessonModal(activeAllocation.lesson_id, activeAllocation.id);
+  });
+  btnEditActiveLesson?.addEventListener('click', () => {
+    if (activeAllocation) openEditLessonModal(activeAllocation.lesson_id, activeAllocation.id);
+  });
+  btnToggleActivePriority?.addEventListener('click', toggleActivePriority);
+  btnCloseEditLesson?.addEventListener('click', () => editLessonModal.classList.add('hidden'));
+  btnCancelEditLesson?.addEventListener('click', () => editLessonModal.classList.add('hidden'));
+  formEditLesson?.addEventListener('submit', handleSaveLesson);
+
+  // Edit Flashcard Listeners
+  btnEditActiveCard?.addEventListener('click', openEditCardModal);
+  document.getElementById('btn-edit-active-card-back')?.addEventListener('click', openEditCardModal);
+  btnCloseEditCard?.addEventListener('click', () => editCardModal.classList.add('hidden'));
+  btnCancelEditCard?.addEventListener('click', () => editCardModal.classList.add('hidden'));
+  btnDeleteCardFromModal?.addEventListener('click', handleDeleteCardFromModal);
+  formEditCard?.addEventListener('submit', handleSaveEditCard);
+
+  // Markdown Toolbar & Personal Notes Save
+  document.querySelectorAll('.md-tool-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const format = btn.getAttribute('data-format');
+      applyMarkdownFormat(format);
+    });
+  });
+  btnSavePersonalNotes?.addEventListener('click', handleSavePersonalNotesManual);
+  inputPersonalNotes?.addEventListener('input', updatePersonalNotesCount);
 
   // Notes Tabs & Actions
   tabGroundedNotes.addEventListener('click', () => switchNotesTab('grounded'));
@@ -449,6 +584,8 @@ function setupEventListeners() {
   btnCloseAddSource.addEventListener('click', () => addSourceModal.classList.add('hidden'));
   tabSrcPdf.addEventListener('click', () => switchSourceModalTab('pdf'));
   tabSrcWeb.addEventListener('click', () => switchSourceModalTab('web'));
+  document.getElementById('tab-src-discover-web')?.addEventListener('click', () => switchSourceModalTab('discover-web'));
+  document.getElementById('btn-approve-web-docs')?.addEventListener('click', handleApproveWebDocs);
   formUploadPdf.addEventListener('submit', handleUploadPdf);
   formImportWeb.addEventListener('submit', handleImportWeb);
 
@@ -485,6 +622,7 @@ function setupEventListeners() {
   // Pyodide Web Worker Listeners
   tabPyodideScratchpad.addEventListener('click', () => switchNotesTab('pyodide'));
   btnRunPyodide.addEventListener('click', runPythonCode);
+  document.getElementById('btn-stop-pyodide')?.addEventListener('click', stopPythonWorker);
   btnClearCode.addEventListener('click', () => { pyodideCodeInput.value = ''; pyodideOutput.textContent = ''; });
   pyodidePresets.addEventListener('change', handlePyodidePresetChange);
 
@@ -535,6 +673,364 @@ window.toggleDayCollapse = function(dayDate) {
   if (isNowHidden) collapsedDays.add(dayDate);
   else collapsedDays.delete(dayDate);
 };
+
+// --- Toast Notification System ---
+function showToast(message, type = 'info') {
+  if (!toastContainer) return;
+  const toast = document.createElement('div');
+  const bg = type === 'success' 
+    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-500/20' 
+    : type === 'error' 
+    ? 'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-rose-500/20' 
+    : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-indigo-500/20';
+  toast.className = `px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-semibold ${bg} transition-all duration-300 transform translate-y-4 opacity-0 pointer-events-auto border border-white/20`;
+  toast.innerHTML = `
+    <span>${type === 'success' ? '✓' : type === 'error' ? '✕' : '⚡'}</span>
+    <span>${message}</span>
+  `;
+  toastContainer.appendChild(toast);
+  requestAnimationFrame(() => {
+    toast.classList.remove('translate-y-4', 'opacity-0');
+  });
+  setTimeout(() => {
+    toast.classList.add('opacity-0', 'translate-y-2');
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+// --- Edit Course Settings Handlers ---
+function openEditCourseModal() {
+  if (!currentCourse) return;
+  document.getElementById('edit-course-title').value = currentCourse.title || '';
+  document.getElementById('edit-course-target-date').value = currentCourse.target_date || '';
+  document.getElementById('edit-course-minutes').value = currentCourse.minutes_per_day || 90;
+  document.getElementById('edit-course-speed').value = currentCourse.playback_speed || 1.25;
+  document.getElementById('edit-course-buffer').value = currentCourse.revision_buffer_days ?? 2;
+  
+  const strat = currentCourse.schedule_strategy || 'paced';
+  const pacedRadio = document.getElementById('edit-strat-paced');
+  const fixedRadio = document.getElementById('edit-strat-fixed');
+  if (pacedRadio && fixedRadio) {
+    if (strat === 'paced') pacedRadio.checked = true;
+    else fixedRadio.checked = true;
+  }
+
+  const restDays = currentCourse.rest_days || ['Sunday'];
+  document.querySelectorAll('.edit-rest-checkbox').forEach(cb => {
+    cb.checked = restDays.includes(cb.value);
+  });
+
+  editCourseModal.classList.remove('hidden');
+}
+
+async function handleSaveCourse(e) {
+  e.preventDefault();
+  if (!currentCourseId) return;
+
+  const title = document.getElementById('edit-course-title').value.trim();
+  const targetDate = document.getElementById('edit-course-target-date').value;
+  const minutes = parseInt(document.getElementById('edit-course-minutes').value, 10);
+  const speed = parseFloat(document.getElementById('edit-course-speed').value);
+  const buffer = parseInt(document.getElementById('edit-course-buffer').value, 10);
+  const strategy = document.querySelector('input[name="edit-strategy"]:checked')?.value || 'paced';
+  
+  const restDays = [];
+  document.querySelectorAll('.edit-rest-checkbox:checked').forEach(cb => {
+    restDays.push(cb.value);
+  });
+
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        target_date: targetDate,
+        minutes_per_day: minutes,
+        playback_speed: speed,
+        revision_buffer_days: buffer,
+        schedule_strategy: strategy,
+        rest_days: restDays,
+      }),
+    });
+    if (!res.ok) throw new Error('Failed to update course');
+
+    editCourseModal.classList.add('hidden');
+    showToast('Course settings updated! Replanning schedule...', 'success');
+
+    // Automatically replan to reflow schedule with new params
+    await replanCourse('normal', {
+      target_date: targetDate,
+      minutes_per_day: minutes,
+      playback_speed: speed,
+      revision_buffer_days: buffer,
+      schedule_strategy: strategy,
+      rest_days: restDays,
+    });
+    await refreshCourseList();
+  } catch (err) {
+    Logger.error('Failed to update course', err);
+    showToast('Failed to update course: ' + err.message, 'error');
+  }
+}
+
+// --- Edit Lesson Handlers ---
+async function openEditLessonModal(lessonId, allocId) {
+  if (!lessonId) return;
+  const lesson = currentLessons.find(l => l.id === lessonId);
+  if (!lesson) return;
+
+  editLessonId.value = lessonId;
+  editLessonAllocId.value = allocId || '';
+  editLessonTitleInput.value = lesson.title || '';
+  editLessonPriorityInput.value = lesson.priority || 'core';
+  editLessonSummaryInput.value = lesson.summary || '';
+
+  if (allocId && currentSchedule) {
+    for (const d of currentSchedule.days) {
+      const a = d.allocations.find(x => x.id === allocId);
+      if (a) {
+        editLessonRescheduleDate.value = a.scheduled_date;
+        break;
+      }
+    }
+  } else {
+    editLessonRescheduleDate.value = '';
+  }
+
+  editLessonModal.classList.remove('hidden');
+}
+
+window.editScheduleLesson = function(lessonId, allocId, event) {
+  if (event) event.stopPropagation();
+  openEditLessonModal(lessonId, allocId);
+};
+
+window.toggleAllocPriority = async function(lessonId, event) {
+  if (event) event.stopPropagation();
+  if (!currentCourseId || !lessonId) return;
+  const current = currentLessons.find(l => l.id === lessonId);
+  const newPriority = (current && current.priority === 'deep-dive') ? 'core' : 'deep-dive';
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/lessons/${lessonId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priority: newPriority }),
+    });
+    if (!res.ok) throw new Error('Failed to update priority');
+    showToast(`Priority changed to ${newPriority.toUpperCase()}`, 'success');
+    await loadLessons(currentCourseId);
+    await loadSchedule(currentCourseId);
+    if (activeAllocation && activeAllocation.lesson_id === lessonId) {
+      activeAllocation.priority = newPriority;
+      if (activeLessonPriority) activeLessonPriority.textContent = newPriority.toUpperCase();
+    }
+  } catch (err) {
+    Logger.error('Failed to toggle priority', err);
+    showToast('Failed to toggle priority: ' + err.message, 'error');
+  }
+};
+
+async function handleSaveLesson(e) {
+  e.preventDefault();
+  const lid = editLessonId.value;
+  const aid = editLessonAllocId.value;
+  if (!lid || !currentCourseId) return;
+
+  const newTitle = editLessonTitleInput.value.trim();
+  const newPriority = editLessonPriorityInput.value;
+  const newSummary = editLessonSummaryInput.value.trim();
+  const newDate = editLessonRescheduleDate.value;
+
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/lessons/${lid}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: newTitle,
+        priority: newPriority,
+        summary: newSummary,
+      }),
+    });
+    if (!res.ok) throw new Error('Failed to update lesson');
+
+    if (aid && newDate) {
+      await fetch(`/api/courses/${currentCourseId}/schedule/allocations/${aid}/reschedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_date: newDate }),
+      });
+    }
+
+    editLessonModal.classList.add('hidden');
+    showToast('Lesson updated successfully!', 'success');
+
+    await loadLessons(currentCourseId);
+    await loadSchedule(currentCourseId);
+    if (activeAllocation && activeAllocation.lesson_id === lid) {
+      activeLessonTitle.textContent = newTitle;
+      activeLessonPriority.textContent = newPriority.toUpperCase();
+    }
+  } catch (err) {
+    Logger.error('Failed to save lesson', err);
+    showToast('Error updating lesson: ' + err.message, 'error');
+  }
+}
+
+async function toggleActivePriority() {
+  if (!activeAllocation || !currentCourseId) return;
+  const currentP = (activeAllocation.priority || 'core').toLowerCase();
+  const nextP = currentP === 'core' ? 'deep-dive' : 'core';
+
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/lessons/${activeAllocation.lesson_id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priority: nextP }),
+    });
+    if (!res.ok) throw new Error('Failed to toggle priority');
+
+    activeAllocation.priority = nextP;
+    activeLessonPriority.textContent = nextP.toUpperCase();
+    showToast(`Switched priority to ${nextP.toUpperCase()}`, 'info');
+    await loadSchedule(currentCourseId);
+  } catch (err) {
+    Logger.error('Failed to toggle priority', err);
+    showToast('Error toggling priority: ' + err.message, 'error');
+  }
+}
+
+// --- Edit Flashcard Handlers ---
+function openEditCardModal() {
+  if (!currentCardUnderReview) return;
+  editCardId.value = currentCardUnderReview.id;
+  editCardFrontInput.value = currentCardUnderReview.front || '';
+  editCardBackInput.value = currentCardUnderReview.back || '';
+  editCardModal.classList.remove('hidden');
+}
+
+async function handleSaveEditCard(e) {
+  e.preventDefault();
+  const cid = editCardId.value;
+  if (!cid || !currentCourseId) return;
+
+  const front = editCardFrontInput.value.trim();
+  const back = editCardBackInput.value.trim();
+
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/flashcards/${cid}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ front, back }),
+    });
+    if (!res.ok) throw new Error('Update card failed');
+    const updated = await res.json();
+    currentCardUnderReview = updated;
+
+    fsrsFrontText.textContent = front;
+    fsrsBackText.textContent = back;
+
+    editCardModal.classList.add('hidden');
+    showToast('Flashcard updated!', 'success');
+  } catch (err) {
+    Logger.error('Failed to update card', err);
+    showToast('Error updating card: ' + err.message, 'error');
+  }
+}
+
+async function handleDeleteCardFromModal() {
+  const cid = editCardId.value;
+  if (!cid || !currentCourseId) return;
+  if (!confirm('Are you sure you want to delete this flashcard?')) return;
+
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/flashcards/${cid}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Delete failed');
+    editCardModal.classList.add('hidden');
+    showToast('Flashcard deleted!', 'info');
+    await updateFlashcardCounts();
+    await loadDueFlashcards(currentCourseId);
+  } catch (err) {
+    Logger.error('Failed to delete card', err);
+    showToast('Error deleting card: ' + err.message, 'error');
+  }
+}
+
+// --- Markdown Toolbar Handlers ---
+function applyMarkdownFormat(format) {
+  if (!inputPersonalNotes) return;
+  const start = inputPersonalNotes.selectionStart;
+  const end = inputPersonalNotes.selectionEnd;
+  const text = inputPersonalNotes.value;
+  const selected = text.substring(start, end);
+
+  let replacement = '';
+  let newCursorPos = start;
+
+  switch (format) {
+    case 'bold':
+      replacement = `**${selected || 'bold text'}**`;
+      newCursorPos = selected ? end + 4 : start + 2;
+      break;
+    case 'italic':
+      replacement = `*${selected || 'italic text'}*`;
+      newCursorPos = selected ? end + 2 : start + 1;
+      break;
+    case 'heading':
+      replacement = `\n## ${selected || 'Heading'}\n`;
+      newCursorPos = selected ? end + 5 : start + 4;
+      break;
+    case 'code':
+      replacement = `\`${selected || 'code'}\``;
+      newCursorPos = selected ? end + 2 : start + 1;
+      break;
+    case 'bullet':
+      replacement = `\n- ${selected || 'List item'}\n`;
+      newCursorPos = selected ? end + 4 : start + 3;
+      break;
+    case 'quote':
+      replacement = `\n> ${selected || 'Quote'}\n`;
+      newCursorPos = selected ? end + 4 : start + 3;
+      break;
+    default:
+      return;
+  }
+
+  inputPersonalNotes.value = text.substring(0, start) + replacement + text.substring(end);
+  inputPersonalNotes.focus();
+  inputPersonalNotes.setSelectionRange(newCursorPos, newCursorPos);
+  updatePersonalNotesCount();
+}
+
+function updatePersonalNotesCount() {
+  if (!personalNotesWordCount || !inputPersonalNotes) return;
+  const val = inputPersonalNotes.value.trim();
+  const words = val ? val.split(/\s+/).length : 0;
+  personalNotesWordCount.textContent = `${words} word${words === 1 ? '' : 's'}`;
+}
+
+async function handleSavePersonalNotesManual() {
+  if (!activeAllocation) {
+    showToast('Select a lesson first', 'info');
+    return;
+  }
+  const text = inputPersonalNotes.value;
+  try {
+    const res = await fetch(`/api/lessons/${activeAllocation.lesson_id}/notes/personal`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ personal_notes: text }),
+    });
+    if (!res.ok) throw new Error('Save failed');
+    personalNoteSaveStatus.textContent = '✓ Saved ' + new Date().toLocaleTimeString();
+    showToast('Personal notes saved!', 'success');
+  } catch (err) {
+    Logger.error('Failed to save personal notes', err);
+    showToast('Error saving notes', 'error');
+  }
+}
 
 // --- Strategy Switching (Paced vs Fixed) ---
 function updateStrategyPills(strategy) {
@@ -670,15 +1166,23 @@ function renderSchedule(sched) {
 
   statDailyTarget.textContent = `~${Math.round(sched.effective_daily_target_minutes || 0)} min`;
 
+  // Update KPI bar minutes and speed displays
+  const kpiMin = document.getElementById('kpi-minutes-display');
+  const kpiSpd = document.getElementById('kpi-speed-display');
+  const speed = sched.playback_speed || (currentCourse ? currentCourse.playback_speed : 1.25);
+  const minutes = sched.minutes_per_day || (currentCourse ? currentCourse.minutes_per_day : 90);
+  if (kpiMin) kpiMin.textContent = `${minutes}m`;
+  if (kpiSpd) kpiSpd.textContent = `${speed}x`;
+
   // Update Pacing Mode & Buffer Visual Indicators
   updateStrategyPills(sched.schedule_strategy || 'paced');
   if (pillBufferZero && pillBufferTwo) {
     if (sched.revision_buffer_days === 0) {
-      pillBufferZero.className = 'px-2 py-0.5 rounded-md font-semibold transition bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm';
-      pillBufferTwo.className = 'px-2 py-0.5 rounded-md font-medium transition text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white';
+      pillBufferZero.className = 'px-2 py-0.5 rounded-md font-semibold transition bg-indigo-600 text-white shadow-sm';
+      pillBufferTwo.className = 'px-2 py-0.5 rounded-md font-medium transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
     } else {
-      pillBufferTwo.className = 'px-2 py-0.5 rounded-md font-semibold transition bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm';
-      pillBufferZero.className = 'px-2 py-0.5 rounded-md font-medium transition text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white';
+      pillBufferTwo.className = 'px-2 py-0.5 rounded-md font-semibold transition bg-indigo-600 text-white shadow-sm';
+      pillBufferZero.className = 'px-2 py-0.5 rounded-md font-medium transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
     }
   }
 
@@ -708,62 +1212,73 @@ function renderSchedule(sched) {
     behindScheduleBanner.classList.add('hidden');
   }
 
-  // Render Day Groups (Minimalist CourseIt style)
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // Render Day Groups (CourseIt style with radiant badges)
   sched.days.forEach(day => {
+    const isToday = (day.date === todayStr);
     const dayEl = document.createElement('div');
-    dayEl.className = 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-sm transition hover:border-zinc-300 dark:hover:border-zinc-700';
+    dayEl.className = `day-group-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm transition hover:border-slate-300 dark:hover:border-slate-700 ${isToday ? 'ring-2 ring-indigo-500 dark:ring-indigo-400 shadow-md shadow-indigo-500/15' : ''}`;
 
     let badgeHtml = '';
+    if (isToday) {
+      badgeHtml += '<span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-mono shadow-sm">✨ Today</span>';
+    }
     if (day.is_revision_day) {
-      badgeHtml = '<span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800/80 font-mono">Revision Buffer</span>';
+      badgeHtml += '<span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800/80 font-mono">Revision Buffer</span>';
     } else if (day.is_rest_day) {
-      badgeHtml = '<span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 font-mono">Rest Day</span>';
+      badgeHtml += '<span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800 font-mono">Rest Day</span>';
     }
 
     const isCollapsed = collapsedDays.has(day.date);
 
     const dayHeader = `
-      <div class="px-3.5 py-2.5 bg-zinc-50/80 dark:bg-zinc-950/80 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs cursor-pointer select-none" onclick="window.toggleDayCollapse('${day.date}')">
+      <div class="px-3.5 py-2.5 bg-slate-50/90 dark:bg-slate-950/90 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs cursor-pointer select-none" onclick="window.toggleDayCollapse('${day.date}')">
         <div class="flex items-center gap-2">
-          <svg id="day-chevron-${day.date}" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 transition-transform day-chevron" style="transform: ${isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-          <span class="font-bold text-zinc-900 dark:text-zinc-100">${day.day_name}, ${formatDateDisplay(day.date)}</span>
+          <svg id="day-chevron-${day.date}" class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 transition-transform day-chevron" style="transform: ${isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          <span class="font-bold text-slate-900 dark:text-slate-100">${day.day_name}, ${formatDateDisplay(day.date)}</span>
           ${badgeHtml}
         </div>
-        <span class="text-zinc-600 dark:text-zinc-400 font-mono font-medium">${Math.round(day.total_effective_minutes)} min</span>
+        <span class="text-indigo-600 dark:text-indigo-400 font-mono font-bold text-xs bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-800/80">${Math.round(day.total_effective_minutes)} min</span>
       </div>
     `;
 
     let allocsHtml = '';
     if (day.allocations.length === 0) {
       allocsHtml = `
-        <div class="p-3 text-xs text-zinc-400 dark:text-zinc-500 italic text-center">
+        <div class="p-3 text-xs text-slate-400 dark:text-slate-500 italic text-center">
           ${day.is_revision_day ? 'Dedicated strictly for comprehensive revision & mock exams.' : day.is_rest_day ? 'Rest & recharge day.' : 'No study allocations.'}
         </div>
       `;
     } else {
-      allocsHtml = `<div class="divide-y divide-zinc-100 dark:divide-zinc-800">`;
+      allocsHtml = `<div class="divide-y divide-slate-100 dark:divide-slate-800/80">`;
       day.allocations.forEach(alloc => {
         const isCompleted = alloc.is_completed;
         const splitText = alloc.split_count > 1 ? `Part ${alloc.split_index + 1}/${alloc.split_count}` : '';
         const priorityBadge = alloc.priority === 'deep-dive' 
-          ? '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-mono">Deep-Dive</span>'
-          : '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 font-mono">Core</span>';
+          ? `<button type="button" class="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-mono hover:scale-105 active:scale-95 transition" onclick="window.toggleAllocPriority('${alloc.lesson_id}', event)" title="Click to toggle Priority (Core / Deep-Dive)">Deep-Dive</button>`
+          : `<button type="button" class="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-mono hover:scale-105 active:scale-95 transition" onclick="window.toggleAllocPriority('${alloc.lesson_id}', event)" title="Click to toggle Priority (Core / Deep-Dive)">Core</button>`;
 
         allocsHtml += `
-          <div class="p-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition flex items-start gap-2.5 cursor-pointer alloc-item ${isCompleted ? 'opacity-50' : ''}" data-alloc-id="${alloc.id}">
-            <input type="checkbox" class="mt-1 rounded text-zinc-900 dark:text-white focus:ring-0 alloc-checkbox cursor-pointer" data-alloc-id="${alloc.id}" ${isCompleted ? 'checked' : ''}>
-            <div class="flex-1 min-w-0" onclick="window.selectAllocation('${alloc.id}')">
-              <div class="flex items-center gap-1.5 mb-0.5">
+          <div class="allocation-card p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition flex items-start gap-2.5 cursor-pointer alloc-item group ${isCompleted ? 'opacity-50' : ''}" data-alloc-id="${alloc.id}" onclick="window.selectAllocation('${alloc.id}')">
+            <input type="checkbox" class="btn-complete-allocation mt-1 rounded text-indigo-600 focus:ring-0 alloc-checkbox cursor-pointer" data-alloc-id="${alloc.id}" ${isCompleted ? 'checked' : ''} onclick="event.stopPropagation()">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5 mb-1 flex-wrap">
                 ${priorityBadge}
-                ${splitText ? `<span class="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-medium">${splitText}</span>` : ''}
-                <span class="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">[${formatDurationSec(alloc.allocated_start_sec)} - ${formatDurationSec(alloc.allocated_end_sec)}]</span>
+                ${splitText ? `<span class="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-bold">${splitText}</span>` : ''}
+                <span class="text-[10px] text-cyan-600 dark:text-cyan-400 font-mono font-medium">[${formatDurationSec(alloc.allocated_start_sec)} - ${formatDurationSec(alloc.allocated_end_sec)}]</span>
               </div>
-              <h4 class="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate ${isCompleted ? 'line-through text-zinc-400 dark:text-zinc-500' : ''}">${alloc.lesson_title}</h4>
-              <div class="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5 font-mono">${alloc.effective_minutes} min (effective)</div>
+              <h4 class="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition ${isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : ''}">${alloc.lesson_title}</h4>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">${alloc.effective_minutes} min (effective)</div>
             </div>
-            <button class="text-zinc-400 hover:text-amber-500 dark:text-zinc-500 dark:hover:text-amber-400 p-1 text-xs shrink-0" title="Skip lesson" onclick="window.skipAllocation('${alloc.id}', event)">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
-            </button>
+            <div class="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100 transition">
+              <button class="p-1 rounded text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Edit lesson title, notes, priority or move to date" onclick="window.editScheduleLesson('${alloc.lesson_id}', '${alloc.id}', event)">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              </button>
+              <button class="btn-skip-allocation p-1 rounded text-slate-400 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Skip lesson & reflow" onclick="window.skipAllocation('${alloc.id}', event)">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
+              </button>
+            </div>
           </div>
         `;
       });
@@ -979,15 +1494,19 @@ function renderCurriculumDrawer(lessons) {
   curriculumLessonsList.innerHTML = '';
   lessons.forEach(l => {
     const item = document.createElement('div');
-    item.className = `p-2 rounded-lg flex items-start gap-2.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/60 ${l.is_excluded ? 'opacity-40' : ''}`;
+    item.className = `p-2.5 rounded-xl flex items-start gap-2.5 text-xs hover:bg-slate-100 dark:hover:bg-slate-800/60 transition ${l.is_excluded ? 'opacity-40' : ''}`;
+    const priorityPill = l.priority === 'core'
+      ? '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-mono font-bold">Core</span>'
+      : '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-mono font-bold">Deep-Dive</span>';
+
     item.innerHTML = `
-      <input type="checkbox" class="mt-0.5 rounded text-zinc-900 dark:text-white focus:ring-0 cursor-pointer" ${!l.is_excluded ? 'checked' : ''} onchange="window.toggleLessonExclude('${l.id}')">
+      <input type="checkbox" class="mt-1 rounded text-indigo-600 focus:ring-0 cursor-pointer" ${!l.is_excluded ? 'checked' : ''} onchange="window.toggleLessonExclude('${l.id}')">
       <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-1.5 mb-0.5">
-          <span class="text-[9px] uppercase px-1 rounded ${l.priority === 'core' ? 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700' : 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800'} font-mono">${l.priority}</span>
-          <span class="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">${formatDurationSec(l.raw_duration_sec)}</span>
+        <div class="flex items-center gap-1.5 mb-1">
+          ${priorityPill}
+          <span class="text-[10px] text-cyan-600 dark:text-cyan-400 font-mono font-medium">${formatDurationSec(l.raw_duration_sec)}</span>
         </div>
-        <div class="font-medium text-zinc-900 dark:text-zinc-100 truncate ${l.is_excluded ? 'line-through text-zinc-400 dark:text-zinc-500' : ''}">${l.title}</div>
+        <div class="font-semibold text-slate-900 dark:text-slate-100 truncate ${l.is_excluded ? 'line-through text-slate-400 dark:text-slate-500' : ''}">${l.title}</div>
       </div>
     `;
     curriculumLessonsList.appendChild(item);
@@ -1051,6 +1570,13 @@ async function handleCourseCreate(e) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: goalQuery, is_approved: true }),
       });
+      if (!resImport.ok) {
+        const errData = await resImport.json().catch(() => ({}));
+        const errorMsg = errData.detail || 'Could not fetch YouTube video or playlist metadata.';
+        Logger.error('Failed to import YouTube URL', errorMsg);
+        showImportError(errorMsg);
+        return;
+      }
       const importData = await resImport.json();
       Logger.api('POST', `/api/courses/.../sources/import`, resImport.status, Math.round(performance.now() - t1), importData);
 
@@ -1072,6 +1598,58 @@ async function handleCourseCreate(e) {
   } finally {
     spinner.classList.add('hidden');
     btnText.textContent = 'Discover & Build Study Plan';
+  }
+}
+
+function showImportError(msg) {
+  const banner = document.getElementById('import-error-banner');
+  const msgEl = document.getElementById('import-error-message');
+  if (banner && msgEl) {
+    msgEl.textContent = msg;
+    banner.classList.remove('hidden');
+    banner.scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
+async function handleManualFallbackSubmit() {
+  const text = document.getElementById('input-manual-transcript').value.trim();
+  const fileInput = document.getElementById('input-manual-transcript-file');
+  let content = text;
+  if (!content && fileInput && fileInput.files && fileInput.files[0]) {
+    content = await fileInput.files[0].text();
+  }
+  if (!content) {
+    alert('Please enter or upload transcript text.');
+    return;
+  }
+  if (!currentCourseId) {
+    alert('No active course selected.');
+    return;
+  }
+
+  const btn = document.getElementById('btn-submit-manual-fallback');
+  btn.disabled = true;
+  btn.textContent = 'Importing...';
+
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/sources/manual-transcript`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Manual Lecture Notes',
+        transcript_text: content,
+        raw_duration_sec: 1200,
+        priority: 'core',
+      }),
+    });
+    if (!res.ok) throw new Error('Failed to import manual transcript');
+    document.getElementById('import-error-banner').classList.add('hidden');
+    await refreshCourseList();
+  } catch (err) {
+    alert('Error saving manual transcript: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Import Manual Transcript & Build Schedule';
   }
 }
 
@@ -1156,10 +1734,13 @@ async function handleApproveSources() {
 }
 
 // --- Settings & Maintenance ---
+let currentSettings = null;
+
 async function loadSettings() {
   try {
     const res = await fetch('/api/settings');
     const s = await res.json();
+    currentSettings = s;
     document.getElementById('settings-ytdlp-version').textContent = s.ytdlp_version;
     document.getElementById('settings-browser-cookies').value = s.cookies_browser || '';
     document.getElementById('settings-db-size').textContent = formatBytes(s.db_size_bytes);
@@ -1169,14 +1750,99 @@ async function loadSettings() {
     const totalBytes = s.transcripts_size_bytes + s.screenshots_size_bytes;
     document.getElementById('settings-total-disk').textContent = formatBytes(totalBytes);
 
-    const badgeGemini = document.getElementById('badge-gemini');
-    if (s.has_gemini_key) {
-      badgeGemini.classList.replace('bg-slate-800', 'bg-emerald-950');
-      badgeGemini.classList.replace('text-slate-400', 'text-emerald-300');
-      badgeGemini.textContent = 'Gemini (Connected)';
+    // Study Defaults
+    if (document.getElementById('settings-pref-minutes-day')) {
+      document.getElementById('settings-pref-minutes-day').value = s.default_minutes_per_day || 90;
     }
+    if (document.getElementById('settings-pref-playback-speed')) {
+      document.getElementById('settings-pref-playback-speed').value = String(s.default_playback_speed || 1.25);
+    }
+    if (document.getElementById('settings-pref-rest-sun')) {
+      document.getElementById('settings-pref-rest-sun').checked = (s.default_rest_days || []).includes('Sunday');
+    }
+    if (document.getElementById('settings-pref-rest-sat')) {
+      document.getElementById('settings-pref-rest-sat').checked = (s.default_rest_days || []).includes('Saturday');
+    }
+    if (document.getElementById('settings-pref-rev-buffer')) {
+      document.getElementById('settings-pref-rev-buffer').value = String(s.default_revision_buffer_days ?? 2);
+    }
+
+    handleLlmProviderChange();
   } catch (err) {
     Logger.error('Failed to load settings', err);
+  }
+}
+
+function handleLlmProviderChange() {
+  const providerSelect = document.getElementById('settings-llm-provider');
+  if (!providerSelect) return;
+  const provider = providerSelect.value;
+  const modelInput = document.getElementById('settings-llm-model');
+  const baseUrlInput = document.getElementById('settings-llm-base-url');
+  const baseUrlWrapper = document.getElementById('wrapper-llm-base-url');
+  const keyWrapper = document.getElementById('wrapper-llm-key');
+  const keyInput = document.getElementById('settings-llm-key');
+  const resultBox = document.getElementById('connection-test-result');
+  if (resultBox) resultBox.classList.add('hidden');
+
+  if (provider === 'gemini') {
+    modelInput.value = currentSettings?.gemini_model || 'gemini-2.5-flash';
+    baseUrlWrapper.classList.add('hidden');
+    keyWrapper.classList.remove('hidden');
+    keyInput.placeholder = currentSettings?.has_gemini_key ? '•••••••••••• (API Key Configured in .env)' : 'Paste Gemini API Key';
+  } else if (provider === 'groq') {
+    modelInput.value = currentSettings?.groq_model || 'llama-3.3-70b-versatile';
+    baseUrlWrapper.classList.add('hidden');
+    keyWrapper.classList.remove('hidden');
+    keyInput.placeholder = currentSettings?.has_groq_key ? '•••••••••••• (API Key Configured in .env)' : 'Paste Groq API Key';
+  } else if (provider === 'openrouter') {
+    modelInput.value = currentSettings?.openrouter_model || 'google/gemini-2.5-flash';
+    baseUrlInput.value = currentSettings?.openrouter_base_url || 'https://openrouter.ai/api/v1';
+    baseUrlWrapper.classList.remove('hidden');
+    keyWrapper.classList.remove('hidden');
+    keyInput.placeholder = currentSettings?.has_openrouter_key ? '•••••••••••• (API Key Configured in .env)' : 'Paste OpenRouter API Key';
+  } else if (provider === 'ollama') {
+    modelInput.value = currentSettings?.ollama_model || 'llama3.2';
+    baseUrlInput.value = currentSettings?.ollama_base_url || 'http://localhost:11434';
+    baseUrlWrapper.classList.remove('hidden');
+    keyWrapper.classList.add('hidden');
+  }
+}
+
+async function handleTestConnection() {
+  const provider = document.getElementById('settings-llm-provider').value;
+  const model = document.getElementById('settings-llm-model').value.trim();
+  const baseUrl = document.getElementById('settings-llm-base-url').value.trim();
+  const apiKey = document.getElementById('settings-llm-key').value.trim();
+  const resultBox = document.getElementById('connection-test-result');
+
+  resultBox.classList.remove('hidden');
+  resultBox.className = 'p-2.5 rounded-lg text-xs leading-relaxed border bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border-zinc-300 dark:border-zinc-700';
+  resultBox.textContent = `Testing connection to ${provider}...`;
+
+  try {
+    const res = await fetch('/api/settings/test-connection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider,
+        api_key: apiKey || undefined,
+        model: model || undefined,
+        base_url: baseUrl || undefined,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      resultBox.className = 'p-2.5 rounded-lg text-xs leading-relaxed border bg-emerald-50 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-800';
+      resultBox.textContent = `✅ ${data.message}`;
+    } else {
+      resultBox.className = 'p-2.5 rounded-lg text-xs leading-relaxed border bg-amber-50 dark:bg-amber-950/80 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-800';
+      let guideText = data.guide ? `\n\nSetup Guide:\n${data.guide}` : '';
+      resultBox.textContent = `⚠️ ${data.message}${guideText}`;
+    }
+  } catch (err) {
+    resultBox.className = 'p-2.5 rounded-lg text-xs leading-relaxed border bg-red-50 dark:bg-red-950/80 text-red-800 dark:text-red-200 border-red-300 dark:border-red-800';
+    resultBox.textContent = `❌ Network Error: ${err.message}`;
   }
 }
 
@@ -1208,11 +1874,31 @@ async function handleCleanupCache() {
 }
 
 async function handleSaveKeys() {
-  const gemini = document.getElementById('input-key-gemini').value.trim();
-  const updates = {};
-  if (gemini) updates.GEMINI_API_KEY = gemini;
+  const provider = document.getElementById('settings-llm-provider').value;
+  const model = document.getElementById('settings-llm-model').value.trim();
+  const baseUrl = document.getElementById('settings-llm-base-url').value.trim();
+  const key = document.getElementById('settings-llm-key').value.trim();
 
-  if (Object.keys(updates).length === 0) return;
+  const updates = {};
+  if (provider === 'gemini') {
+    if (key) updates.GEMINI_API_KEY = key;
+    if (model) updates.GEMINI_MODEL = model;
+  } else if (provider === 'groq') {
+    if (key) updates.GROQ_API_KEY = key;
+    if (model) updates.GROQ_MODEL = model;
+  } else if (provider === 'openrouter') {
+    if (key) updates.OPENROUTER_API_KEY = key;
+    if (model) updates.OPENROUTER_MODEL = model;
+    if (baseUrl) updates.OPENROUTER_BASE_URL = baseUrl;
+  } else if (provider === 'ollama') {
+    if (baseUrl) updates.OLLAMA_BASE_URL = baseUrl;
+    if (model) updates.OLLAMA_MODEL = model;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    alert('No changes to save.');
+    return;
+  }
 
   try {
     const res = await fetch('/api/settings/keys', {
@@ -1222,11 +1908,46 @@ async function handleSaveKeys() {
     });
     const data = await res.json();
     alert(data.message);
-    document.getElementById('input-key-gemini').value = '';
+    document.getElementById('settings-llm-key').value = '';
     await loadSettings();
   } catch (err) {
     alert('Failed to save keys: ' + err.message);
   }
+}
+
+async function handleSaveStudyDefaults() {
+  const minDay = parseInt(document.getElementById('settings-pref-minutes-day').value, 10);
+  const speed = parseFloat(document.getElementById('settings-pref-playback-speed').value);
+  const restDays = [];
+  if (document.getElementById('settings-pref-rest-sun').checked) restDays.push('Sunday');
+  if (document.getElementById('settings-pref-rest-sat').checked) restDays.push('Saturday');
+  const buffer = parseInt(document.getElementById('settings-pref-rev-buffer').value, 10);
+
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        minutes_per_day: minDay,
+        playback_speed: speed,
+        rest_days: restDays,
+        revision_buffer_days: buffer,
+      }),
+    });
+    const data = await res.json();
+    alert('Study preferences saved successfully.');
+    await loadSettings();
+  } catch (err) {
+    alert('Failed to save defaults: ' + err.message);
+  }
+}
+
+function handleExportMarkdown() {
+  if (!currentCourseId) {
+    alert('Select a course first to export its study bundle.');
+    return;
+  }
+  window.open(`/api/courses/${currentCourseId}/export-markdown`, '_blank');
 }
 
 async function handleUpdateBrowserCookies(e) {
@@ -1269,20 +1990,49 @@ function formatBytes(bytes) {
 
 // --- Notes, Transcription & Keyframe Functions ---
 function switchNotesTab(tab) {
-  const activeClass = ['font-semibold', 'text-zinc-900', 'bg-white', 'shadow-sm', 'dark:bg-zinc-800', 'dark:text-white'];
-  const inactiveClass = ['font-medium', 'text-zinc-600', 'hover:text-zinc-900', 'dark:text-zinc-400', 'dark:hover:text-white'];
+  const inactiveClass = ['font-medium', 'text-slate-500', 'hover:text-slate-900', 'dark:text-slate-400', 'dark:hover:text-white', 'border-transparent'];
 
   const allTabs = [
-    { id: 'grounded', btn: tabGroundedNotes, pane: paneGroundedNotes },
-    { id: 'personal', btn: tabPersonalNotes, pane: panePersonalNotes },
-    { id: 'qa', btn: tabQaNotebook, pane: paneQaNotebook },
-    { id: 'quiz', btn: tabQuizMastery, pane: paneQuizMastery },
-    { id: 'flashcards', btn: tabFlashcardsFsrs, pane: paneFlashcardsFsrs },
-    { id: 'pyodide', btn: tabPyodideScratchpad, pane: panePyodideScratchpad },
+    { 
+      id: 'grounded', 
+      btn: tabGroundedNotes, 
+      pane: paneGroundedNotes,
+      active: ['font-bold', 'text-indigo-600', 'dark:text-indigo-300', 'bg-white', 'dark:bg-slate-800', 'shadow-sm', 'border', 'border-indigo-200', 'dark:border-indigo-800/80'],
+    },
+    { 
+      id: 'personal', 
+      btn: tabPersonalNotes, 
+      pane: panePersonalNotes,
+      active: ['font-bold', 'text-emerald-600', 'dark:text-emerald-300', 'bg-white', 'dark:bg-slate-800', 'shadow-sm', 'border', 'border-emerald-200', 'dark:border-emerald-800/80'],
+    },
+    { 
+      id: 'qa', 
+      btn: tabQaNotebook, 
+      pane: paneQaNotebook,
+      active: ['font-bold', 'text-purple-600', 'dark:text-purple-300', 'bg-white', 'dark:bg-slate-800', 'shadow-sm', 'border', 'border-purple-200', 'dark:border-purple-800/80'],
+    },
+    { 
+      id: 'quiz', 
+      btn: tabQuizMastery, 
+      pane: paneQuizMastery,
+      active: ['font-bold', 'text-amber-600', 'dark:text-amber-300', 'bg-white', 'dark:bg-slate-800', 'shadow-sm', 'border', 'border-amber-200', 'dark:border-amber-800/80'],
+    },
+    { 
+      id: 'flashcards', 
+      btn: tabFlashcardsFsrs, 
+      pane: paneFlashcardsFsrs,
+      active: ['font-bold', 'text-rose-600', 'dark:text-rose-300', 'bg-white', 'dark:bg-slate-800', 'shadow-sm', 'border', 'border-rose-200', 'dark:border-rose-800/80'],
+    },
+    { 
+      id: 'pyodide', 
+      btn: tabPyodideScratchpad, 
+      pane: panePyodideScratchpad,
+      active: ['font-bold', 'text-cyan-600', 'dark:text-cyan-300', 'bg-white', 'dark:bg-slate-800', 'shadow-sm', 'border', 'border-cyan-200', 'dark:border-cyan-800/80'],
+    },
   ];
 
   allTabs.forEach(t => {
-    t.btn.classList.remove(...activeClass);
+    t.active.forEach(cls => t.btn.classList.remove(cls));
     t.btn.classList.add(...inactiveClass);
     t.pane.classList.add('hidden');
   });
@@ -1290,7 +2040,7 @@ function switchNotesTab(tab) {
   const active = allTabs.find(t => t.id === tab);
   if (active) {
     active.btn.classList.remove(...inactiveClass);
-    active.btn.classList.add(...activeClass);
+    active.btn.classList.add(...active.active);
     active.pane.classList.remove('hidden');
   }
 
@@ -1419,7 +2169,7 @@ function renderMarkdownNotes(markdownText) {
     } else {
       totalSec = parseInt(p1, 10) * 60 + parseInt(p2, 10);
     }
-    return `<button type="button" onclick="window.seekToSeconds(${totalSec})" class="inline-flex items-center gap-1 font-mono text-[11px] font-medium bg-violet-950/90 hover:bg-violet-800 text-violet-300 border border-violet-700/60 rounded px-1.5 py-0.5 cursor-pointer transition shadow-sm active:scale-95" title="Jump video to ${match}"><span>▶</span> ${match}</button>`;
+    return `<button type="button" onclick="window.seekToSeconds(${totalSec})" class="timestamp-link inline-flex items-center gap-1 font-mono text-[11px] font-medium bg-violet-950/90 hover:bg-violet-800 text-violet-300 border border-violet-700/60 rounded px-1.5 py-0.5 cursor-pointer transition shadow-sm active:scale-95" title="Jump video to ${match}"><span>▶</span> ${match}</button>`;
   });
 
   notesContent.innerHTML = html;
@@ -1482,20 +2232,103 @@ function handlePersonalNotesInput() {
 
 // --- Multi-Source & Q&A Functions ---
 function switchSourceModalTab(tab) {
+  const tabPdf = document.getElementById('tab-src-pdf');
+  const tabWeb = document.getElementById('tab-src-web');
+  const tabDisc = document.getElementById('tab-src-discover-web');
+  const formPdf = document.getElementById('form-upload-pdf');
+  const formWeb = document.getElementById('form-import-web');
+  const viewDisc = document.getElementById('view-discover-web');
+
+  [tabPdf, tabWeb, tabDisc].forEach(t => {
+    if (t) {
+      t.classList.remove('bg-white', 'dark:bg-zinc-800', 'font-semibold', 'text-zinc-900', 'dark:text-white', 'shadow-sm');
+      t.classList.add('text-zinc-500', 'dark:text-zinc-400');
+    }
+  });
+  if (formPdf) formPdf.classList.add('hidden');
+  if (formWeb) formWeb.classList.add('hidden');
+  if (viewDisc) viewDisc.classList.add('hidden');
+
   if (tab === 'pdf') {
-    tabSrcPdf.classList.add('bg-surface-800', 'text-white');
-    tabSrcPdf.classList.remove('text-slate-400');
-    tabSrcWeb.classList.remove('bg-surface-800', 'text-white');
-    tabSrcWeb.classList.add('text-slate-400');
-    formUploadPdf.classList.remove('hidden');
-    formImportWeb.classList.add('hidden');
-  } else {
-    tabSrcWeb.classList.add('bg-surface-800', 'text-white');
-    tabSrcWeb.classList.remove('text-slate-400');
-    tabSrcPdf.classList.remove('bg-surface-800', 'text-white');
-    tabSrcPdf.classList.add('text-slate-400');
-    formImportWeb.classList.remove('hidden');
-    formUploadPdf.classList.add('hidden');
+    if (tabPdf) {
+      tabPdf.classList.add('bg-white', 'dark:bg-zinc-800', 'font-semibold', 'text-zinc-900', 'dark:text-white', 'shadow-sm');
+      tabPdf.classList.remove('text-zinc-500', 'dark:text-zinc-400');
+    }
+    if (formPdf) formPdf.classList.remove('hidden');
+  } else if (tab === 'web') {
+    if (tabWeb) {
+      tabWeb.classList.add('bg-white', 'dark:bg-zinc-800', 'font-semibold', 'text-zinc-900', 'dark:text-white', 'shadow-sm');
+      tabWeb.classList.remove('text-zinc-500', 'dark:text-zinc-400');
+    }
+    if (formWeb) formWeb.classList.remove('hidden');
+  } else if (tab === 'discover-web') {
+    if (tabDisc) {
+      tabDisc.classList.add('bg-white', 'dark:bg-zinc-800', 'font-semibold', 'text-zinc-900', 'dark:text-white', 'shadow-sm');
+      tabDisc.classList.remove('text-zinc-500', 'dark:text-zinc-400');
+    }
+    if (viewDisc) viewDisc.classList.remove('hidden');
+    loadWebDocsDiscovery();
+  }
+}
+
+async function loadWebDocsDiscovery() {
+  if (!currentCourseId) return;
+  const listEl = document.getElementById('candidate-web-docs-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<div class="text-xs text-zinc-500 italic p-3">Searching curated study docs & guides...</div>';
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/sources/discover-web`);
+    const data = await res.json();
+    listEl.innerHTML = '';
+    const candidates = data.candidates || [];
+    if (candidates.length === 0) {
+      listEl.innerHTML = '<div class="text-xs text-zinc-500 italic p-3">No web candidates found.</div>';
+      return;
+    }
+    candidates.forEach(c => {
+      const label = document.createElement('label');
+      label.className = 'flex items-start gap-2.5 p-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-750 text-xs';
+      label.innerHTML = `
+        <input type="checkbox" name="approved_web_doc" value="${c.url}" data-title="${c.title}" checked class="mt-0.5 rounded text-zinc-900 focus:ring-0">
+        <div>
+          <div class="font-semibold text-zinc-900 dark:text-zinc-100">${c.title}</div>
+          <div class="text-[11px] text-zinc-500 dark:text-zinc-400">${c.site} • ${c.summary}</div>
+        </div>
+      `;
+      listEl.appendChild(label);
+    });
+  } catch (err) {
+    listEl.innerHTML = `<div class="text-xs text-red-400 p-3">Error loading docs: ${err.message}</div>`;
+  }
+}
+
+async function handleApproveWebDocs() {
+  const checked = document.querySelectorAll('input[name="approved_web_doc"]:checked');
+  if (checked.length === 0) {
+    alert('Select at least one document to import.');
+    return;
+  }
+  const btn = document.getElementById('btn-approve-web-docs');
+  btn.disabled = true;
+  btn.textContent = 'Ingesting Docs...';
+
+  try {
+    for (const cb of checked) {
+      const url = cb.value;
+      const title = cb.getAttribute('data-title') || 'Web Document';
+      await fetch(`/api/courses/${currentCourseId}/sources/web`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, title }),
+      });
+    }
+    document.getElementById('add-source-modal').classList.add('hidden');
+    await loadCourseSources(currentCourseId);
+  } catch (err) {
+    alert('Failed to import web doc: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Approve & Ingest Selected Docs';
   }
 }
 
@@ -1670,7 +2503,7 @@ function renderQAThreads(threads) {
           <span class="text-[10px] text-slate-500 font-semibold uppercase shrink-0">Citations:</span>
           ${t.citations.map(c => {
             const timeTag = c.start_sec !== null && c.start_sec !== undefined ? ` [${formatDurationSec(c.start_sec)}]` : '';
-            return `<button type="button" onclick="${c.start_sec !== null && c.start_sec !== undefined ? `window.seekToSeconds(${c.start_sec})` : ''}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-950 text-violet-300 border border-violet-800/50 font-mono text-[10px] hover:bg-violet-900 transition" title="${escapeHtml(c.excerpt)}">
+            return `<button type="button" onclick="${c.start_sec !== null && c.start_sec !== undefined ? `window.seekToSeconds(${c.start_sec})` : ''}" class="qa-citation-badge inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-950 text-violet-300 border border-violet-800/50 font-mono text-[10px] hover:bg-violet-900 transition" title="${escapeHtml(c.excerpt)}">
               <span>📌</span> ${escapeHtml(c.source_title)}${timeTag}
             </button>`;
           }).join('')}
@@ -1699,8 +2532,8 @@ function formatGroundedAnswerHtml(markdown) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  // Citations [ref:chk_...]
-  html = html.replace(/\[ref:([a-zA-Z0-9_]+)\]/g, '<span class="text-violet-400 font-mono text-[10px] bg-surface-950 px-1 py-0.2 rounded border border-violet-900/60 font-semibold">[ref:$1]</span>');
+  // Citations [ref:chk_...] or UUID
+  html = html.replace(/\[ref:([a-zA-Z0-9_\-]+)\]/g, '<span class="text-violet-400 font-mono text-[10px] bg-surface-950 px-1 py-0.2 rounded border border-violet-900/60 font-semibold">[ref:$1]</span>');
 
   // Timestamps [MM:SS]
   html = html.replace(/\[(\d{1,2}):(\d{2})\]/g, (match, p1, p2) => {
@@ -1886,8 +2719,8 @@ function renderQuiz(quiz) {
               }
             }
             return `
-              <label class="flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition ${optClass}">
-                <input type="radio" name="quiz_q_${q.id}" value="${optIdx}" ${isCompleted ? 'disabled' : ''} class="text-amber-500 focus:ring-0">
+              <label class="quiz-option-label flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition ${optClass}">
+                <input type="radio" name="quiz_q_${q.id}" value="${optIdx}" ${isCompleted ? 'disabled' : ''} class="quiz-option-input text-amber-500 focus:ring-0">
                 <span class="leading-relaxed">${escapeHtml(opt)}</span>
               </label>
             `;
@@ -1986,7 +2819,7 @@ async function handleLessonQuizSubmit(e) {
     renderQuiz(currentQuiz);
 
     if (result.tested_out_lessons && result.tested_out_lessons.length > 0) {
-      await fetchSchedule(currentCourseId);
+      await loadSchedule(currentCourseId);
     }
     updateFlashcardCounts();
   } catch (err) {
@@ -2213,7 +3046,7 @@ async function openDiagnosticPreTest() {
         </div>
         <div class="space-y-1.5 pt-1">
           ${q.options.map((opt, optIdx) => `
-            <label class="flex items-center gap-2 p-2 rounded-lg border border-slate-700 text-xs text-slate-300 hover:bg-surface-800 cursor-pointer">
+            <label class="diagnostic-option flex items-center gap-2 p-2 rounded-lg border border-slate-700 text-xs text-slate-300 hover:bg-surface-800 cursor-pointer">
               <input type="radio" name="diag_q_${q.id}" value="${optIdx}" class="text-amber-500 focus:ring-0">
               <span>${escapeHtml(opt)}</span>
             </label>
@@ -2248,7 +3081,7 @@ async function handleSubmitDiagnostic() {
     const testedOutCount = (result.tested_out_lessons || []).length;
     alert(`Diagnostic Complete! Score: ${result.score}%\nTested Out: ${testedOutCount} topics.\nYour schedule has been dynamically reflowed.`);
     diagnosticModal.classList.add('hidden');
-    await fetchSchedule(currentCourseId);
+    await loadSchedule(currentCourseId);
   } catch (err) {
     Logger.error('Diagnostic submission failed', err);
     alert('Submission failed: ' + err.message);
@@ -2302,7 +3135,7 @@ async function openMockExam() {
         </div>
         <div class="space-y-1.5 pt-1">
           ${q.options.map((opt, optIdx) => `
-            <label class="flex items-center gap-2 p-2 rounded-lg border border-slate-700 text-xs text-slate-300 hover:bg-surface-800 cursor-pointer">
+            <label class="diagnostic-option flex items-center gap-2 p-2 rounded-lg border border-slate-700 text-xs text-slate-300 hover:bg-surface-800 cursor-pointer">
               <input type="radio" name="mock_q_${q.id}" value="${optIdx}" onchange="updateMockAnsweredCount()" class="text-emerald-500 focus:ring-0">
               <span>${escapeHtml(opt)}</span>
             </label>
@@ -2447,6 +3280,24 @@ function runPythonCode() {
   `;
   pyodideOutput.textContent = 'Executing locally inside in-browser Web Worker...';
   pyodideWorker.postMessage({ type: 'run', code, id: Date.now() });
+}
+
+function stopPythonWorker() {
+  if (pyodideWorker) {
+    pyodideWorker.terminate();
+    pyodideWorker = null;
+    isWorkerReady = false;
+  }
+  btnRunPyodide.disabled = false;
+  btnRunPyodide.innerHTML = `
+    <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    <span>Run Python</span>
+  `;
+  pyodideOutput.textContent = '[Execution stopped: Worker killed by user within 2s. Browser UI remained 100% responsive.]';
+  pyodideOutput.className = 'flex-1 overflow-y-auto text-amber-400 whitespace-pre-wrap';
+  pyodideStatusPill.textContent = 'Worker: Terminated';
+  pyodideStatusPill.className = 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-800';
+  Logger.api('WORKER', 'pyodide_worker.js', 200, 0, 'Worker terminated by user stop signal');
 }
 
 function handlePyodidePresetChange(e) {

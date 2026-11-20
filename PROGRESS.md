@@ -55,3 +55,18 @@
 - `tests/test_e2e_m5.py`: 1 passed (Playwright Pyodide scratchpad, Storage Guard vacuum, backup, bundle export)
 - `tests/test_live_browser_ui.py`: 5 passed (Playwright live dual-theme, date alignment, buffer toggle, collapsible studio & days, selective video toggling, F12 console)
 - **Total**: 53 passed, 0 failed (100% pass rate).
+
+---
+
+## Milestone 5.2: Complete Editability, Pacing Alignment & Colorful UI Redesign (CourseIt & NotebookLM Inspired)
+- [x] **Full Course & Pacing Editability**: Added `PATCH /api/courses/{course_id}` allowing one-click updates to Course Title, Exam Target Date, Pacing Mode (Finish on Exam Date vs Fixed Daily Spend), Daily Study Minutes, Playback Speed, Revision Buffer Days, and Weekly Rest Days with automatic instant replan.
+- [x] **Full Lesson & Allocation Editability**: Added `PATCH /api/courses/{course_id}/lessons/{lesson_id}` and `POST /allocations/{id}/reschedule` to rename lessons, toggle priority (Core vs Deep-Dive), move allocations to any calendar date, and edit lesson summaries.
+- [x] **Interactive Personal Notes**: Built a dedicated Personal Notes studio tab with a rich Markdown formatting toolbar (`**B**`, `*I*`, `H2`, `</>`, `• List`, `> Quote`), live word counter, and manual `💾 Save Notes` button with toast confirmation.
+- [x] **Flashcard Editor & Add Card**: Built interactive modal editor (`PUT /api/courses/{course_id}/flashcards/{card_id}`) to edit front prompts, back answers, and delete cards, plus a manual card creator.
+- [x] **Selective Video Ingestion & Examples Filter**: Enhanced the Curriculum Drawer with a `⚡ Skip All Examples` one-click action that automatically excludes practice/question videos, saving hours of exam prep time.
+- [x] **Vibrant Creative Layout**:
+  - Replaced drab monochrome with an elevated visual hierarchy: electric violet brand icon, 4 vibrant Top KPI cards (Cyan Study Left, Emerald Projected Finish, Purple Exam Deadline, Amber Pace & Speed), rainbow progress bar, and signature color accents on each studio tab.
+  - High-contrast dual theme support (Obsidian Slate Dark Mode + Porcelain Light Mode) with WCAG AA compliance.
+- [x] **Test Verification**:
+  - 12 unit and integration tests passing (`tests/test_scheduler.py`, `tests/test_migrations.py`, `tests/test_integration_pipeline.py`).
+  - 8 Playwright live browser UI tests passing (`tests/test_live_browser_ui.py`) covering theme switching, date alignment, studio collapsing, selective video filtering, course editing, lesson editing, and personal notes.

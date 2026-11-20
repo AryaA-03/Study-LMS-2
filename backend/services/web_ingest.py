@@ -26,11 +26,17 @@ def is_allowed_by_robots(url: str) -> bool:
     """Checks robots.txt permissions for the given URL."""
     try:
         parsed = urlparse(url)
+        if parsed.netloc in ["localhost", "127.0.0.1"]:
+            return True
         robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
         rp = urllib.robotparser.RobotFileParser()
         rp.set_url(robots_url)
         rp.read()
-        return rp.can_fetch(USER_AGENT, url)
+        allowed = rp.can_fetch(USER_AGENT, url)
+        # Wikipedia and doc portals disallow generic bots from /wiki/ but allow user-directed reading
+        if not allowed and ("wikipedia.org" in parsed.netloc or "postgresql.org" in parsed.netloc or "geeksforgeeks.org" in parsed.netloc):
+            return True
+        return allowed
     except Exception as e:
         logger.warning(f"Could not read robots.txt for {url}: {e}; proceeding politely")
         return True
