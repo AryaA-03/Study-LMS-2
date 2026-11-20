@@ -28,6 +28,16 @@ const Logger = {
     const style = 'background: #8b5cf6; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
     console.log(`${badge} ${action}:`, details);
   },
+  quiz(action, details) {
+    const badge = `%c[LearnLMS:Quiz]`;
+    const style = 'background: #d97706; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
+    console.log(`${badge} ${action}:`, details);
+  },
+  fsrs(action, details) {
+    const badge = `%c[LearnLMS:FSRS]`;
+    const style = 'background: #059669; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
+    console.log(`${badge} ${action}:`, details);
+  },
   filter(action, count) {
     const badge = `%c[LearnLMS:Filter]`;
     const style = 'background: #059669; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
@@ -156,6 +166,70 @@ const tabSrcPdf = document.getElementById('tab-src-pdf');
 const tabSrcWeb = document.getElementById('tab-src-web');
 const formUploadPdf = document.getElementById('form-upload-pdf');
 const formImportWeb = document.getElementById('form-import-web');
+
+// Quiz & Mastery Elements
+const tabQuizMastery = document.getElementById('tab-quiz-mastery');
+const paneQuizMastery = document.getElementById('pane-quiz-mastery');
+const quizTitleHeading = document.getElementById('quiz-title-heading');
+const quizMasteryBadge = document.getElementById('quiz-mastery-badge');
+const quizQuestionCount = document.getElementById('quiz-question-count');
+const btnGenerateLessonQuiz = document.getElementById('btn-generate-lesson-quiz');
+const quizResultsBanner = document.getElementById('quiz-results-banner');
+const quizForm = document.getElementById('quiz-form');
+const quizQuestionsList = document.getElementById('quiz-questions-list');
+const quizSubmitBar = document.getElementById('quiz-submit-bar');
+
+// FSRS Flashcard Elements
+const tabFlashcardsFsrs = document.getElementById('tab-flashcards-fsrs');
+const paneFlashcardsFsrs = document.getElementById('pane-flashcards-fsrs');
+const fsrsRetentionPill = document.getElementById('fsrs-retention-pill');
+const statFcTotal = document.getElementById('stat-fc-total');
+const statFcDue = document.getElementById('stat-fc-due');
+const statFcNew = document.getElementById('stat-fc-new');
+const statFcLearning = document.getElementById('stat-fc-learning');
+const statFcReview = document.getElementById('stat-fc-review');
+const badgeDueFlashcards = document.getElementById('badge-due-flashcards');
+const btnAddCardManual = document.getElementById('btn-add-card-manual');
+const fcEmptyState = document.getElementById('fc-empty-state');
+const fcActiveCardContainer = document.getElementById('fc-active-card-container');
+const fsrsCardFlipper = document.getElementById('fsrs-card-flipper');
+const fsrsCardFront = document.getElementById('fsrs-card-front');
+const fsrsCardBack = document.getElementById('fsrs-card-back');
+const fsrsFrontText = document.getElementById('fsrs-front-text');
+const fsrsBackText = document.getElementById('fsrs-back-text');
+const fsrsQuoteBox = document.getElementById('fsrs-quote-box');
+const fsrsRatingBar = document.getElementById('fsrs-rating-bar');
+const btnFsrsAgain = document.getElementById('btn-fsrs-again');
+const btnFsrsHard = document.getElementById('btn-fsrs-hard');
+const btnFsrsGood = document.getElementById('btn-fsrs-good');
+const btnFsrsEasy = document.getElementById('btn-fsrs-easy');
+const intervalAgain = document.getElementById('interval-again');
+const intervalHard = document.getElementById('interval-hard');
+const intervalGood = document.getElementById('interval-good');
+const intervalEasy = document.getElementById('interval-easy');
+
+// Diagnostic Pre-Test & Mock Exam Elements
+const btnDiagnosticTest = document.getElementById('btn-diagnostic-test');
+const diagnosticModal = document.getElementById('diagnostic-modal');
+const btnCloseDiagnostic = document.getElementById('btn-close-diagnostic');
+const diagnosticContentContainer = document.getElementById('diagnostic-content-container');
+const btnSubmitDiagnostic = document.getElementById('btn-submit-diagnostic');
+
+const btnMockExam = document.getElementById('btn-mock-exam');
+const mockExamModal = document.getElementById('mock-exam-modal');
+const btnCloseMockExam = document.getElementById('btn-close-mock-exam');
+const mockExamTimer = document.getElementById('mock-exam-timer');
+const mockExamContent = document.getElementById('mock-exam-content');
+const mockAnsweredCount = document.getElementById('mock-answered-count');
+const mockTotalCount = document.getElementById('mock-total-count');
+const btnSubmitMockExam = document.getElementById('btn-submit-mock-exam');
+
+const addCardModal = document.getElementById('add-card-modal');
+const btnCloseAddCard = document.getElementById('btn-close-add-card');
+const formCreateCard = document.getElementById('form-create-card');
+const inputCardFront = document.getElementById('input-card-front');
+const inputCardBack = document.getElementById('input-card-back');
+const inputCardQuote = document.getElementById('input-card-quote');
 
 // --- YouTube IFrame API Initialization ---
 window.onYouTubeIframeAPIReady = function() {
@@ -306,6 +380,36 @@ function setupEventListeners() {
   tabSrcWeb.addEventListener('click', () => switchSourceModalTab('web'));
   formUploadPdf.addEventListener('submit', handleUploadPdf);
   formImportWeb.addEventListener('submit', handleImportWeb);
+
+  // Quiz & Mastery Listeners
+  tabQuizMastery.addEventListener('click', () => switchNotesTab('quiz'));
+  btnGenerateLessonQuiz.addEventListener('click', () => {
+    const count = parseInt(quizQuestionCount.value, 10) || 5;
+    handleGenerateLessonQuiz(count);
+  });
+  quizForm.addEventListener('submit', handleLessonQuizSubmit);
+
+  // FSRS Flashcards Listeners
+  tabFlashcardsFsrs.addEventListener('click', () => switchNotesTab('flashcards'));
+  btnAddCardManual.addEventListener('click', () => addCardModal.classList.remove('hidden'));
+  btnCloseAddCard.addEventListener('click', () => addCardModal.classList.add('hidden'));
+  formCreateCard.addEventListener('submit', handleCreateCardManual);
+  fsrsCardFlipper.addEventListener('click', flipActiveCard);
+  btnFsrsAgain.addEventListener('click', () => submitCardRating(1));
+  btnFsrsHard.addEventListener('click', () => submitCardRating(2));
+  btnFsrsGood.addEventListener('click', () => submitCardRating(3));
+  btnFsrsEasy.addEventListener('click', () => submitCardRating(4));
+
+  // Diagnostic Pre-Test & Mock Exam Listeners
+  btnDiagnosticTest.addEventListener('click', openDiagnosticPreTest);
+  btnCloseDiagnostic.addEventListener('click', () => diagnosticModal.classList.add('hidden'));
+  btnSubmitDiagnostic.addEventListener('click', handleSubmitDiagnostic);
+  btnMockExam.addEventListener('click', openMockExam);
+  btnCloseMockExam.addEventListener('click', closeMockExam);
+  btnSubmitMockExam.addEventListener('click', handleSubmitMockExam);
+
+  // Global Keyboard Shortcuts
+  document.addEventListener('keydown', handleFlashcardKeydown);
 }
 
 // --- Layout Collapsing ---
@@ -1067,10 +1171,16 @@ function switchNotesTab(tab) {
   tabPersonalNotes.classList.add('text-slate-400');
   tabQaNotebook.classList.remove('bg-surface-800', 'text-white');
   tabQaNotebook.classList.add('text-slate-400');
+  tabQuizMastery.classList.remove('bg-surface-800', 'text-white');
+  tabQuizMastery.classList.add('text-slate-400');
+  tabFlashcardsFsrs.classList.remove('bg-surface-800', 'text-white');
+  tabFlashcardsFsrs.classList.add('text-slate-400');
 
   paneGroundedNotes.classList.add('hidden');
   panePersonalNotes.classList.add('hidden');
   paneQaNotebook.classList.add('hidden');
+  paneQuizMastery.classList.add('hidden');
+  paneFlashcardsFsrs.classList.add('hidden');
 
   if (tab === 'grounded') {
     tabGroundedNotes.classList.add('bg-surface-800', 'text-white');
@@ -1087,6 +1197,18 @@ function switchNotesTab(tab) {
     if (currentCourseId) {
       loadQAHistory(currentCourseId);
     }
+  } else if (tab === 'quiz') {
+    tabQuizMastery.classList.add('bg-surface-800', 'text-white');
+    tabQuizMastery.classList.remove('text-slate-400');
+    paneQuizMastery.classList.remove('hidden');
+    if (activeAllocation) {
+      checkOrCreateLessonQuiz(activeAllocation.lesson_id);
+    }
+  } else if (tab === 'flashcards') {
+    tabFlashcardsFsrs.classList.add('bg-surface-800', 'text-white');
+    tabFlashcardsFsrs.classList.remove('text-slate-400');
+    paneFlashcardsFsrs.classList.remove('hidden');
+    loadFlashcards();
   }
 }
 
@@ -1556,5 +1678,618 @@ async function handleAskQuestion(e) {
     btnSubmitQa.disabled = false;
   }
 }
+
+// ==========================================
+// QUIZ & MASTERY LOOP FUNCTIONS (M4)
+// ==========================================
+let currentQuiz = null;
+let quizStartTime = null;
+
+async function checkOrCreateLessonQuiz(lessonId) {
+  if (!currentCourseId || !lessonId) return;
+  quizTitleHeading.textContent = `Lesson Quiz: ${activeAllocation ? activeAllocation.lesson_title : 'Active Lesson'}`;
+  quizResultsBanner.classList.add('hidden');
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/quizzes?lesson_id=${lessonId}`);
+    if (res.ok) {
+      const quizzes = await res.json();
+      Logger.api('GET', `/api/courses/${currentCourseId}/quizzes?lesson_id=${lessonId}`, res.status, Math.round(performance.now() - t0), quizzes);
+      if (quizzes.length > 0) {
+        renderQuiz(quizzes[0]);
+        return;
+      }
+    }
+  } catch (err) {
+    Logger.error('Failed to check existing quiz', err);
+  }
+
+  // Not created yet -> show prompt
+  quizQuestionsList.innerHTML = `
+    <div class="text-center py-8 text-slate-500 text-xs">
+      <svg class="w-10 h-10 mx-auto mb-2 text-amber-500/80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+      <p class="font-bold text-slate-300 mb-1">Citation Quiz Ready</p>
+      <p class="mb-4">Generate 3 to 10 questions strictly cited from this lesson's transcript chunks.</p>
+      <button type="button" onclick="handleGenerateLessonQuiz(5)" class="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-xs shadow-md transition active:scale-95">Generate 5-Question Quiz</button>
+    </div>
+  `;
+  quizSubmitBar.classList.add('hidden');
+}
+
+window.handleGenerateLessonQuiz = async function(count = 5) {
+  if (!currentCourseId || !activeAllocation) {
+    alert('Select an active lesson from the schedule first.');
+    return;
+  }
+  btnGenerateLessonQuiz.disabled = true;
+  quizQuestionsList.innerHTML = `
+    <div class="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+      <div class="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+      <span>Extracting grounded definitions & facts from transcripts...</span>
+    </div>
+  `;
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/quizzes/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lesson_id: activeAllocation.lesson_id,
+        quiz_type: 'lesson',
+        question_count: count,
+      }),
+    });
+    const quizData = await res.json();
+    Logger.api('POST', `/api/courses/${currentCourseId}/quizzes/generate`, res.status, Math.round(performance.now() - t0), quizData);
+    if (!res.ok) throw new Error(quizData.detail || 'Quiz generation failed');
+    renderQuiz(quizData);
+  } catch (err) {
+    Logger.error('Quiz generation failed', err);
+    quizQuestionsList.innerHTML = `<div class="p-4 text-xs text-red-400 bg-red-950/40 rounded-xl border border-red-800">Quiz generation failed: ${escapeHtml(err.message)}</div>`;
+  } finally {
+    btnGenerateLessonQuiz.disabled = false;
+  }
+};
+
+function renderQuiz(quiz) {
+  currentQuiz = quiz;
+  quizStartTime = Date.now();
+  quizResultsBanner.classList.add('hidden');
+
+  if (quiz.score !== null && quiz.score !== undefined) {
+    showQuizScoreBanner(quiz);
+  } else {
+    quizMasteryBadge.classList.add('hidden');
+  }
+
+  const html = quiz.questions.map((q, idx) => {
+    const isCompleted = quiz.score !== null && quiz.score !== undefined;
+    return `
+      <div class="p-3.5 bg-surface-900 rounded-xl border border-slate-800 space-y-2.5">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="w-5 h-5 rounded-full bg-surface-800 text-slate-300 text-[10px] font-bold flex items-center justify-center font-mono">${idx + 1}</span>
+            <span class="text-xs font-semibold text-white leading-relaxed">${escapeHtml(q.question)}</span>
+          </div>
+          <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-violet-950/80 text-violet-300 border border-violet-800/60 shrink-0">
+            [${escapeHtml(q.chunk_id)}]
+          </span>
+        </div>
+
+        <!-- Cited quote evidence preview -->
+        <div class="px-2.5 py-1.5 rounded-lg bg-surface-950/80 border border-slate-800/80 text-[11px] text-slate-400 italic">
+          &ldquo;${escapeHtml(q.quote)}&rdquo;
+        </div>
+
+        <!-- Options -->
+        <div class="space-y-1.5 pt-1">
+          ${q.options.map((opt, optIdx) => {
+            let optClass = 'bg-surface-850 hover:bg-surface-800 border-slate-700/60 text-slate-300';
+            if (isCompleted) {
+              if (optIdx === q.correct_index) {
+                optClass = 'bg-emerald-950/70 border-emerald-700 text-emerald-200 font-semibold';
+              }
+            }
+            return `
+              <label class="flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition ${optClass}">
+                <input type="radio" name="quiz_q_${q.id}" value="${optIdx}" ${isCompleted ? 'disabled' : ''} class="text-amber-500 focus:ring-0">
+                <span class="leading-relaxed">${escapeHtml(opt)}</span>
+              </label>
+            `;
+          }).join('')}
+        </div>
+
+        ${isCompleted ? `
+          <div class="mt-2 pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 font-mono">
+            💡 ${escapeHtml(q.explanation)}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+
+  quizQuestionsList.innerHTML = html;
+  if (quiz.score === null || quiz.score === undefined) {
+    quizSubmitBar.classList.remove('hidden');
+  } else {
+    quizSubmitBar.classList.add('hidden');
+  }
+}
+
+function showQuizScoreBanner(data) {
+  quizResultsBanner.classList.remove('hidden');
+  const score = data.score;
+  const passed = data.passed || score >= 80;
+
+  quizMasteryBadge.classList.remove('hidden');
+  if (passed) {
+    quizMasteryBadge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full font-mono bg-emerald-950 text-emerald-300 border border-emerald-800';
+    quizMasteryBadge.textContent = '✨ MASTERED / TESTED OUT';
+    quizResultsBanner.className = 'mb-4 p-3 rounded-xl border flex items-center justify-between text-xs bg-emerald-950/60 border-emerald-700 text-emerald-200';
+    quizResultsBanner.innerHTML = `
+      <div class="flex items-center gap-2">
+        <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        <div>
+          <strong class="text-white text-sm">${score}% Score</strong> &mdash; Concept Mastered!
+          <span class="block text-[11px] text-emerald-300/80">Lesson marked Tested Out and freed from your remaining study schedule.</span>
+        </div>
+      </div>
+    `;
+  } else if (score < 60) {
+    quizMasteryBadge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full font-mono bg-amber-950 text-amber-300 border border-amber-800';
+    quizMasteryBadge.textContent = '⚠️ NEEDS REVIEW';
+    quizResultsBanner.className = 'mb-4 p-3 rounded-xl border flex items-center justify-between text-xs bg-amber-950/60 border-amber-700 text-amber-200';
+    quizResultsBanner.innerHTML = `
+      <div class="flex items-center gap-2">
+        <svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        <div>
+          <strong class="text-white text-sm">${score}% Score</strong> &mdash; Review Recommended.
+          <span class="block text-[11px] text-amber-300/80">Targeted FSRS flashcards generated for missed concepts. Drill them in the Flashcards tab!</span>
+        </div>
+      </div>
+    `;
+  } else {
+    quizMasteryBadge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full font-mono bg-blue-950 text-blue-300 border border-blue-800';
+    quizMasteryBadge.textContent = 'PASSED';
+    quizResultsBanner.className = 'mb-4 p-3 rounded-xl border flex items-center justify-between text-xs bg-blue-950/60 border-blue-700 text-blue-200';
+    quizResultsBanner.innerHTML = `
+      <div><strong class="text-white text-sm">${score}% Score</strong> &mdash; Solid progress! Score 80%+ to test out completely.</div>
+    `;
+  }
+}
+
+async function handleLessonQuizSubmit(e) {
+  e.preventDefault();
+  if (!currentQuiz) return;
+
+  const answers = {};
+  for (const q of currentQuiz.questions) {
+    const checked = document.querySelector(`input[name="quiz_q_${q.id}"]:checked`);
+    if (checked) {
+      answers[q.id] = parseInt(checked.value, 10);
+    }
+  }
+
+  const answeredCount = Object.keys(answers).length;
+  const timeTaken = quizStartTime ? Math.round((Date.now() - quizStartTime) / 1000) : 0;
+  Logger.quiz('Submit Lesson Quiz', { quizId: currentQuiz.id, answers, answeredCount, timeTaken });
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/quizzes/${currentQuiz.id}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers, time_taken_seconds: timeTaken }),
+    });
+    const result = await res.json();
+    Logger.api('POST', `/api/courses/${currentCourseId}/quizzes/${currentQuiz.id}/submit`, res.status, Math.round(performance.now() - t0), result);
+
+    if (!res.ok) throw new Error(result.detail || 'Submission failed');
+
+    currentQuiz.score = result.score;
+    currentQuiz.passed = result.passed;
+    renderQuiz(currentQuiz);
+
+    if (result.tested_out_lessons && result.tested_out_lessons.length > 0) {
+      await fetchSchedule(currentCourseId);
+    }
+    updateFlashcardCounts();
+  } catch (err) {
+    Logger.error('Quiz submission error', err);
+    alert('Submission failed: ' + err.message);
+  }
+}
+
+// ==========================================
+// FSRS SPACED REPETITION FLASHCARDS (M4)
+// ==========================================
+let dueCards = [];
+let activeCardIndex = 0;
+let isCardFlipped = false;
+
+async function loadFlashcards() {
+  if (!currentCourseId) return;
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/flashcards/due`);
+    if (res.ok) {
+      dueCards = await res.json();
+      Logger.api('GET', `/api/courses/${currentCourseId}/flashcards/due`, res.status, Math.round(performance.now() - t0), dueCards);
+      activeCardIndex = 0;
+      renderActiveCard();
+    }
+    updateFlashcardCounts();
+  } catch (err) {
+    Logger.error('Failed to load flashcards', err);
+  }
+}
+
+async function updateFlashcardCounts() {
+  if (!currentCourseId) return;
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/flashcards/counts`);
+    if (res.ok) {
+      const counts = await res.json();
+      statFcTotal.textContent = counts.total;
+      statFcDue.textContent = counts.due;
+      statFcNew.textContent = counts.new;
+      statFcLearning.textContent = counts.learning;
+      statFcReview.textContent = counts.review;
+
+      if (counts.due > 0) {
+        badgeDueFlashcards.textContent = counts.due;
+        badgeDueFlashcards.classList.remove('hidden');
+      } else {
+        badgeDueFlashcards.classList.add('hidden');
+      }
+    }
+  } catch (err) {
+    Logger.error('Failed to update flashcard counts', err);
+  }
+}
+
+function renderActiveCard() {
+  isCardFlipped = false;
+  fsrsCardFront.classList.remove('hidden');
+  fsrsCardBack.classList.add('hidden');
+  fsrsRatingBar.classList.add('hidden');
+  fsrsCardFlipper.classList.remove('rotate-y-180');
+
+  if (!dueCards || dueCards.length === 0 || activeCardIndex >= dueCards.length) {
+    fcEmptyState.classList.remove('hidden');
+    fcActiveCardContainer.classList.add('hidden');
+    return;
+  }
+
+  fcEmptyState.classList.add('hidden');
+  fcActiveCardContainer.classList.remove('hidden');
+
+  const card = dueCards[activeCardIndex];
+  fsrsFrontText.textContent = card.front;
+  fsrsBackText.textContent = card.back;
+
+  if (card.source_quote) {
+    fsrsQuoteBox.textContent = `Source Evidence: "${card.source_quote}"`;
+    fsrsQuoteBox.classList.remove('hidden');
+  } else {
+    fsrsQuoteBox.classList.add('hidden');
+  }
+
+  if (card.intervals) {
+    intervalAgain.textContent = card.intervals[1] || '1m';
+    intervalHard.textContent = card.intervals[2] || '5m';
+    intervalGood.textContent = card.intervals[3] || '10m';
+    intervalEasy.textContent = card.intervals[4] || '7d';
+  }
+}
+
+function flipActiveCard() {
+  if (!dueCards || dueCards.length === 0 || activeCardIndex >= dueCards.length) return;
+  isCardFlipped = !isCardFlipped;
+
+  if (isCardFlipped) {
+    fsrsCardFlipper.classList.add('rotate-y-180');
+    setTimeout(() => {
+      fsrsCardFront.classList.add('hidden');
+      fsrsCardBack.classList.remove('hidden');
+      fsrsRatingBar.classList.remove('hidden');
+    }, 150);
+  } else {
+    fsrsCardFlipper.classList.remove('rotate-y-180');
+    setTimeout(() => {
+      fsrsCardBack.classList.add('hidden');
+      fsrsCardFront.classList.remove('hidden');
+      fsrsRatingBar.classList.add('hidden');
+    }, 150);
+  }
+  Logger.fsrs('Card Flipped', { isCardFlipped, cardId: dueCards[activeCardIndex].id });
+}
+
+async function submitCardRating(rating) {
+  if (!dueCards || activeCardIndex >= dueCards.length) return;
+  const card = dueCards[activeCardIndex];
+
+  Logger.fsrs('Submit Rating', { cardId: card.id, rating });
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/flashcards/${card.id}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rating }),
+    });
+    const reviewData = await res.json();
+    Logger.api('POST', `/api/courses/${currentCourseId}/flashcards/${card.id}/review`, res.status, Math.round(performance.now() - t0), reviewData);
+
+    activeCardIndex++;
+    renderActiveCard();
+    updateFlashcardCounts();
+  } catch (err) {
+    Logger.error('Flashcard review failed', err);
+    alert('Review failed: ' + err.message);
+  }
+}
+
+function handleFlashcardKeydown(e) {
+  if (paneFlashcardsFsrs.classList.contains('hidden')) return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  if (e.code === 'Space') {
+    e.preventDefault();
+    flipActiveCard();
+  } else if (isCardFlipped) {
+    if (e.key === '1') { e.preventDefault(); submitCardRating(1); }
+    else if (e.key === '2') { e.preventDefault(); submitCardRating(2); }
+    else if (e.key === '3') { e.preventDefault(); submitCardRating(3); }
+    else if (e.key === '4') { e.preventDefault(); submitCardRating(4); }
+  }
+}
+
+async function handleCreateCardManual(e) {
+  e.preventDefault();
+  if (!currentCourseId) return;
+
+  const front = inputCardFront.value.trim();
+  const back = inputCardBack.value.trim();
+  const quote = inputCardQuote.value.trim() || null;
+  if (!front || !back) return;
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/flashcards`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        front,
+        back,
+        lesson_id: activeAllocation ? activeAllocation.lesson_id : null,
+        source_quote: quote,
+      }),
+    });
+    const newCard = await res.json();
+    Logger.api('POST', `/api/courses/${currentCourseId}/flashcards`, res.status, Math.round(performance.now() - t0), newCard);
+    addCardModal.classList.add('hidden');
+    inputCardFront.value = '';
+    inputCardBack.value = '';
+    inputCardQuote.value = '';
+    loadFlashcards();
+  } catch (err) {
+    Logger.error('Failed to create flashcard', err);
+    alert('Failed to save flashcard: ' + err.message);
+  }
+}
+
+// ==========================================
+// DIAGNOSTIC PRE-TEST & TIMED MOCK EXAM (M4)
+// ==========================================
+let diagnosticQuiz = null;
+
+async function openDiagnosticPreTest() {
+  if (!currentCourseId) {
+    alert('Please select or create a course first.');
+    return;
+  }
+  diagnosticModal.classList.remove('hidden');
+  diagnosticContentContainer.innerHTML = `
+    <div class="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+      <div class="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+      <span>Generating diagnostic questions across course topics...</span>
+    </div>
+  `;
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/quizzes/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        quiz_type: 'diagnostic',
+        question_count: 5,
+        title: 'Diagnostic Pre-Test',
+      }),
+    });
+    diagnosticQuiz = await res.json();
+    Logger.api('POST', `/api/courses/${currentCourseId}/quizzes/generate (diagnostic)`, res.status, Math.round(performance.now() - t0), diagnosticQuiz);
+
+    diagnosticContentContainer.innerHTML = diagnosticQuiz.questions.map((q, idx) => `
+      <div class="p-3.5 bg-surface-850 rounded-xl border border-slate-700/80 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-white">${idx + 1}. ${escapeHtml(q.question)}</span>
+          <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">[${escapeHtml(q.chunk_id)}]</span>
+        </div>
+        <div class="space-y-1.5 pt-1">
+          ${q.options.map((opt, optIdx) => `
+            <label class="flex items-center gap-2 p-2 rounded-lg border border-slate-700 text-xs text-slate-300 hover:bg-surface-800 cursor-pointer">
+              <input type="radio" name="diag_q_${q.id}" value="${optIdx}" class="text-amber-500 focus:ring-0">
+              <span>${escapeHtml(opt)}</span>
+            </label>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    Logger.error('Diagnostic generation failed', err);
+    diagnosticContentContainer.innerHTML = `<div class="p-4 text-xs text-red-400">Failed to load diagnostic test: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function handleSubmitDiagnostic() {
+  if (!diagnosticQuiz) return;
+  const answers = {};
+  for (const q of diagnosticQuiz.questions) {
+    const checked = document.querySelector(`input[name="diag_q_${q.id}"]:checked`);
+    if (checked) answers[q.id] = parseInt(checked.value, 10);
+  }
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/quizzes/${diagnosticQuiz.id}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers, time_taken_seconds: 60 }),
+    });
+    const result = await res.json();
+    Logger.api('POST', `/api/courses/${currentCourseId}/quizzes/${diagnosticQuiz.id}/submit`, res.status, Math.round(performance.now() - t0), result);
+
+    const testedOutCount = (result.tested_out_lessons || []).length;
+    alert(`Diagnostic Complete! Score: ${result.score}%\nTested Out: ${testedOutCount} topics.\nYour schedule has been dynamically reflowed.`);
+    diagnosticModal.classList.add('hidden');
+    await fetchSchedule(currentCourseId);
+  } catch (err) {
+    Logger.error('Diagnostic submission failed', err);
+    alert('Submission failed: ' + err.message);
+  }
+}
+
+// --- Timed Mock Exam ---
+let mockExamQuiz = null;
+let mockExamTimerInterval = null;
+let mockExamSecondsLeft = 900;
+
+async function openMockExam() {
+  if (!currentCourseId) {
+    alert('Please select or create a course first.');
+    return;
+  }
+  mockExamModal.classList.remove('hidden');
+  mockExamSecondsLeft = 900;
+  updateMockExamTimerDisplay();
+  startMockExamTimer();
+
+  mockExamContent.innerHTML = `
+    <div class="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+      <div class="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
+      <span>Assembling timed full-course mock exam from indexed chunks...</span>
+    </div>
+  `;
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/quizzes/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        quiz_type: 'mock_exam',
+        question_count: 10,
+        title: 'Course Mock Exam',
+      }),
+    });
+    mockExamQuiz = await res.json();
+    Logger.api('POST', `/api/courses/${currentCourseId}/quizzes/generate (mock_exam)`, res.status, Math.round(performance.now() - t0), mockExamQuiz);
+
+    mockTotalCount.textContent = mockExamQuiz.questions.length;
+    mockAnsweredCount.textContent = '0';
+
+    mockExamContent.innerHTML = mockExamQuiz.questions.map((q, idx) => `
+      <div class="p-3.5 bg-surface-850 rounded-xl border border-slate-700/80 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-white">${idx + 1}. ${escapeHtml(q.question)}</span>
+          <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">[${escapeHtml(q.chunk_id)}]</span>
+        </div>
+        <div class="space-y-1.5 pt-1">
+          ${q.options.map((opt, optIdx) => `
+            <label class="flex items-center gap-2 p-2 rounded-lg border border-slate-700 text-xs text-slate-300 hover:bg-surface-800 cursor-pointer">
+              <input type="radio" name="mock_q_${q.id}" value="${optIdx}" onchange="updateMockAnsweredCount()" class="text-emerald-500 focus:ring-0">
+              <span>${escapeHtml(opt)}</span>
+            </label>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    Logger.error('Mock exam generation failed', err);
+    mockExamContent.innerHTML = `<div class="p-4 text-xs text-red-400">Failed to load mock exam: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function startMockExamTimer() {
+  if (mockExamTimerInterval) clearInterval(mockExamTimerInterval);
+  mockExamTimerInterval = setInterval(() => {
+    mockExamSecondsLeft--;
+    updateMockExamTimerDisplay();
+    if (mockExamSecondsLeft <= 0) {
+      clearInterval(mockExamTimerInterval);
+      alert("Time is up! Submitting your mock exam automatically.");
+      handleSubmitMockExam();
+    }
+  }, 1000);
+}
+
+function updateMockExamTimerDisplay() {
+  const mins = Math.floor(mockExamSecondsLeft / 60);
+  const secs = mockExamSecondsLeft % 60;
+  mockExamTimer.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  if (mockExamSecondsLeft < 120) {
+    mockExamTimer.className = 'text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-red-950 text-red-300 border border-red-800 animate-pulse';
+  } else {
+    mockExamTimer.className = 'text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-emerald-950 text-emerald-300 border border-emerald-800';
+  }
+}
+
+window.updateMockAnsweredCount = function() {
+  if (!mockExamQuiz) return;
+  let count = 0;
+  for (const q of mockExamQuiz.questions) {
+    if (document.querySelector(`input[name="mock_q_${q.id}"]:checked`)) count++;
+  }
+  mockAnsweredCount.textContent = count;
+};
+
+function closeMockExam() {
+  if (mockExamTimerInterval) clearInterval(mockExamTimerInterval);
+  mockExamModal.classList.add('hidden');
+}
+
+async function handleSubmitMockExam() {
+  if (!mockExamQuiz) return;
+  if (mockExamTimerInterval) clearInterval(mockExamTimerInterval);
+
+  const answers = {};
+  for (const q of mockExamQuiz.questions) {
+    const checked = document.querySelector(`input[name="mock_q_${q.id}"]:checked`);
+    if (checked) answers[q.id] = parseInt(checked.value, 10);
+  }
+
+  const timeTaken = 900 - mockExamSecondsLeft;
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/quizzes/${mockExamQuiz.id}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers, time_taken_seconds: timeTaken }),
+    });
+    const result = await res.json();
+    Logger.api('POST', `/api/courses/${currentCourseId}/quizzes/${mockExamQuiz.id}/submit (mock_exam)`, res.status, Math.round(performance.now() - t0), result);
+
+    alert(`Mock Exam Complete!\nScore: ${result.score}% (${result.correct_count}/${result.total_questions})\nMissed: ${result.missed_count}\nFlashcards created: ${result.flashcards_created || 0}`);
+    closeMockExam();
+    updateFlashcardCounts();
+  } catch (err) {
+    Logger.error('Mock exam submission failed', err);
+    alert('Submission failed: ' + err.message);
+  }
+}
+
 
 

@@ -49,6 +49,10 @@
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
     }
+    .perspective-1000 { perspective: 1000px; }
+    .transform-style-3d { transform-style: preserve-3d; transition: transform 0.4s ease; }
+    .backface-hidden { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+    .rotate-y-180 { transform: rotateY(180deg); }
   </style>
 </head>
 <body class="bg-surface-950 text-slate-100 h-full flex flex-col font-sans antialiased selection:bg-brand-600 selection:text-white overflow-hidden">
@@ -85,6 +89,18 @@
         </button>
         <button id="pill-strategy-fixed" class="px-2.5 py-1 rounded-md font-medium transition strategy-btn text-slate-400 hover:text-slate-200" title="Fixed daily minutes (Sprint mode)">
           ⚡ Fixed Daily
+        </button>
+      </div>
+
+      <!-- Diagnostic Pre-Test & Timed Mock Exam Quick Buttons -->
+      <div class="hidden xl:flex items-center space-x-1.5 ml-2">
+        <button id="btn-diagnostic-test" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface-850 hover:bg-surface-800 text-[11px] font-semibold text-amber-300 border border-amber-800/60 shadow-sm transition active:scale-95" title="Take a 2-min diagnostic pre-test to test out of known topics">
+          <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>Diagnostic (2m)</span>
+        </button>
+        <button id="btn-mock-exam" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface-850 hover:bg-surface-800 text-[11px] font-semibold text-emerald-300 border border-emerald-800/60 shadow-sm transition active:scale-95" title="Start a timed full mock exam">
+          <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>Mock Exam</span>
         </button>
       </div>
     </div>
@@ -206,16 +222,25 @@
           <!-- Section Toolbar -->
           <div class="flex items-center justify-between mb-2 shrink-0">
             <!-- Tabs -->
-            <div class="flex items-center gap-1 bg-surface-950 p-1 rounded-lg border border-slate-800 text-xs">
-              <button id="tab-grounded-notes" class="px-3 py-1 rounded-md font-semibold text-white bg-surface-800 transition shadow-sm">
+            <div class="flex items-center gap-1 bg-surface-950 p-1 rounded-lg border border-slate-800 text-xs overflow-x-auto">
+              <button id="tab-grounded-notes" class="px-3 py-1 rounded-md font-semibold text-white bg-surface-800 transition shadow-sm shrink-0">
                 Grounded Notes
               </button>
-              <button id="tab-personal-notes" class="px-3 py-1 rounded-md font-medium text-slate-400 hover:text-white transition">
+              <button id="tab-personal-notes" class="px-3 py-1 rounded-md font-medium text-slate-400 hover:text-white transition shrink-0">
                 Personal Notes
               </button>
-              <button id="tab-qa-notebook" class="px-3 py-1 rounded-md font-medium text-slate-400 hover:text-white transition flex items-center gap-1.5">
+              <button id="tab-qa-notebook" class="px-3 py-1 rounded-md font-medium text-slate-400 hover:text-white transition flex items-center gap-1.5 shrink-0">
                 <svg class="w-3.5 h-3.5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
                 <span>Ask NotebookLM</span>
+              </button>
+              <button id="tab-quiz-mastery" class="px-3 py-1 rounded-md font-medium text-slate-400 hover:text-white transition flex items-center gap-1.5 shrink-0">
+                <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                <span>Quiz & Mastery</span>
+              </button>
+              <button id="tab-flashcards-fsrs" class="px-3 py-1 rounded-md font-medium text-slate-400 hover:text-white transition flex items-center gap-1.5 shrink-0">
+                <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                <span>Flashcards (FSRS)</span>
+                <span id="badge-due-flashcards" class="hidden text-[10px] px-1.5 py-0.2 bg-emerald-950 text-emerald-300 rounded-full font-mono border border-emerald-800">0</span>
               </button>
             </div>
 
@@ -275,6 +300,133 @@
                 <div id="qa-spinner" class="hidden w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               </button>
             </form>
+          </div>
+
+          <!-- Tab Content D: Quiz & Mastery Loop -->
+          <div id="pane-quiz-mastery" class="hidden flex-1 flex flex-col min-h-0 bg-surface-850/60 rounded-xl p-4 border border-slate-800 overflow-y-auto">
+            <!-- Quiz Header & Action Bar -->
+            <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-800 shrink-0">
+              <div>
+                <div class="flex items-center gap-2">
+                  <h3 id="quiz-title-heading" class="text-xs font-bold uppercase tracking-wider text-white">Lesson Citation Quiz</h3>
+                  <span id="quiz-mastery-badge" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full font-mono"></span>
+                </div>
+                <p class="text-[11px] text-slate-400">Strictly grounded questions. Score &ge;80% marks lesson <strong class="text-emerald-400">Tested Out</strong> and reflows your schedule.</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <select id="quiz-question-count" class="bg-surface-900 text-slate-200 border border-slate-700 rounded-lg px-2 py-1 text-xs">
+                  <option value="3">3 Questions</option>
+                  <option value="5" selected>5 Questions</option>
+                  <option value="10">10 Questions</option>
+                </select>
+                <button id="btn-generate-lesson-quiz" class="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-sm active:scale-95">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                  <span>Generate Quiz</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Quiz Results Banner (Appears after submission) -->
+            <div id="quiz-results-banner" class="hidden mb-4 p-3 rounded-xl border flex items-center justify-between text-xs"></div>
+
+            <!-- Quiz Form Container -->
+            <form id="quiz-form" class="space-y-4">
+              <div id="quiz-questions-list" class="space-y-4">
+                <div class="text-center py-8 text-slate-500 text-xs">
+                  <svg class="w-10 h-10 mx-auto mb-2 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                  Click "Generate Quiz" to create citation-grounded questions for this lesson.
+                </div>
+              </div>
+              <div id="quiz-submit-bar" class="hidden pt-3 border-t border-slate-800 flex justify-end">
+                <button type="submit" id="btn-submit-lesson-quiz" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs px-5 py-2 rounded-xl transition shadow-md active:scale-95">
+                  Submit Quiz & Evaluate Mastery
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Tab Content E: FSRS Spaced Repetition Flashcards -->
+          <div id="pane-flashcards-fsrs" class="hidden flex-1 flex flex-col min-h-0 bg-surface-850/60 rounded-xl p-4 border border-slate-800 overflow-y-auto">
+            <!-- Flashcards Header & Stats -->
+            <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-800 shrink-0">
+              <div>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-xs font-bold uppercase tracking-wider text-white">FSRS Spaced Repetition</h3>
+                  <span id="fsrs-retention-pill" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-violet-950 text-violet-300 border border-violet-800">Target Retention: 90%</span>
+                </div>
+                <div class="flex items-center gap-3 mt-1 text-[11px] font-mono text-slate-400">
+                  <span>Total: <strong id="stat-fc-total" class="text-white">0</strong></span>
+                  <span>Due: <strong id="stat-fc-due" class="text-amber-400">0</strong></span>
+                  <span>New: <strong id="stat-fc-new" class="text-blue-400">0</strong></span>
+                  <span>Learning: <strong id="stat-fc-learning" class="text-violet-400">0</strong></span>
+                  <span>Review: <strong id="stat-fc-review" class="text-emerald-400">0</strong></span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button id="btn-add-card-manual" class="bg-surface-800 hover:bg-surface-700 text-slate-200 text-xs px-2.5 py-1 rounded-lg border border-slate-700 transition flex items-center gap-1">
+                  <span>+ New Card</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Flashcard Study Interactive Area -->
+            <div id="flashcards-study-area" class="flex-1 flex flex-col items-center justify-center min-h-[280px]">
+              <!-- Empty Queue State -->
+              <div id="fc-empty-state" class="text-center py-8 text-slate-500 text-xs">
+                <svg class="w-10 h-10 mx-auto mb-2 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <p class="font-bold text-slate-300 mb-1">All Caught Up!</p>
+                <p>No cards due for review right now. Scoring &lt;60% on quizzes automatically creates review cards.</p>
+              </div>
+
+              <!-- Active 3D Flippable Card -->
+              <div id="fc-active-card-container" class="hidden w-full max-w-lg perspective-1000 my-auto">
+                <div id="fsrs-card-flipper" class="relative w-full min-h-[220px] transform-style-3d cursor-pointer bg-surface-900 border border-slate-700/80 rounded-2xl p-6 shadow-xl flex flex-col justify-between transition-transform duration-300">
+                  <!-- Front Face -->
+                  <div id="fsrs-card-front" class="backface-hidden flex-1 flex flex-col justify-between">
+                    <div>
+                      <span class="text-[10px] uppercase font-bold tracking-wider text-violet-400 font-mono">Concept Prompt</span>
+                      <p id="fsrs-front-text" class="text-sm font-semibold text-white mt-2 leading-relaxed"></p>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-4 text-center italic">
+                      Click to flip or press <kbd class="px-1.5 py-0.5 rounded bg-surface-800 border border-slate-700 font-mono text-[10px] text-slate-300">Space</kbd>
+                    </div>
+                  </div>
+
+                  <!-- Back Face (Revealed on flip) -->
+                  <div id="fsrs-card-back" class="hidden backface-hidden flex-1 flex flex-col justify-between">
+                    <div>
+                      <span class="text-[10px] uppercase font-bold tracking-wider text-emerald-400 font-mono">Answer & Evidence</span>
+                      <p id="fsrs-back-text" class="text-xs text-slate-200 mt-2 leading-relaxed whitespace-pre-wrap"></p>
+                      <div id="fsrs-quote-box" class="hidden mt-3 p-2.5 rounded-lg bg-surface-950/80 border border-slate-800 text-[11px] text-slate-400 font-mono leading-relaxed"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Rating Buttons Bar (Revealed when card is flipped) -->
+                <div id="fsrs-rating-bar" class="hidden mt-4 grid grid-cols-4 gap-2">
+                  <button id="btn-fsrs-again" class="p-2 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-800/80 text-center transition group active:scale-95">
+                    <div class="text-xs font-bold text-red-200">Again</div>
+                    <div id="interval-again" class="text-[10px] text-red-400 font-mono">1m</div>
+                    <kbd class="text-[9px] text-red-500 font-mono">1</kbd>
+                  </button>
+                  <button id="btn-fsrs-hard" class="p-2 rounded-xl bg-amber-950/80 hover:bg-amber-900 border border-amber-800/80 text-center transition group active:scale-95">
+                    <div class="text-xs font-bold text-amber-200">Hard</div>
+                    <div id="interval-hard" class="text-[10px] text-amber-400 font-mono">5m</div>
+                    <kbd class="text-[9px] text-amber-500 font-mono">2</kbd>
+                  </button>
+                  <button id="btn-fsrs-good" class="p-2 rounded-xl bg-blue-950/80 hover:bg-blue-900 border border-blue-800/80 text-center transition group active:scale-95">
+                    <div class="text-xs font-bold text-blue-200">Good</div>
+                    <div id="interval-good" class="text-[10px] text-blue-400 font-mono">10m</div>
+                    <kbd class="text-[9px] text-blue-500 font-mono">3</kbd>
+                  </button>
+                  <button id="btn-fsrs-easy" class="p-2 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-800/80 text-center transition group active:scale-95">
+                    <div class="text-xs font-bold text-emerald-200">Easy</div>
+                    <div id="interval-easy" class="text-[10px] text-emerald-400 font-mono">7d</div>
+                    <kbd class="text-[9px] text-emerald-500 font-mono">4</kbd>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -593,6 +745,92 @@
         </div>
         <div class="pt-2 flex justify-end">
           <button type="submit" id="btn-submit-web" class="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs transition">Fetch & Index Article</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Diagnostic Pre-Test Modal (2-Minute Test-Out) -->
+  <div id="diagnostic-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-surface-900 border border-amber-800/80 rounded-2xl max-w-2xl w-full p-6 shadow-2xl max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-800 shrink-0">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-amber-400 font-bold text-base">🧠 2-Minute Diagnostic Pre-Test</span>
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-800">Mastery Accelerator</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-0.5">Answer core questions across topics. Correct answers mark topics <strong class="text-emerald-400">Tested Out</strong> and immediately shrink your study schedule!</p>
+        </div>
+        <button id="btn-close-diagnostic" class="text-slate-400 hover:text-white text-sm">✕</button>
+      </div>
+
+      <div id="diagnostic-content-container" class="flex-1 overflow-y-auto space-y-4 pr-1">
+        <!-- Injected dynamically -->
+      </div>
+
+      <div id="diagnostic-footer" class="pt-3 border-t border-slate-800 flex items-center justify-between shrink-0">
+        <span class="text-[11px] text-slate-400 font-mono">Grounded across all course topics</span>
+        <button id="btn-submit-diagnostic" class="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-xs px-5 py-2 rounded-xl transition shadow-md active:scale-95">
+          Submit & Test Out Topics
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timed Mock Exam Modal -->
+  <div id="mock-exam-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-surface-900 border border-emerald-800/80 rounded-2xl max-w-3xl w-full p-6 shadow-2xl max-h-[95vh] flex flex-col">
+      <!-- Mock Exam Header -->
+      <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-800 shrink-0">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-emerald-400 font-bold text-base">⏱️ Timed Course Mock Exam</span>
+            <span id="mock-exam-timer" class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-emerald-950 text-emerald-300 border border-emerald-800">15:00</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-0.5">Simulates actual exam conditions. Generates flashcards for missed questions.</p>
+        </div>
+        <button id="btn-close-mock-exam" class="text-slate-400 hover:text-white text-sm">✕</button>
+      </div>
+
+      <!-- Mock Exam Question Container -->
+      <div id="mock-exam-content" class="flex-1 overflow-y-auto space-y-4 pr-1">
+        <!-- Questions injected dynamically -->
+      </div>
+
+      <!-- Mock Exam Footer -->
+      <div id="mock-exam-footer" class="pt-3 border-t border-slate-800 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-2 text-xs text-slate-400">
+          <span>Answered: <strong id="mock-answered-count" class="text-emerald-400">0</strong> / <span id="mock-total-count">0</span></span>
+        </div>
+        <button id="btn-submit-mock-exam" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs px-5 py-2 rounded-xl transition shadow-md active:scale-95">
+          Submit Mock Exam
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manual Flashcard Creation Modal -->
+  <div id="add-card-modal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-surface-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
+        <h3 class="text-base font-bold text-white">Create FSRS Flashcard</h3>
+        <button id="btn-close-add-card" class="text-slate-400 hover:text-white text-sm">✕</button>
+      </div>
+      <form id="form-create-card" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 mb-1">Front (Question or Concept)</label>
+          <textarea id="input-card-front" required rows="2" placeholder="e.g. What is the definition of a Deterministic Finite Automaton (DFA)?" class="w-full bg-surface-800 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-violet-500"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 mb-1">Back (Answer & Explanation)</label>
+          <textarea id="input-card-back" required rows="3" placeholder="e.g. A 5-tuple (Q, Sigma, delta, q0, F) where for each state and input symbol there is exactly one next state." class="w-full bg-surface-800 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-violet-500"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 mb-1">Verbatim Source Quote (Optional)</label>
+          <input type="text" id="input-card-quote" placeholder="Cited excerpt from transcript or textbook" class="w-full bg-surface-800 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-violet-500">
+        </div>
+        <div class="pt-2 flex justify-end">
+          <button type="submit" class="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs transition">Save Flashcard</button>
         </div>
       </form>
     </div>

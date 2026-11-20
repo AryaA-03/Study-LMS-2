@@ -606,3 +606,92 @@ def save_snapshot(
         (snapshot_id, course_id, reason, json.dumps(diff_summary), json.dumps(snapshot_payload)),
     )
     return snapshot_id
+
+
+def trigger_course_reflow(course_id: str, db: sqlite3.Connection) -> None:
+    """Helper to reflow remaining allocations when lessons are marked tested out or completed."""
+    course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not course:
+        return
+
+    old_rows = db.execute(
+        """
+        SELECT sa.*, l.title as lesson_title, l.video_id, l.video_url, l.priority
+        FROM schedule_allocations sa
+        JOIN lessons l ON sa.lesson_id = l.id
+        WHERE sa.course_id = ?
+        ORDER BY sa.scheduled_date ASC, sa.split_index ASC;
+        """,
+        (course_id,),
+    ).fetchall()
+    if not old_rows:
+        return
+
+    old_allocs = [
+        ScheduleAllocation(
+            id=r["id"],
+            course_id=r["course_id"],
+            lesson_id=r["lesson_id"],
+            lesson_title=r["lesson_title"],
+            scheduled_date=r["scheduled_date"],
+            allocated_start_sec=r["allocated_start_sec"],
+            allocated_end_sec=r["allocated_end_sec"],
+            effective_minutes=r["effective_minutes"],
+            split_index=r["split_index"],
+            split_count=r["split_count"],
+            is_completed=bool(r["is_completed"]),
+            is_skipped=bool(r["is_skipped"]),
+            priority=r["priority"],
+            video_id=r["video_id"],
+            video_url=r["video_url"],
+        )
+        for r in old_rows
+    ]
+
+    lessons_rows = db.execute(
+        "SELECT * FROM lessons WHERE course_id = ? AND is_excluded = 0 ORDER BY order_index ASC;",
+        (course_id,),
+    ).fetchall()
+    lessons = [dict(l) for l in lessons_rows]
+    rest_days = json.loads(course["rest_days"])
+    target_d = datetime.strptime(course["target_date"], "%Y-%m-%d").date()
+    strategy = course["schedule_strategy"] if "schedule_strategy" in course.keys() else "paced"
+
+    sched_res = reflow_overdue_and_remaining(
+        course_id=course_id,
+        allocations=old_allocs,
+        lessons=lessons,
+        target_date=target_d,
+        minutes_per_day=course["minutes_per_day"],
+        playback_speed=course["playback_speed"],
+        rest_days=rest_days,
+        revision_buffer_days=course["revision_buffer_days"],
+        schedule_strategy=strategy,
+    )
+    new_allocs = sched_res["allocations"]
+    db.execute("DELETE FROM schedule_allocations WHERE course_id = ?;", (course_id,))
+    for a in new_allocs:
+        db.execute(
+            """
+            INSERT INTO schedule_allocations (
+                id, course_id, lesson_id, scheduled_date, split_index, split_count,
+                allocated_start_sec, allocated_end_sec, effective_minutes, is_completed, is_skipped
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            (
+                a.id,
+                course_id,
+                a.lesson_id,
+                a.scheduled_date,
+                a.split_index,
+                a.split_count,
+                a.allocated_start_sec,
+                a.allocated_end_sec,
+                a.effective_minutes,
+                1 if a.is_completed else 0,
+                1 if a.is_skipped else 0,
+            ),
+        )
+    db.commit()
+    logger.info(f"[Schedule] Reflowed allocations after mastery test-out for course {course_id}")
+

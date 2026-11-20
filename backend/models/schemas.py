@@ -215,4 +215,86 @@ class QAResponse(BaseModel):
     answer_markdown: str
     citations: List[CitationItem] = Field(default_factory=list)
 
+# --- Quiz & Mock Exam Schemas ---
+class QuizQuestion(BaseModel):
+    id: str
+    chunk_id: str
+    lesson_id: Optional[str] = None
+    quote: str
+    question: str
+    options: List[str]
+    correct_index: int
+    explanation: str
+
+class QuizGenerateRequest(BaseModel):
+    lesson_id: Optional[str] = None
+    quiz_type: str = Field("lesson", description="'lesson', 'diagnostic', or 'mock_exam'")
+    question_count: int = Field(5, ge=1, le=30)
+    title: Optional[str] = None
+
+class QuizResponse(BaseModel):
+    id: str
+    course_id: str
+    lesson_id: Optional[str] = None
+    quiz_type: str
+    title: str
+    questions: List[QuizQuestion]
+    score: Optional[float] = None
+    passed: bool = False
+    time_taken_seconds: Optional[int] = None
+    created_at: Optional[str] = None
+
+class QuizSubmitRequest(BaseModel):
+    answers: Dict[str, int] = Field(..., description="Mapping of question ID to chosen option index")
+    time_taken_seconds: int = 0
+
+class QuizSubmitResponse(BaseModel):
+    quiz_id: str
+    score: float
+    passed: bool
+    correct_count: int
+    total_questions: int
+    mastery_status: str
+    tested_out_lessons: List[str] = Field(default_factory=list)
+    flashcards_created: int = 0
+    missed_count: int = 0
+
+# --- FSRS Flashcard Schemas ---
+class FlashcardCreateRequest(BaseModel):
+    front: str
+    back: str
+    lesson_id: Optional[str] = None
+    chunk_id: Optional[str] = None
+    source_quote: Optional[str] = None
+
+class FlashcardResponse(BaseModel):
+    id: str
+    course_id: str
+    lesson_id: Optional[str] = None
+    chunk_id: Optional[str] = None
+    front: str
+    back: str
+    state: int
+    state_name: str
+    due_date: str
+    stability: float
+    difficulty: float
+    reps: int
+    source_quote: Optional[str] = None
+    intervals: Dict[int, str] = Field(default_factory=dict)
+
+class FlashcardReviewRequest(BaseModel):
+    rating: int = Field(..., ge=1, le=4, description="1=Again, 2=Hard, 3=Good, 4=Easy")
+
+class FlashcardReviewResponse(BaseModel):
+    card: FlashcardResponse
+    next_interval_str: str
+
+class FlashcardCountsResponse(BaseModel):
+    total: int
+    due: int
+    new: int
+    learning: int
+    review: int
+
 

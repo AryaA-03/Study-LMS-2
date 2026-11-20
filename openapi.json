@@ -1533,6 +1533,594 @@
         }
       }
     },
+    "/api/courses/{course_id}/quizzes/generate": {
+      "post": {
+        "tags": [
+          "quizzes"
+        ],
+        "summary": "Generate Quiz",
+        "operationId": "generate_quiz_api_courses__course_id__quizzes_generate_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuizGenerateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/quizzes/{quiz_id}": {
+      "get": {
+        "tags": [
+          "quizzes"
+        ],
+        "summary": "Get Quiz",
+        "operationId": "get_quiz_api_courses__course_id__quizzes__quiz_id__get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "quiz_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Quiz Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/quizzes/{quiz_id}/submit": {
+      "post": {
+        "tags": [
+          "quizzes"
+        ],
+        "summary": "Submit Quiz",
+        "operationId": "submit_quiz_api_courses__course_id__quizzes__quiz_id__submit_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "quiz_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Quiz Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuizSubmitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizSubmitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/quizzes": {
+      "get": {
+        "tags": [
+          "quizzes"
+        ],
+        "summary": "List Quizzes",
+        "operationId": "list_quizzes_api_courses__course_id__quizzes_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "quiz_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Quiz Type"
+            }
+          },
+          {
+            "name": "lesson_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuizResponse"
+                  },
+                  "title": "Response List Quizzes Api Courses  Course Id  Quizzes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/flashcards/due": {
+      "get": {
+        "tags": [
+          "flashcards"
+        ],
+        "summary": "List Due Flashcards",
+        "operationId": "list_due_flashcards_api_courses__course_id__flashcards_due_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "lesson_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lesson Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FlashcardResponse"
+                  },
+                  "title": "Response List Due Flashcards Api Courses  Course Id  Flashcards Due Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/flashcards/counts": {
+      "get": {
+        "tags": [
+          "flashcards"
+        ],
+        "summary": "Get Counts",
+        "operationId": "get_counts_api_courses__course_id__flashcards_counts_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlashcardCountsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/flashcards": {
+      "get": {
+        "tags": [
+          "flashcards"
+        ],
+        "summary": "List All Flashcards",
+        "operationId": "list_all_flashcards_api_courses__course_id__flashcards_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "lesson_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lesson Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FlashcardResponse"
+                  },
+                  "title": "Response List All Flashcards Api Courses  Course Id  Flashcards Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "flashcards"
+        ],
+        "summary": "Add Flashcard",
+        "operationId": "add_flashcard_api_courses__course_id__flashcards_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlashcardCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlashcardResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/flashcards/{card_id}/review": {
+      "post": {
+        "tags": [
+          "flashcards"
+        ],
+        "summary": "Review Card",
+        "operationId": "review_card_api_courses__course_id__flashcards__card_id__review_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "card_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Card Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlashcardReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlashcardReviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/flashcards/{card_id}": {
+      "delete": {
+        "tags": [
+          "flashcards"
+        ],
+        "summary": "Delete Card",
+        "operationId": "delete_card_api_courses__course_id__flashcards__card_id__delete",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "card_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Card Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Index Page",
@@ -2052,6 +2640,221 @@
         "type": "object",
         "title": "DiffSummary"
       },
+      "FlashcardCountsResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "due": {
+            "type": "integer",
+            "title": "Due"
+          },
+          "new": {
+            "type": "integer",
+            "title": "New"
+          },
+          "learning": {
+            "type": "integer",
+            "title": "Learning"
+          },
+          "review": {
+            "type": "integer",
+            "title": "Review"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "due",
+          "new",
+          "learning",
+          "review"
+        ],
+        "title": "FlashcardCountsResponse"
+      },
+      "FlashcardCreateRequest": {
+        "properties": {
+          "front": {
+            "type": "string",
+            "title": "Front"
+          },
+          "back": {
+            "type": "string",
+            "title": "Back"
+          },
+          "lesson_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lesson Id"
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "source_quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Quote"
+          }
+        },
+        "type": "object",
+        "required": [
+          "front",
+          "back"
+        ],
+        "title": "FlashcardCreateRequest"
+      },
+      "FlashcardResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "course_id": {
+            "type": "string",
+            "title": "Course Id"
+          },
+          "lesson_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lesson Id"
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "front": {
+            "type": "string",
+            "title": "Front"
+          },
+          "back": {
+            "type": "string",
+            "title": "Back"
+          },
+          "state": {
+            "type": "integer",
+            "title": "State"
+          },
+          "state_name": {
+            "type": "string",
+            "title": "State Name"
+          },
+          "due_date": {
+            "type": "string",
+            "title": "Due Date"
+          },
+          "stability": {
+            "type": "number",
+            "title": "Stability"
+          },
+          "difficulty": {
+            "type": "number",
+            "title": "Difficulty"
+          },
+          "reps": {
+            "type": "integer",
+            "title": "Reps"
+          },
+          "source_quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Quote"
+          },
+          "intervals": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Intervals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "course_id",
+          "front",
+          "back",
+          "state",
+          "state_name",
+          "due_date",
+          "stability",
+          "difficulty",
+          "reps"
+        ],
+        "title": "FlashcardResponse"
+      },
+      "FlashcardReviewRequest": {
+        "properties": {
+          "rating": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Rating",
+            "description": "1=Again, 2=Hard, 3=Good, 4=Easy"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rating"
+        ],
+        "title": "FlashcardReviewRequest"
+      },
+      "FlashcardReviewResponse": {
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/FlashcardResponse"
+          },
+          "next_interval_str": {
+            "type": "string",
+            "title": "Next Interval Str"
+          }
+        },
+        "type": "object",
+        "required": [
+          "card",
+          "next_interval_str"
+        ],
+        "title": "FlashcardReviewResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2333,6 +3136,266 @@
           "answer_markdown"
         ],
         "title": "QAResponse"
+      },
+      "QuizGenerateRequest": {
+        "properties": {
+          "lesson_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lesson Id"
+          },
+          "quiz_type": {
+            "type": "string",
+            "title": "Quiz Type",
+            "description": "'lesson', 'diagnostic', or 'mock_exam'",
+            "default": "lesson"
+          },
+          "question_count": {
+            "type": "integer",
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Question Count",
+            "default": 5
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "title": "QuizGenerateRequest"
+      },
+      "QuizQuestion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id"
+          },
+          "lesson_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lesson Id"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Options"
+          },
+          "correct_index": {
+            "type": "integer",
+            "title": "Correct Index"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "chunk_id",
+          "quote",
+          "question",
+          "options",
+          "correct_index",
+          "explanation"
+        ],
+        "title": "QuizQuestion"
+      },
+      "QuizResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "course_id": {
+            "type": "string",
+            "title": "Course Id"
+          },
+          "lesson_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lesson Id"
+          },
+          "quiz_type": {
+            "type": "string",
+            "title": "Quiz Type"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/QuizQuestion"
+            },
+            "type": "array",
+            "title": "Questions"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "passed": {
+            "type": "boolean",
+            "title": "Passed",
+            "default": false
+          },
+          "time_taken_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Taken Seconds"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "course_id",
+          "quiz_type",
+          "title",
+          "questions"
+        ],
+        "title": "QuizResponse"
+      },
+      "QuizSubmitRequest": {
+        "properties": {
+          "answers": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Answers",
+            "description": "Mapping of question ID to chosen option index"
+          },
+          "time_taken_seconds": {
+            "type": "integer",
+            "title": "Time Taken Seconds",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "answers"
+        ],
+        "title": "QuizSubmitRequest"
+      },
+      "QuizSubmitResponse": {
+        "properties": {
+          "quiz_id": {
+            "type": "string",
+            "title": "Quiz Id"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "passed": {
+            "type": "boolean",
+            "title": "Passed"
+          },
+          "correct_count": {
+            "type": "integer",
+            "title": "Correct Count"
+          },
+          "total_questions": {
+            "type": "integer",
+            "title": "Total Questions"
+          },
+          "mastery_status": {
+            "type": "string",
+            "title": "Mastery Status"
+          },
+          "tested_out_lessons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tested Out Lessons"
+          },
+          "flashcards_created": {
+            "type": "integer",
+            "title": "Flashcards Created",
+            "default": 0
+          },
+          "missed_count": {
+            "type": "integer",
+            "title": "Missed Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "quiz_id",
+          "score",
+          "passed",
+          "correct_count",
+          "total_questions",
+          "mastery_status"
+        ],
+        "title": "QuizSubmitResponse"
       },
       "ReplanRequest": {
         "properties": {

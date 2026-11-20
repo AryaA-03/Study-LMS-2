@@ -1,8 +1,8 @@
 # Milestone Progress & Recovery Log
 
 ## Current Status
-- **Current Milestone**: Completed M3 (`v0.3-m3` — Multi-Source Notebooks: PDFs, Web & Citation Q&A)
-- **Next Milestone**: M4 (`v0.4-m4` — Citation Quizzes, FSRS Spaced Repetition & Mock Exams)
+- **Current Milestone**: Completed M4 (`v0.4-m4` — Citation Quizzes, FSRS Spaced Repetition, Diagnostic Pre-Test & Mock Exams)
+- **Next Milestone**: M5 (`v0.5-m5` — In-Browser Pyodide Scratchpad, Storage Guard, UI Polish & Final Ship)
 - **Active Data Directory**: `data-dev/`
 - **Stable Live Directory**: `../learn-app-live/` (checked out at `v0.1-m1`, pointing to `data/app.db`)
 
@@ -48,21 +48,35 @@
   - [x] Multi-source Add Source modal (PDF file drag-and-drop & Web article URL)
   - [x] Persistent Q&A thread history stored in `qa_threads` table
   - [x] 35 tests passed across unit, integration, and Playwright E2E
-- [ ] M4: Citation Quizzes, FSRS Spaced Repetition & Mock Exams (`v0.4-m4`)
-- [ ] M5: In-Browser Pyodide Scratchpad, Storage Guard, UI Polish & Ship (`v0.5-m5`)
+- [x] M4: Citation Quizzes, FSRS Spaced Repetition, Diagnostic Pre-Test & Mock Exams (`v0.4-m4`)
+  - [x] Grounded MCQ quiz generator citing `chunk_id` and verbatim chunk quotes (No-Key deterministic extraction + Gemini LLM)
+  - [x] Quiz Mastery Loop: score &ge;80% marks lesson "Tested Out" and triggers automatic schedule reflow
+  - [x] Quiz Mastery Loop: score &lt;60% marks "Needs Review" and automatically generates targeted FSRS flashcards for missed concepts
+  - [x] Official `fsrs` Python library integration (FSRS v5 algorithm) with card state serialization
+  - [x] Proximity-to-exam dynamic retention scaling (0.90 to 0.96) based on days left to exam
+  - [x] Interactive 3D flip flashcard review pane with preview interval badges (`1m`, `5m`, `10m`, `7d`)
+  - [x] Keyboard shortcuts for flashcard drill: `Space` to flip, `1` Again, `2` Hard, `3` Good, `4` Easy
+  - [x] 2-Minute Diagnostic Pre-Test modal with automated topic test-out and schedule compression
+  - [x] In-browser Timed Mock Exam with countdown timer, question palette, and topic score breakdown
+  - [x] Migration `005_quizzes_and_fsrs.sql` with auto-backup and index optimizations
+  - [x] 43 tests passed across unit, integration, live YouTube smoke, and Playwright E2E
+- [ ] M5: In-Browser Pyodide Scratchpad, Storage Guard, UI Polish & Final Ship (`v0.5-m5`)
 
-## Verification Summary (M3)
+## Verification Summary (M4)
 - `tests/test_scheduler.py`: 10 passed
 - `tests/test_yt_service.py`: 5 passed
 - `tests/test_migrations.py`: 1 passed
 - `tests/test_integration_pipeline.py`: 1 passed
 - `tests/test_transcription.py`: 5 passed
 - `tests/test_screenshots.py`: 1 passed
-- `tests/test_multi_source.py`: 3 passed (PDF extraction, web chunking, robots.txt)
-- `tests/test_qa_engine.py`: 1 passed (FTS5 BM25 search, citations, negative case, persistence)
+- `tests/test_multi_source.py`: 3 passed
+- `tests/test_qa_engine.py`: 1 passed
+- `tests/test_fsrs_engine.py`: 4 passed (card lifecycle, review, target retention, intervals)
+- `tests/test_quiz_engine.py`: 4 passed (grounded MCQs, mastery test-out, low score cards, diagnostic)
 - `tests/test_live_smoke.py`: 3 passed (live TOC playlist 114 entries, large video, search)
 - `tests/test_live_smoke_m2.py`: 2 passed (live TOC captions + DBMS Whisper audio slice)
 - `tests/test_e2e_m1.py`: 1 passed (Playwright golden path)
 - `tests/test_e2e_m2.py`: 1 passed (Playwright notes, tabs, seek buttons, personal notes)
 - `tests/test_e2e_m3.py`: 1 passed (Playwright sources tray, add modal, Ask NotebookLM Q&A)
-- Total: 35 passed, 0 failed.
+- `tests/test_e2e_m4.py`: 1 passed (Playwright quiz generation, mastery submission, FSRS card drill, diagnostic & mock exam)
+- Total: 43 passed, 0 failed.
