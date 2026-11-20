@@ -1,0 +1,24 @@
+# Core Web Framework
+fastapi>=0.115.0          # Lightweight ASGI web framework for REST API and serving UI
+uvicorn[standard]>=0.30.0 # High-performance ASGI server for local execution
+pydantic>=2.12.0          # Request/response validation and strict JSON schema generation
+jinja2>=3.1.4             # Template engine for HTML shell rendering
+python-multipart>=0.0.12  # Multipart form parsing for PDF and local media uploads
+
+# Media & Transcription
+yt-dlp>=2025.01.15        # YouTube metadata, search, and caption extraction without API quota
+imageio-ffmpeg>=0.5.1     # Bundled cross-platform ffmpeg binary fallback for audio slicing & frames
+
+# Study & Spaced Repetition Engine
+fsrs>=3.0.0               # Pure-Python Free Spaced Repetition Scheduler implementation
+
+# HTTP Client & Web Ingestion
+httpx>=0.28.0             # Async HTTP client for LLM gateway, Ollama, and polite single-page fetching
+trafilatura>=2.0.0        # Robust article text extraction with robots.txt check
+
+# Document Parsing
+pypdf>=5.1.0              # Pure-Python PDF extraction without heavy C/C++ dependencies
+
+# Testing & Dev
+pytest>=8.3.0             # Unit and integration test runner
+pytest-asyncio>=0.24.0    # Async test fixtures and runner for FastAPI endpoints
