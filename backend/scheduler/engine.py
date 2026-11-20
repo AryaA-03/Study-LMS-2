@@ -209,16 +209,17 @@ def generate_schedule(
     # Determine daily study budget based on strategy
     deadline_effective = target_date - timedelta(days=revision_buffer_days)
     study_dates, _, _ = get_study_dates(start_date, deadline_effective, rest_days, revision_buffer_days=0)
+    effective_cutoff = study_dates[-1] if study_dates else deadline_effective
     
     allocated_daily_budget = float(minutes_per_day)
     if schedule_strategy == "paced":
         if len(study_dates) > 0 and total_remaining_eff_min > 0:
             # Spread evenly across all available study days
             paced_budget = total_remaining_eff_min / len(study_dates)
-            allocated_daily_budget = max(5.0, round(paced_budget, 1))
+            allocated_daily_budget = max(5.0, paced_budget)
             logger.info(
                 f"[Scheduler] Strategy: PACED | Remaining: {round(total_remaining_eff_min, 1)}m | "
-                f"Study Days: {len(study_dates)} | Daily Target: {allocated_daily_budget}m/day"
+                f"Study Days: {len(study_dates)} | Daily Target: {round(allocated_daily_budget, 1)}m/day"
             )
         else:
             allocated_daily_budget = float(minutes_per_day)
@@ -267,6 +268,20 @@ def generate_schedule(
         split_segments = []
 
         while remaining_raw_sec > 0:
+            # In paced mode, cap at effective_cutoff to prevent spillover into rest days or revision buffer
+            if schedule_strategy == "paced" and curr_date >= effective_cutoff:
+                sec_allocated = remaining_raw_sec
+                eff_min = calculate_effective_minutes(sec_allocated, playback_speed)
+                split_segments.append((
+                    curr_date,
+                    current_split_start,
+                    current_split_start + sec_allocated,
+                    eff_min,
+                ))
+                curr_day_remaining_min = max(0.0, curr_day_remaining_min - eff_min)
+                remaining_raw_sec = 0
+                break
+
             if curr_day_remaining_min <= 0.05:  # Less than 3 seconds remaining
                 curr_date = advance_to_next_study_day(curr_date)
                 curr_day_remaining_min = allocated_daily_budget

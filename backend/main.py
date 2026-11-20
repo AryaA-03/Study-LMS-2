@@ -40,12 +40,27 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.time()
-    response = await call_next(request)
-    duration_ms = round((time.time() - start_time) * 1000, 1)
-    # Don't clutter with static asset polling
-    if not request.url.path.startswith("/static"):
-        logger.info(f"{request.method} {request.url.path} -> {response.status_code} ({duration_ms}ms)")
-    return response
+    try:
+        response = await call_next(request)
+        duration_ms = round((time.time() - start_time) * 1000, 1)
+        if not request.url.path.startswith("/static"):
+            code = response.status_code
+            if code < 300:
+                status_badge = f"\033[92m[{code} OK]\033[0m"
+            elif code < 400:
+                status_badge = f"\033[94m[{code} REDIRECT]\033[0m"
+            elif code < 500:
+                status_badge = f"\033[93m[{code} CLIENT_ERR]\033[0m"
+            else:
+                status_badge = f"\033[91m[{code} SERVER_ERR]\033[0m"
+            
+            query = f"?{request.url.query}" if request.url.query else ""
+            logger.info(f"{request.method} {request.url.path}{query} -> {status_badge} ({duration_ms}ms)")
+        return response
+    except Exception as exc:
+        duration_ms = round((time.time() - start_time) * 1000, 1)
+        logger.error(f"\033[91m[EXCEPTION]\033[0m {request.method} {request.url.path} ({duration_ms}ms): {exc}", exc_info=True)
+        return JSONResponse(status_code=500, content={"detail": f"Internal Server Error: {str(exc)}"})
 
 # Include Routers
 app.include_router(courses.router)

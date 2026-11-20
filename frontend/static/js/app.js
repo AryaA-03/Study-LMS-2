@@ -43,6 +43,11 @@ const Logger = {
     const style = 'background: #059669; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
     console.log(`${badge} ${action} (${count} affected)`);
   },
+  theme(themeName) {
+    const badge = `%c[LearnLMS:Theme]`;
+    const style = 'background: #18181b; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
+    console.log(`${badge} Switched to ${themeName} theme`);
+  },
   error(msg, err) {
     console.error(`%c[LearnLMS:Error] ${msg}`, 'background: #991b1b; color: #ffffff; padding: 2px 5px; font-weight: bold;', err);
   }
@@ -58,6 +63,15 @@ let ytPlayer = null;
 let isYtReady = false;
 let collapsedDays = new Set();
 let areAllDaysCollapsed = false;
+
+// DOM Elements
+const btnThemeToggle = document.getElementById('btn-theme-toggle');
+const themeIconSun = document.getElementById('theme-icon-sun');
+const themeIconMoon = document.getElementById('theme-icon-moon');
+
+const pillBufferZero = document.getElementById('pill-buffer-zero');
+const pillBufferTwo = document.getElementById('pill-buffer-two');
+const pacingNoteDetail = document.getElementById('pacing-note-detail');
 
 // DOM Elements
 const courseSelector = document.getElementById('course-selector');
@@ -301,9 +315,47 @@ window.seekToSeconds = function(seconds) {
   }
 };
 
+// --- Theme Management (Dual Dark & Light Themes) ---
+function initTheme() {
+  const saved = localStorage.getItem('learn_lms_theme');
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDark = saved ? saved === 'dark' : (saved === null ? true : false); // Default to sleek dark if unspecified
+  applyTheme(isDark);
+  Logger.theme(isDark ? 'dark' : 'light');
+}
+
+function toggleTheme() {
+  const isCurrentlyDark = document.documentElement.classList.contains('dark');
+  const newDark = !isCurrentlyDark;
+  applyTheme(newDark);
+  const themeName = newDark ? 'dark' : 'light';
+  localStorage.setItem('learn_lms_theme', themeName);
+  Logger.theme(themeName);
+}
+
+function applyTheme(isDark) {
+  if (isDark) {
+    document.documentElement.classList.add('dark');
+    document.documentElement.classList.remove('light');
+    if (themeIconSun) themeIconSun.classList.remove('hidden');
+    if (themeIconMoon) themeIconMoon.classList.add('hidden');
+  } else {
+    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.add('light');
+    if (themeIconSun) themeIconSun.classList.add('hidden');
+    if (themeIconMoon) themeIconMoon.classList.remove('hidden');
+  }
+}
+
+async function setRevisionBuffer(days) {
+  Logger.schedule('Revision Buffer Change', `${days} days`);
+  await replanCourse('normal', { revision_buffer_days: days });
+}
+
 // --- App Boot ---
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log('%c[LearnLMS] Booting Personal LMS & Exam Prep...', 'color: #8b5cf6; font-size: 14px; font-weight: bold;');
+  console.log('%c[LearnLMS] Booting Personal LMS & Exam Prep...', 'color: #3b82f6; font-size: 14px; font-weight: bold;');
+  initTheme();
   setupEventListeners();
   setDefaultTargetDate();
   await loadSettings();
@@ -344,6 +396,10 @@ function setupEventListeners() {
 
   pillStrategyPaced.addEventListener('click', () => setStrategy('paced'));
   pillStrategyFixed.addEventListener('click', () => setStrategy('fixed'));
+
+  if (pillBufferZero) pillBufferZero.addEventListener('click', () => setRevisionBuffer(0));
+  if (pillBufferTwo) pillBufferTwo.addEventListener('click', () => setRevisionBuffer(2));
+  if (btnThemeToggle) btnThemeToggle.addEventListener('click', toggleTheme);
 
   btnActionCompress.addEventListener('click', () => replanCourse('compress'));
   btnActionExtend.addEventListener('click', () => replanCourse('extend'));
@@ -481,19 +537,18 @@ window.toggleDayCollapse = function(dayDate) {
 };
 
 // --- Strategy Switching (Paced vs Fixed) ---
-async function setStrategy(strategy) {
+function updateStrategyPills(strategy) {
   if (strategy === 'paced') {
-    pillStrategyPaced.classList.add('bg-violet-600', 'text-white', 'shadow-sm');
-    pillStrategyPaced.classList.remove('text-slate-400');
-    pillStrategyFixed.classList.remove('bg-violet-600', 'text-white', 'shadow-sm');
-    pillStrategyFixed.classList.add('text-slate-400');
+    pillStrategyPaced.className = 'px-2.5 py-1 rounded-md font-semibold transition strategy-btn bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm';
+    pillStrategyFixed.className = 'px-2.5 py-1 rounded-md font-medium transition strategy-btn text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200';
   } else {
-    pillStrategyFixed.classList.add('bg-violet-600', 'text-white', 'shadow-sm');
-    pillStrategyFixed.classList.remove('text-slate-400');
-    pillStrategyPaced.classList.remove('bg-violet-600', 'text-white', 'shadow-sm');
-    pillStrategyPaced.classList.add('text-slate-400');
+    pillStrategyFixed.className = 'px-2.5 py-1 rounded-md font-semibold transition strategy-btn bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm';
+    pillStrategyPaced.className = 'px-2.5 py-1 rounded-md font-medium transition strategy-btn text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200';
   }
+}
 
+async function setStrategy(strategy) {
+  updateStrategyPills(strategy);
   Logger.schedule('Strategy Change', strategy);
   await replanCourse('normal', { schedule_strategy: strategy });
 }
@@ -553,20 +608,13 @@ async function loadCourse(courseId) {
     inlinePlaybackSpeed.value = currentCourse.playback_speed;
     inlineMinutesDay.value = currentCourse.minutes_per_day;
 
-    // Update Strategy Buttons
+    // Update Strategy Buttons & Buffer Indicator
     const strat = currentCourse.schedule_strategy || 'paced';
-    if (strat === 'paced') {
-      pillStrategyPaced.classList.add('bg-violet-600', 'text-white');
-      pillStrategyPaced.classList.remove('text-slate-400');
-      pillStrategyFixed.classList.remove('bg-violet-600', 'text-white');
-      pillStrategyFixed.classList.add('text-slate-400');
-      pacingModeLabel.textContent = 'Paced to Exam Date';
-    } else {
-      pillStrategyFixed.classList.add('bg-violet-600', 'text-white');
-      pillStrategyFixed.classList.remove('text-slate-400');
-      pillStrategyPaced.classList.remove('bg-violet-600', 'text-white');
-      pillStrategyPaced.classList.add('text-slate-400');
-      pacingModeLabel.textContent = 'Fixed Daily Goal';
+    updateStrategyPills(strat);
+    if (pacingModeLabel) {
+      pacingModeLabel.textContent = strat === 'paced'
+        ? (currentCourse.revision_buffer_days === 0 ? 'Finish on Exam Date' : 'Paced (2d Buffer)')
+        : 'Fixed Daily Spend';
     }
 
     await loadLessons(courseId);
@@ -622,6 +670,36 @@ function renderSchedule(sched) {
 
   statDailyTarget.textContent = `~${Math.round(sched.effective_daily_target_minutes || 0)} min`;
 
+  // Update Pacing Mode & Buffer Visual Indicators
+  updateStrategyPills(sched.schedule_strategy || 'paced');
+  if (pillBufferZero && pillBufferTwo) {
+    if (sched.revision_buffer_days === 0) {
+      pillBufferZero.className = 'px-2 py-0.5 rounded-md font-semibold transition bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm';
+      pillBufferTwo.className = 'px-2 py-0.5 rounded-md font-medium transition text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white';
+    } else {
+      pillBufferTwo.className = 'px-2 py-0.5 rounded-md font-semibold transition bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm';
+      pillBufferZero.className = 'px-2 py-0.5 rounded-md font-medium transition text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white';
+    }
+  }
+
+  if (pacingNoteDetail) {
+    if (sched.schedule_strategy === 'paced') {
+      if (sched.revision_buffer_days === 0) {
+        pacingNoteDetail.textContent = '✓ Finishes on exam day';
+      } else {
+        pacingNoteDetail.textContent = `✓ Finishes ${sched.revision_buffer_days}d before exam`;
+      }
+    } else {
+      pacingNoteDetail.textContent = '⚡ Sprint mode';
+    }
+  }
+
+  if (pacingModeLabel) {
+    pacingModeLabel.textContent = sched.schedule_strategy === 'paced'
+      ? (sched.revision_buffer_days === 0 ? 'Finish on Exam Date' : 'Paced (2d Buffer)')
+      : 'Fixed Daily Spend';
+  }
+
   // Behind Schedule Alert
   if (sched.is_behind_schedule) {
     behindScheduleBanner.classList.remove('hidden');
@@ -630,60 +708,60 @@ function renderSchedule(sched) {
     behindScheduleBanner.classList.add('hidden');
   }
 
-  // Render Day Groups (CourseIt style)
+  // Render Day Groups (Minimalist CourseIt style)
   sched.days.forEach(day => {
     const dayEl = document.createElement('div');
-    dayEl.className = 'bg-surface-900 border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm transition hover:border-slate-700/70';
+    dayEl.className = 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-sm transition hover:border-zinc-300 dark:hover:border-zinc-700';
 
     let badgeHtml = '';
     if (day.is_revision_day) {
-      badgeHtml = '<span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800/80 font-mono">Revision Buffer</span>';
+      badgeHtml = '<span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800/80 font-mono">Revision Buffer</span>';
     } else if (day.is_rest_day) {
-      badgeHtml = '<span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-surface-800 text-slate-400 font-mono">Rest Day</span>';
+      badgeHtml = '<span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 font-mono">Rest Day</span>';
     }
 
     const isCollapsed = collapsedDays.has(day.date);
 
     const dayHeader = `
-      <div class="px-3.5 py-2.5 bg-surface-850/80 border-b border-slate-800/80 flex items-center justify-between text-xs cursor-pointer select-none" onclick="window.toggleDayCollapse('${day.date}')">
+      <div class="px-3.5 py-2.5 bg-zinc-50/80 dark:bg-zinc-950/80 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs cursor-pointer select-none" onclick="window.toggleDayCollapse('${day.date}')">
         <div class="flex items-center gap-2">
-          <svg id="day-chevron-${day.date}" class="w-3.5 h-3.5 text-slate-400 transition-transform day-chevron" style="transform: ${isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-          <span class="font-bold text-slate-200">${day.day_name}, ${formatDateDisplay(day.date)}</span>
+          <svg id="day-chevron-${day.date}" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 transition-transform day-chevron" style="transform: ${isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          <span class="font-bold text-zinc-900 dark:text-zinc-100">${day.day_name}, ${formatDateDisplay(day.date)}</span>
           ${badgeHtml}
         </div>
-        <span class="text-violet-300 font-mono font-medium">${Math.round(day.total_effective_minutes)} min</span>
+        <span class="text-zinc-600 dark:text-zinc-400 font-mono font-medium">${Math.round(day.total_effective_minutes)} min</span>
       </div>
     `;
 
     let allocsHtml = '';
     if (day.allocations.length === 0) {
       allocsHtml = `
-        <div class="p-3 text-xs text-slate-500 italic text-center">
+        <div class="p-3 text-xs text-zinc-400 dark:text-zinc-500 italic text-center">
           ${day.is_revision_day ? 'Dedicated strictly for comprehensive revision & mock exams.' : day.is_rest_day ? 'Rest & recharge day.' : 'No study allocations.'}
         </div>
       `;
     } else {
-      allocsHtml = `<div class="divide-y divide-slate-800/40">`;
+      allocsHtml = `<div class="divide-y divide-zinc-100 dark:divide-zinc-800">`;
       day.allocations.forEach(alloc => {
         const isCompleted = alloc.is_completed;
         const splitText = alloc.split_count > 1 ? `Part ${alloc.split_index + 1}/${alloc.split_count}` : '';
         const priorityBadge = alloc.priority === 'deep-dive' 
-          ? '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-800">Deep-Dive</span>'
-          : '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded bg-violet-950 text-violet-300 border border-violet-800">Core</span>';
+          ? '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-mono">Deep-Dive</span>'
+          : '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 font-mono">Core</span>';
 
         allocsHtml += `
-          <div class="p-2.5 hover:bg-surface-850/70 transition flex items-start gap-2.5 cursor-pointer alloc-item ${isCompleted ? 'opacity-50' : ''}" data-alloc-id="${alloc.id}">
-            <input type="checkbox" class="mt-1 rounded text-violet-600 focus:ring-0 alloc-checkbox cursor-pointer" data-alloc-id="${alloc.id}" ${isCompleted ? 'checked' : ''}>
+          <div class="p-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition flex items-start gap-2.5 cursor-pointer alloc-item ${isCompleted ? 'opacity-50' : ''}" data-alloc-id="${alloc.id}">
+            <input type="checkbox" class="mt-1 rounded text-zinc-900 dark:text-white focus:ring-0 alloc-checkbox cursor-pointer" data-alloc-id="${alloc.id}" ${isCompleted ? 'checked' : ''}>
             <div class="flex-1 min-w-0" onclick="window.selectAllocation('${alloc.id}')">
               <div class="flex items-center gap-1.5 mb-0.5">
                 ${priorityBadge}
-                ${splitText ? `<span class="text-[10px] text-amber-400 font-mono font-medium">${splitText}</span>` : ''}
-                <span class="text-[10px] text-slate-400 font-mono">[${formatDurationSec(alloc.allocated_start_sec)} - ${formatDurationSec(alloc.allocated_end_sec)}]</span>
+                ${splitText ? `<span class="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-medium">${splitText}</span>` : ''}
+                <span class="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">[${formatDurationSec(alloc.allocated_start_sec)} - ${formatDurationSec(alloc.allocated_end_sec)}]</span>
               </div>
-              <h4 class="text-xs font-medium text-slate-200 truncate ${isCompleted ? 'line-through text-slate-400' : ''}">${alloc.lesson_title}</h4>
-              <div class="text-[10px] text-slate-500 mt-0.5 font-mono">${alloc.effective_minutes} min (effective)</div>
+              <h4 class="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate ${isCompleted ? 'line-through text-zinc-400 dark:text-zinc-500' : ''}">${alloc.lesson_title}</h4>
+              <div class="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5 font-mono">${alloc.effective_minutes} min (effective)</div>
             </div>
-            <button class="text-slate-500 hover:text-amber-400 p-1 text-xs shrink-0" title="Skip lesson" onclick="window.skipAllocation('${alloc.id}', event)">
+            <button class="text-zinc-400 hover:text-amber-500 dark:text-zinc-500 dark:hover:text-amber-400 p-1 text-xs shrink-0" title="Skip lesson" onclick="window.skipAllocation('${alloc.id}', event)">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
             </button>
           </div>
@@ -901,15 +979,15 @@ function renderCurriculumDrawer(lessons) {
   curriculumLessonsList.innerHTML = '';
   lessons.forEach(l => {
     const item = document.createElement('div');
-    item.className = `p-2 rounded-lg flex items-start gap-2.5 text-xs hover:bg-surface-800/60 ${l.is_excluded ? 'opacity-40' : ''}`;
+    item.className = `p-2 rounded-lg flex items-start gap-2.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800/60 ${l.is_excluded ? 'opacity-40' : ''}`;
     item.innerHTML = `
-      <input type="checkbox" class="mt-0.5 rounded text-violet-600 focus:ring-0 cursor-pointer" ${!l.is_excluded ? 'checked' : ''} onchange="window.toggleLessonExclude('${l.id}')">
+      <input type="checkbox" class="mt-0.5 rounded text-zinc-900 dark:text-white focus:ring-0 cursor-pointer" ${!l.is_excluded ? 'checked' : ''} onchange="window.toggleLessonExclude('${l.id}')">
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-1.5 mb-0.5">
-          <span class="text-[9px] uppercase px-1 rounded ${l.priority === 'core' ? 'bg-violet-950 text-violet-300' : 'bg-purple-950 text-purple-300'}">${l.priority}</span>
-          <span class="text-[10px] text-slate-400 font-mono">${formatDurationSec(l.raw_duration_sec)}</span>
+          <span class="text-[9px] uppercase px-1 rounded ${l.priority === 'core' ? 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700' : 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800'} font-mono">${l.priority}</span>
+          <span class="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">${formatDurationSec(l.raw_duration_sec)}</span>
         </div>
-        <div class="font-medium text-slate-200 truncate ${l.is_excluded ? 'line-through text-slate-500' : ''}">${l.title}</div>
+        <div class="font-medium text-zinc-900 dark:text-zinc-100 truncate ${l.is_excluded ? 'line-through text-zinc-400 dark:text-zinc-500' : ''}">${l.title}</div>
       </div>
     `;
     curriculumLessonsList.appendChild(item);
@@ -1191,57 +1269,38 @@ function formatBytes(bytes) {
 
 // --- Notes, Transcription & Keyframe Functions ---
 function switchNotesTab(tab) {
-  tabGroundedNotes.classList.remove('bg-surface-800', 'text-white');
-  tabGroundedNotes.classList.add('text-slate-400');
-  tabPersonalNotes.classList.remove('bg-surface-800', 'text-white');
-  tabPersonalNotes.classList.add('text-slate-400');
-  tabQaNotebook.classList.remove('bg-surface-800', 'text-white');
-  tabQaNotebook.classList.add('text-slate-400');
-  tabQuizMastery.classList.remove('bg-surface-800', 'text-white');
-  tabQuizMastery.classList.add('text-slate-400');
-  tabFlashcardsFsrs.classList.remove('bg-surface-800', 'text-white');
-  tabFlashcardsFsrs.classList.add('text-slate-400');
-  tabPyodideScratchpad.classList.remove('bg-surface-800', 'text-white');
-  tabPyodideScratchpad.classList.add('text-slate-400');
+  const activeClass = ['font-semibold', 'text-zinc-900', 'bg-white', 'shadow-sm', 'dark:bg-zinc-800', 'dark:text-white'];
+  const inactiveClass = ['font-medium', 'text-zinc-600', 'hover:text-zinc-900', 'dark:text-zinc-400', 'dark:hover:text-white'];
 
-  paneGroundedNotes.classList.add('hidden');
-  panePersonalNotes.classList.add('hidden');
-  paneQaNotebook.classList.add('hidden');
-  paneQuizMastery.classList.add('hidden');
-  paneFlashcardsFsrs.classList.add('hidden');
-  panePyodideScratchpad.classList.add('hidden');
+  const allTabs = [
+    { id: 'grounded', btn: tabGroundedNotes, pane: paneGroundedNotes },
+    { id: 'personal', btn: tabPersonalNotes, pane: panePersonalNotes },
+    { id: 'qa', btn: tabQaNotebook, pane: paneQaNotebook },
+    { id: 'quiz', btn: tabQuizMastery, pane: paneQuizMastery },
+    { id: 'flashcards', btn: tabFlashcardsFsrs, pane: paneFlashcardsFsrs },
+    { id: 'pyodide', btn: tabPyodideScratchpad, pane: panePyodideScratchpad },
+  ];
 
-  if (tab === 'grounded') {
-    tabGroundedNotes.classList.add('bg-surface-800', 'text-white');
-    tabGroundedNotes.classList.remove('text-slate-400');
-    paneGroundedNotes.classList.remove('hidden');
-  } else if (tab === 'personal') {
-    tabPersonalNotes.classList.add('bg-surface-800', 'text-white');
-    tabPersonalNotes.classList.remove('text-slate-400');
-    panePersonalNotes.classList.remove('hidden');
-  } else if (tab === 'qa') {
-    tabQaNotebook.classList.add('bg-surface-800', 'text-white');
-    tabQaNotebook.classList.remove('text-slate-400');
-    paneQaNotebook.classList.remove('hidden');
-    if (currentCourseId) {
-      loadQAHistory(currentCourseId);
-    }
-  } else if (tab === 'quiz') {
-    tabQuizMastery.classList.add('bg-surface-800', 'text-white');
-    tabQuizMastery.classList.remove('text-slate-400');
-    paneQuizMastery.classList.remove('hidden');
-    if (activeAllocation) {
-      checkOrCreateLessonQuiz(activeAllocation.lesson_id);
-    }
+  allTabs.forEach(t => {
+    t.btn.classList.remove(...activeClass);
+    t.btn.classList.add(...inactiveClass);
+    t.pane.classList.add('hidden');
+  });
+
+  const active = allTabs.find(t => t.id === tab);
+  if (active) {
+    active.btn.classList.remove(...inactiveClass);
+    active.btn.classList.add(...activeClass);
+    active.pane.classList.remove('hidden');
+  }
+
+  if (tab === 'qa' && currentCourseId) {
+    loadQAHistory(currentCourseId);
+  } else if (tab === 'quiz' && activeAllocation) {
+    checkOrCreateLessonQuiz(activeAllocation.lesson_id);
   } else if (tab === 'flashcards') {
-    tabFlashcardsFsrs.classList.add('bg-surface-800', 'text-white');
-    tabFlashcardsFsrs.classList.remove('text-slate-400');
-    paneFlashcardsFsrs.classList.remove('hidden');
     loadFlashcards();
   } else if (tab === 'pyodide') {
-    tabPyodideScratchpad.classList.add('bg-surface-800', 'text-white');
-    tabPyodideScratchpad.classList.remove('text-slate-400');
-    panePyodideScratchpad.classList.remove('hidden');
     initPyodide();
   }
 }
@@ -2501,6 +2560,16 @@ async function handleExportCourseBundle() {
   }
 }
 
-
-
+// --- Global Debug & Inspection Object for F12 Console ---
+window.learnLMS = {
+  getCurrentCourse: () => currentCourse,
+  getCurrentSchedule: () => currentSchedule,
+  getCurrentLessons: () => currentLessons,
+  getActiveAllocation: () => activeAllocation,
+  setStrategy: setStrategy,
+  setRevisionBuffer: setRevisionBuffer,
+  toggleTheme: toggleTheme,
+  filterLessons: handleFilterLessons,
+  logger: Logger,
+};
 

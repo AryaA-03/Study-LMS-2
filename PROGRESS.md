@@ -21,8 +21,20 @@
   - [x] One-click JSON course study bundle export (`/api/courses/{course_id}/export`)
   - [x] Comprehensive `README.md` documentation
   - [x] 48 tests passed (100% pass across all unit, integration, live YouTube smoke, and Playwright E2E tests)
+- [x] Post-M5: UI/UX Refresh & Rigorous Live Browser Testing (`v0.5.1-ui-refresh`)
+  - [x] Replaced purple/indigo "AI slop" gradients with clean monochrome (black & white) and functional editorial accents (amber, blue, mint, coral)
+  - [x] Dual themes (Dark and Light) with top navbar theme switcher (☀️/🌙) and `localStorage` persistence
+  - [x] Declared `<meta name="color-scheme" content="light dark">` and `:root { color-scheme: light dark; }` per Modern Web Guidance
+  - [x] Explicit Exam Date Alignment: added choice between "Finish on Exam Date" (0-day or 2-day buffer) and "Fixed Daily Spend"
+  - [x] Fixed date spillover in `backend/scheduler/engine.py`: in paced mode with 0-day buffer, finish date strictly matches exam date
+  - [x] Collapsible interface: theater player toggle, full-width studio sidebar toggle, day-card chevrons with global collapse/expand
+  - [x] Selective video toggling: curriculum drawer with "Skip All Examples", search filter, and individual inclusion checkboxes
+  - [x] Full-spectrum logging: color-coded terminal HTTP request logging and rich F12 browser console logger (`[LearnLMS:...]`)
+  - [x] Interactive browser inspection: exposed `window.learnLMS` global object for debugging
+  - [x] Live browser test suite: 5 Playwright tests in `tests/test_live_browser_ui.py` validating themes, date alignment, collapsing, filtering, and F12 logs
+  - [x] 53 tests passed (100% pass rate across all 38 unit/integration, 5 live YouTube smoke, and 10 Playwright E2E tests)
 
-## Verification Summary (Full M1–M5 Suite)
+## Verification Summary (Full 53-Test Suite)
 - `tests/test_scheduler.py`: 10 passed
 - `tests/test_yt_service.py`: 5 passed
 - `tests/test_migrations.py`: 1 passed
@@ -41,4 +53,5 @@
 - `tests/test_e2e_m3.py`: 1 passed (Playwright sources tray, add modal, Ask NotebookLM Q&A)
 - `tests/test_e2e_m4.py`: 1 passed (Playwright quiz generation, mastery submission, FSRS card drill, diagnostic & mock exam)
 - `tests/test_e2e_m5.py`: 1 passed (Playwright Pyodide scratchpad, Storage Guard vacuum, backup, bundle export)
-- **Total**: 48 passed, 0 failed.
+- `tests/test_live_browser_ui.py`: 5 passed (Playwright live dual-theme, date alignment, buffer toggle, collapsible studio & days, selective video toggling, F12 console)
+- **Total**: 53 passed, 0 failed (100% pass rate).
