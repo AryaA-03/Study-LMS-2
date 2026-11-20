@@ -190,17 +190,55 @@
         </div>
 
         <!-- NotebookLM-Inspired Grounded Notes & Citations Section -->
-        <div class="p-4 flex-1 flex flex-col">
-          <div class="flex items-center justify-between mb-2">
-            <div class="flex items-center gap-2">
-              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Grounded Study Notes</h3>
-              <span class="text-[10px] px-1.5 py-0.2 rounded bg-surface-800 text-slate-400 font-mono">Citations Active</span>
+        <div class="p-4 flex-1 flex flex-col min-h-0 overflow-hidden">
+          <!-- Section Toolbar -->
+          <div class="flex items-center justify-between mb-2 shrink-0">
+            <!-- Tabs -->
+            <div class="flex items-center gap-1 bg-surface-950 p-1 rounded-lg border border-slate-800 text-xs">
+              <button id="tab-grounded-notes" class="px-3 py-1 rounded-md font-semibold text-white bg-surface-800 transition shadow-sm">
+                Grounded Notes
+              </button>
+              <button id="tab-personal-notes" class="px-3 py-1 rounded-md font-medium text-slate-400 hover:text-white transition">
+                Personal Notes
+              </button>
             </div>
-            <span class="text-[11px] text-slate-500">Click timestamps to jump player</span>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center gap-2">
+              <button id="btn-transcribe-lesson" class="text-xs bg-surface-800 hover:bg-surface-700 text-slate-200 px-2.5 py-1 rounded-lg border border-slate-700 flex items-center gap-1.5 transition" title="Fetch Captions or run Whisper">
+                <svg class="w-3.5 h-3.5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/></svg>
+                <span id="transcribe-btn-label">Transcribe</span>
+                <span id="transcribe-status-pill" class="hidden text-[10px] px-1 py-0.2 rounded bg-violet-900/60 text-violet-300 font-mono"></span>
+              </button>
+              <button id="btn-capture-keyframes" class="text-xs bg-surface-800 hover:bg-surface-700 text-slate-200 px-2.5 py-1 rounded-lg border border-slate-700 flex items-center gap-1.5 transition" title="Capture 480p keyframe screenshots">
+                <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                <span>Keyframes</span>
+              </button>
+              <button id="btn-regenerate-notes" class="text-xs text-slate-400 hover:text-white p-1 rounded hover:bg-surface-800 transition" title="Regenerate structured notes">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              </button>
+            </div>
           </div>
 
-          <div id="notes-content" class="bg-surface-850/60 rounded-xl p-4 border border-slate-800 text-sm text-slate-300 leading-relaxed flex-1 min-h-[180px]">
-            <p class="text-slate-500 italic text-xs">Lesson notes, keyframe video bookmarks, and cited chunks will generate and populate here as you study.</p>
+          <!-- Keyframes Visual Strip (Opt-in Keyframes Gallery) -->
+          <div id="keyframes-strip" class="hidden mb-3 p-2 bg-surface-950/80 rounded-xl border border-slate-800/80 overflow-x-auto flex items-center gap-3 shrink-0">
+            <!-- Populated dynamically with keyframe cards -->
+          </div>
+
+          <!-- Tab Content A: Grounded Structured Notes -->
+          <div id="pane-grounded-notes" class="flex-1 flex flex-col min-h-0 overflow-y-auto bg-surface-850/60 rounded-xl p-4 border border-slate-800">
+            <div id="notes-content" class="text-sm text-slate-300 leading-relaxed space-y-3">
+              <p class="text-slate-500 italic text-xs">Select a lesson to load or generate grounded study notes and timestamped bookmarks.</p>
+            </div>
+          </div>
+
+          <!-- Tab Content B: Personal Editable Notes -->
+          <div id="pane-personal-notes" class="hidden flex-1 flex flex-col min-h-0 bg-surface-850/60 rounded-xl p-3 border border-slate-800">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs text-slate-400">Personal study scratchpad for this lesson (Auto-saved)</span>
+              <span id="personal-note-save-status" class="text-[10px] text-emerald-400 font-mono"></span>
+            </div>
+            <textarea id="input-personal-notes" placeholder="Type personal formulas, exam notes, memory tricks, or questions here..." class="w-full flex-1 bg-surface-900 border border-slate-700/80 rounded-lg p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono leading-relaxed resize-none"></textarea>
           </div>
         </div>
       </section>

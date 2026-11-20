@@ -21,6 +21,11 @@ def load_env_vars() -> Dict[str, str]:
 
 ENV_VARS = load_env_vars()
 
+# Ensure .venv/bin is on PATH so ffmpeg, yt-dlp, and mlx-whisper find local binaries
+VENV_BIN = BASE_DIR / ".venv" / "bin"
+if VENV_BIN.exists() and str(VENV_BIN) not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = f"{VENV_BIN}:{os.environ.get('PATH', '')}"
+
 # App configuration
 APP_ENV = os.getenv("APP_ENV", ENV_VARS.get("APP_ENV", "development"))
 DATA_DIR_NAME = os.getenv("DATA_DIR", ENV_VARS.get("DATA_DIR", "data-dev"))
@@ -79,3 +84,47 @@ def update_env_file(updates: Dict[str, str]) -> None:
     # Refresh cache
     global ENV_VARS
     ENV_VARS = load_env_vars()
+
+# Ensure .venv/bin is on PATH so ffmpeg, yt-dlp, and mlx-whisper find local binaries
+VENV_BIN = BASE_DIR / ".venv" / "bin"
+if VENV_BIN.exists() and str(VENV_BIN) not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = f"{VENV_BIN}:{os.environ.get('PATH', '')}"
+
+class Settings:
+    @property
+    def BASE_DIR(self) -> Path:
+        return BASE_DIR
+
+    @property
+    def PROJECT_ROOT(self) -> Path:
+        return BASE_DIR
+
+    @property
+    def DATA_DIR(self) -> Path:
+        return DATA_DIR
+
+    @property
+    def DB_PATH(self) -> Path:
+        return DB_PATH
+
+    @property
+    def LOCAL_TZ(self) -> ZoneInfo:
+        return LOCAL_TZ
+
+    @property
+    def GEMINI_API_KEY(self) -> Optional[str]:
+        return os.getenv("GEMINI_API_KEY", ENV_VARS.get("GEMINI_API_KEY"))
+
+    @property
+    def GROQ_API_KEY(self) -> Optional[str]:
+        return os.getenv("GROQ_API_KEY", ENV_VARS.get("GROQ_API_KEY"))
+
+    @property
+    def OPENROUTER_API_KEY(self) -> Optional[str]:
+        return os.getenv("OPENROUTER_API_KEY", ENV_VARS.get("OPENROUTER_API_KEY"))
+
+_settings = Settings()
+
+def get_settings() -> Settings:
+    return _settings
+

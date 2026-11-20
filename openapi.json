@@ -901,6 +901,436 @@
         }
       }
     },
+    "/api/lessons/{lesson_id}/transcribe": {
+      "post": {
+        "tags": [
+          "transcripts"
+        ],
+        "summary": "Transcribe Lesson",
+        "description": "Ingests captions or runs lazy Whisper fallback for a single lesson.",
+        "operationId": "transcribe_lesson_api_lessons__lesson_id__transcribe_post",
+        "parameters": [
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Transcribe Lesson Api Lessons  Lesson Id  Transcribe Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lessons/{lesson_id}/chunks": {
+      "get": {
+        "tags": [
+          "transcripts"
+        ],
+        "summary": "Get Lesson Chunks",
+        "description": "Retrieves all indexed transcript chunks for a lesson.",
+        "operationId": "get_lesson_chunks_api_lessons__lesson_id__chunks_get",
+        "parameters": [
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response Get Lesson Chunks Api Lessons  Lesson Id  Chunks Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lessons/{lesson_id}/status": {
+      "get": {
+        "tags": [
+          "transcripts"
+        ],
+        "summary": "Get Lesson Transcript Status",
+        "description": "Returns the current transcription and caption status for a lesson.",
+        "operationId": "get_lesson_transcript_status_api_lessons__lesson_id__status_get",
+        "parameters": [
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Lesson Transcript Status Api Lessons  Lesson Id  Status Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lessons/{lesson_id}/notes": {
+      "get": {
+        "tags": [
+          "notes"
+        ],
+        "summary": "Get Lesson Notes",
+        "description": "Retrieves or automatically synthesizes structured notes for a lesson.",
+        "operationId": "get_lesson_notes_api_lessons__lesson_id__notes_get",
+        "parameters": [
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lessons/{lesson_id}/notes/regenerate": {
+      "post": {
+        "tags": [
+          "notes"
+        ],
+        "summary": "Regenerate Lesson Notes",
+        "description": "Forces re-synthesis of structured notes for a lesson from its chunks.",
+        "operationId": "regenerate_lesson_notes_api_lessons__lesson_id__notes_regenerate_post",
+        "parameters": [
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lessons/{lesson_id}/notes/personal": {
+      "put": {
+        "tags": [
+          "notes"
+        ],
+        "summary": "Update Personal Notes",
+        "description": "Saves user personal editable notes for a lesson.",
+        "operationId": "update_personal_notes_api_lessons__lesson_id__notes_personal_put",
+        "parameters": [
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonalNotesUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Update Personal Notes Api Lessons  Lesson Id  Notes Personal Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lessons/{lesson_id}/screenshots": {
+      "post": {
+        "tags": [
+          "screenshots"
+        ],
+        "summary": "Capture Screenshots",
+        "description": "Captures opt-in keyframe screenshots for a lesson.",
+        "operationId": "capture_screenshots_api_lessons__lesson_id__screenshots_post",
+        "parameters": [
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScreenshotResponse"
+                  },
+                  "title": "Response Capture Screenshots Api Lessons  Lesson Id  Screenshots Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "screenshots"
+        ],
+        "summary": "List Screenshots",
+        "description": "Lists existing keyframe screenshots for a lesson.",
+        "operationId": "list_screenshots_api_lessons__lesson_id__screenshots_get",
+        "parameters": [
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScreenshotResponse"
+                  },
+                  "title": "Response List Screenshots Api Lessons  Lesson Id  Screenshots Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/screenshots/{course_id}/{lesson_id}/{filename}": {
+      "get": {
+        "tags": [
+          "screenshots"
+        ],
+        "summary": "Serve Screenshot",
+        "description": "Serves a stored screenshot image.",
+        "operationId": "serve_screenshot_api_screenshots__course_id___lesson_id___filename__get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          },
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Index Page",
@@ -1522,6 +1952,74 @@
         ],
         "title": "LessonResponse"
       },
+      "NoteResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "course_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Id"
+          },
+          "lesson_id": {
+            "type": "string",
+            "title": "Lesson Id"
+          },
+          "content_markdown": {
+            "type": "string",
+            "title": "Content Markdown"
+          },
+          "personal_notes": {
+            "type": "string",
+            "title": "Personal Notes",
+            "default": ""
+          },
+          "is_generated": {
+            "type": "integer",
+            "title": "Is Generated",
+            "default": 1
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "lesson_id",
+          "content_markdown"
+        ],
+        "title": "NoteResponse"
+      },
+      "PersonalNotesUpdate": {
+        "properties": {
+          "personal_notes": {
+            "type": "string",
+            "title": "Personal Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "personal_notes"
+        ],
+        "title": "PersonalNotesUpdate"
+      },
       "ReplanRequest": {
         "properties": {
           "mode": {
@@ -1706,6 +2204,39 @@
           "revision_buffer_days"
         ],
         "title": "ScheduleResponse"
+      },
+      "ScreenshotResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "timestamp_sec": {
+            "type": "integer",
+            "title": "Timestamp Sec"
+          },
+          "formatted_time": {
+            "type": "string",
+            "title": "Formatted Time"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "caption": {
+            "type": "string",
+            "title": "Caption"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp_sec",
+          "formatted_time",
+          "url",
+          "caption"
+        ],
+        "title": "ScreenshotResponse"
       },
       "SourceApprovalRequest": {
         "properties": {

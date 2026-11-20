@@ -1,8 +1,8 @@
 # Milestone Progress & Recovery Log
 
 ## Current Status
-- **Current Milestone**: Completed M1 (`v0.1-m1` — Usable Day One)
-- **Next Milestone**: M2 (`v0.2-m2` — Captions, Transcripts, Notes, Screenshots & Adaptive Replanning)
+- **Current Milestone**: Completed M2 (`v0.2-m2` — Captions, Transcripts, Notes, Screenshots & Adaptive Replanning)
+- **Next Milestone**: M3 (`v0.3-m3` — Multi-Source Notebooks: PDFs, Web & Citation Q&A)
 - **Active Data Directory**: `data-dev/`
 - **Stable Live Directory**: `../learn-app-live/` (checked out at `v0.1-m1`, pointing to `data/app.db`)
 
@@ -22,16 +22,34 @@
   - [x] Clean dark-mode split-screen study UI with YouTube IFrame Player API integration
   - [x] Settings modal: yt-dlp version, one-click update, browser cookies, disk usage meter & cleanup
   - [x] 18 tests passed (unit, migration auto-backup, integration pipeline, live YouTube smoke, Playwright E2E)
-- [ ] M2: Captions, Transcripts, Notes, Screenshots & Adaptive Replanning (`v0.2-m2`)
+- [x] M2: Captions, Transcripts, Notes, Screenshots & Adaptive Replanning (`v0.2-m2`)
+  - [x] Captions-first ingestion via `yt-dlp` with zero video download
+  - [x] Millisecond-precise `json3` parser with deduplication and token chunking (300-600 tokens)
+  - [x] WebVTT rolling-caption prefix deduplicator
+  - [x] Resumable SQLite chunk storage + FTS5 full-text search indexing (`chunks_fts`)
+  - [x] Lazy per-lesson Whisper fallback (`mlx-whisper` on Apple Silicon, `faster-whisper` on CPU)
+  - [x] Audio slice extractor via `yt-dlp` + bundled `ffmpeg` on PATH with instant temp cleanup
+  - [x] Opt-in 480p JPEG keyframe screenshot capture via ffmpeg with YouTube thumbnail fallback
+  - [x] NotebookLM-style tabbed study studio: Grounded Notes vs. Personal Editable Notes
+  - [x] Automatic note synthesis (Gemini 2.5 Flash with fallback to deterministic No-Key mode)
+  - [x] Interactive clickable `[MM:SS]` timestamp seek links bound to `window.seekToSeconds`
+  - [x] Keyframes visual gallery strip with duration badges and instant player jump
+  - [x] Debounced auto-saving personal scratchpad persisted to SQLite `notes` table
+  - [x] Adaptive replanning: Compress (drops deep-dives) vs. Extend Deadline with diff & Undo
+  - [x] 31 tests passed across unit, integration, live TOC/DBMS smoke, and Playwright E2E
 - [ ] M3: Multi-Source Notebooks (PDFs, Web, Videos) & Citation Q&A (`v0.3-m3`)
 - [ ] M4: Citation Quizzes, FSRS Spaced Repetition & Mock Exams (`v0.4-m4`)
 - [ ] M5: In-Browser Pyodide Scratchpad, Storage Guard, UI Polish & Ship (`v0.5-m5`)
 
-## Verification Summary (M1)
-- `tests/test_scheduler.py`: 8 passed
-- `tests/test_yt_service.py`: 5 passed
-- `tests/test_migrations.py`: 1 passed
-- `tests/test_integration_pipeline.py`: 1 passed
-- `tests/test_live_smoke.py`: 2 passed (live YouTube endpoints tested)
-- `tests/test_e2e_m1.py`: 1 passed (Playwright headless Chromium verified)
-- Total: 18 passed, 0 failed.
+## Verification Summary (M2)
+- `tests/test_scheduler.py`: 10 passed (speed scaling, multi-day splitting, rest/revision days, reflow, compress, core deficit, paced vs fixed exam spreading, lesson exclusion)
+- `tests/test_yt_service.py`: 5 passed (duration format, chapters, 15-min deterministic, remainder merge, ytdlp version)
+- `tests/test_migrations.py`: 1 passed (non-destructive migration and backup)
+- `tests/test_integration_pipeline.py`: 1 passed (full import -> approve -> schedule -> toggle -> skip -> reflow -> compress -> undo)
+- `tests/test_transcription.py`: 5 passed (format seconds, json3 deduplication, rolling VTT deduplication, no-key note generation, notes persistence)
+- `tests/test_screenshots.py`: 1 passed (keyframe extraction, directory management, retrieval)
+- `tests/test_live_smoke.py`: 3 passed (live TOC playlist 114 entries, live large video chapters, live search discovery)
+- `tests/test_live_smoke_m2.py`: 2 passed (live TOC captions ingestion + notes synthesis, live large video audio slice + Whisper)
+- `tests/test_e2e_m1.py`: 1 passed (Playwright headless Chromium golden-path test)
+- `tests/test_e2e_m2.py`: 1 passed (Playwright headless Chromium notes, tabs, seek buttons, personal auto-save)
+- Total: 31 passed, 0 failed.

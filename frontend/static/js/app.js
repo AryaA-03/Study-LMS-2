@@ -123,6 +123,21 @@ const btnFilterConcepts = document.getElementById('btn-filter-concepts');
 const btnFilterExamples = document.getElementById('btn-filter-examples');
 const btnToggleCollapseAll = document.getElementById('btn-toggle-collapse-all');
 
+// Notes, Keyframes & Transcription Elements
+const tabGroundedNotes = document.getElementById('tab-grounded-notes');
+const tabPersonalNotes = document.getElementById('tab-personal-notes');
+const paneGroundedNotes = document.getElementById('pane-grounded-notes');
+const panePersonalNotes = document.getElementById('pane-personal-notes');
+const notesContent = document.getElementById('notes-content');
+const inputPersonalNotes = document.getElementById('input-personal-notes');
+const personalNoteSaveStatus = document.getElementById('personal-note-save-status');
+const btnTranscribeLesson = document.getElementById('btn-transcribe-lesson');
+const transcribeBtnLabel = document.getElementById('transcribe-btn-label');
+const transcribeStatusPill = document.getElementById('transcribe-status-pill');
+const btnCaptureKeyframes = document.getElementById('btn-capture-keyframes');
+const btnRegenerateNotes = document.getElementById('btn-regenerate-notes');
+const keyframesStrip = document.getElementById('keyframes-strip');
+
 // --- YouTube IFrame API Initialization ---
 window.onYouTubeIframeAPIReady = function() {
   Logger.player('API Ready', 'Initializing YouTube IFrame API instance');
@@ -167,6 +182,16 @@ function playVideoSlice(videoId, startSec, endSec) {
     });
   }
 }
+
+window.seekToSeconds = function(seconds) {
+  Logger.player('Seek To Seconds', { seconds });
+  if (isYtReady && ytPlayer && ytPlayer.seekTo) {
+    ytPlayer.seekTo(seconds, true);
+    if (ytPlayer.playVideo) {
+      ytPlayer.playVideo();
+    }
+  }
+};
 
 // --- App Boot ---
 document.addEventListener('DOMContentLoaded', async () => {
@@ -242,6 +267,16 @@ function setupEventListeners() {
   document.getElementById('btn-cleanup-cache').addEventListener('click', handleCleanupCache);
   document.getElementById('btn-save-keys').addEventListener('click', handleSaveKeys);
   document.getElementById('settings-browser-cookies').addEventListener('change', handleUpdateBrowserCookies);
+
+  // Notes Tabs & Actions
+  tabGroundedNotes.addEventListener('click', () => switchNotesTab('grounded'));
+  tabPersonalNotes.addEventListener('click', () => switchNotesTab('personal'));
+  btnTranscribeLesson.addEventListener('click', handleTranscribeLesson);
+  btnCaptureKeyframes.addEventListener('click', handleCaptureKeyframes);
+  btnRegenerateNotes.addEventListener('click', () => {
+    if (activeAllocation) loadLessonNotesAndArtifacts(activeAllocation.lesson_id, true);
+  });
+  inputPersonalNotes.addEventListener('input', handlePersonalNotesInput);
 }
 
 // --- Layout Collapsing ---
@@ -534,6 +569,7 @@ window.selectAllocation = function(allocId) {
         activeAllocation = a;
         updateActiveLessonUI(a);
         playVideoSlice(a.video_id, a.allocated_start_sec, a.allocated_end_sec);
+        loadLessonNotesAndArtifacts(a.lesson_id);
         return;
       }
     }
@@ -992,3 +1028,200 @@ function formatBytes(bytes) {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
+
+// --- Notes, Transcription & Keyframe Functions ---
+function switchNotesTab(tab) {
+  if (tab === 'grounded') {
+    tabGroundedNotes.classList.add('bg-surface-800', 'text-white');
+    tabGroundedNotes.classList.remove('text-slate-400');
+    tabPersonalNotes.classList.remove('bg-surface-800', 'text-white');
+    tabPersonalNotes.classList.add('text-slate-400');
+
+    paneGroundedNotes.classList.remove('hidden');
+    panePersonalNotes.classList.add('hidden');
+  } else {
+    tabPersonalNotes.classList.add('bg-surface-800', 'text-white');
+    tabPersonalNotes.classList.remove('text-slate-400');
+    tabGroundedNotes.classList.remove('bg-surface-800', 'text-white');
+    tabGroundedNotes.classList.add('text-slate-400');
+
+    panePersonalNotes.classList.remove('hidden');
+    paneGroundedNotes.classList.add('hidden');
+  }
+}
+
+async function loadLessonNotesAndArtifacts(lessonId, forceRegen = false) {
+  if (!lessonId) return;
+  const t0 = performance.now();
+
+  try {
+    // 1. Fetch transcript status
+    const resStatus = await fetch(`/api/lessons/${lessonId}/status`);
+    if (resStatus.ok) {
+      const statusData = await resStatus.json();
+      if (statusData.has_transcript) {
+        transcribeBtnLabel.textContent = 'Transcribed';
+        transcribeStatusPill.classList.remove('hidden');
+        transcribeStatusPill.textContent = (statusData.transcript_type || 'CAPTION').toUpperCase();
+      } else {
+        transcribeBtnLabel.textContent = 'Transcribe';
+        transcribeStatusPill.classList.add('hidden');
+      }
+    }
+
+    // 2. Fetch screenshots
+    const resShots = await fetch(`/api/lessons/${lessonId}/screenshots`);
+    if (resShots.ok) {
+      const shots = await resShots.json();
+      renderKeyframesStrip(shots);
+    }
+
+    // 3. Fetch notes
+    const endpoint = forceRegen ? `/api/lessons/${lessonId}/notes/regenerate` : `/api/lessons/${lessonId}/notes`;
+    const method = forceRegen ? 'POST' : 'GET';
+    const resNotes = await fetch(endpoint, { method });
+    if (resNotes.ok) {
+      const noteData = await resNotes.json();
+      renderMarkdownNotes(noteData.content_markdown);
+      if (inputPersonalNotes) {
+        inputPersonalNotes.value = noteData.personal_notes || '';
+      }
+      Logger.api(method, endpoint, resNotes.status, Math.round(performance.now() - t0), noteData);
+    }
+  } catch (err) {
+    Logger.error('Failed to load lesson notes & artifacts', err);
+  }
+}
+
+function renderKeyframesStrip(shots) {
+  if (!shots || shots.length === 0) {
+    keyframesStrip.classList.add('hidden');
+    keyframesStrip.innerHTML = '';
+    return;
+  }
+
+  keyframesStrip.classList.remove('hidden');
+  keyframesStrip.innerHTML = shots.map(s => `
+    <div class="relative shrink-0 group cursor-pointer rounded-lg overflow-hidden border border-slate-700 hover:border-violet-500 transition shadow" onclick="window.seekToSeconds(${s.timestamp_sec})" title="Jump to ${s.formatted_time}">
+      <img src="${s.url}" alt="${s.caption}" class="w-24 h-14 object-cover">
+      <span class="absolute bottom-1 right-1 bg-black/80 text-white font-mono text-[9px] px-1 py-0.2 rounded font-semibold">${s.formatted_time}</span>
+      <div class="absolute inset-0 bg-violet-600/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+        <svg class="w-5 h-5 text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderMarkdownNotes(markdownText) {
+  if (!markdownText) {
+    notesContent.innerHTML = '<p class="text-slate-500 italic text-xs">No notes generated for this lesson yet. Click "Transcribe" above.</p>';
+    return;
+  }
+
+  // Escape basic HTML tags to prevent XSS
+  let html = markdownText
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // GitHub style alerts: > [!NOTE], > [!IMPORTANT], > [!TIP], > [!WARNING]
+  html = html.replace(/&gt; \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n((?:&gt; .*\n?)+)/gi, (match, p1, p2) => {
+    const alertType = p1.toUpperCase();
+    const alertBody = p2.replace(/&gt; ?/g, '');
+    let colorClass = 'border-blue-500/60 bg-blue-950/40 text-blue-200';
+    if (alertType === 'IMPORTANT') colorClass = 'border-amber-500/60 bg-amber-950/40 text-amber-200';
+    if (alertType === 'WARNING') colorClass = 'border-red-500/60 bg-red-950/40 text-red-200';
+    if (alertType === 'TIP') colorClass = 'border-emerald-500/60 bg-emerald-950/40 text-emerald-200';
+    return `<div class="p-3 my-2 border-l-4 rounded-r-lg ${colorClass} text-xs leading-relaxed">
+      <div class="font-bold uppercase tracking-wider mb-1">${alertType}</div>
+      <div>${alertBody}</div>
+    </div>`;
+  });
+
+  // Images ![caption](url)
+  html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<div class="my-3"><img src="$2" alt="$1" class="rounded-lg border border-slate-700 max-h-56 object-cover shadow-lg mx-auto"><div class="text-[11px] text-center text-slate-400 mt-1 italic">$1</div></div>');
+
+  // Headings
+  html = html.replace(/^### (.*$)/gim, '<h3 class="text-sm font-bold text-violet-300 mt-3 mb-1">$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2 class="text-base font-bold text-white mt-4 mb-2 pb-1 border-b border-slate-800">$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1 class="text-lg font-extrabold text-white mt-4 mb-2 pb-1 border-b border-slate-700">$1</h1>');
+
+  // Bold & Italic
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
+  html = html.replace(/\*(.*?)\*/g, '<em class="text-slate-300">$1</em>');
+
+  // Code spans
+  html = html.replace(/`([^`]+)`/g, '<code class="bg-surface-950 text-violet-300 px-1.5 py-0.5 rounded text-[11px] font-mono border border-slate-800">$1</code>');
+
+  // Bullets
+  html = html.replace(/^- (.*$)/gim, '<div class="flex items-start gap-2 my-1 text-xs text-slate-300 leading-normal"><span class="text-violet-400 mt-0.5">•</span><span>$1</span></div>');
+
+  // Clickable Timestamps [MM:SS] or [HH:MM:SS]
+  html = html.replace(/\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]/g, (match, p1, p2, p3) => {
+    let totalSec = 0;
+    if (p3 !== undefined) {
+      totalSec = parseInt(p1, 10) * 3600 + parseInt(p2, 10) * 60 + parseInt(p3, 10);
+    } else {
+      totalSec = parseInt(p1, 10) * 60 + parseInt(p2, 10);
+    }
+    return `<button type="button" onclick="window.seekToSeconds(${totalSec})" class="inline-flex items-center gap-1 font-mono text-[11px] font-medium bg-violet-950/90 hover:bg-violet-800 text-violet-300 border border-violet-700/60 rounded px-1.5 py-0.5 cursor-pointer transition shadow-sm active:scale-95" title="Jump video to ${match}"><span>▶</span> ${match}</button>`;
+  });
+
+  notesContent.innerHTML = html;
+}
+
+async function handleTranscribeLesson() {
+  if (!activeAllocation) return;
+  const lessonId = activeAllocation.lesson_id;
+  transcribeBtnLabel.textContent = 'Transcribing...';
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/lessons/${lessonId}/transcribe`, { method: 'POST' });
+    const data = await res.json();
+    Logger.api('POST', `/api/lessons/${lessonId}/transcribe`, res.status, Math.round(performance.now() - t0), data);
+    await loadLessonNotesAndArtifacts(lessonId, true);
+  } catch (err) {
+    Logger.error('Transcription failed', err);
+    transcribeBtnLabel.textContent = 'Transcribe';
+  }
+}
+
+async function handleCaptureKeyframes() {
+  if (!activeAllocation) return;
+  const lessonId = activeAllocation.lesson_id;
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/lessons/${lessonId}/screenshots`, { method: 'POST' });
+    const shots = await res.json();
+    Logger.api('POST', `/api/lessons/${lessonId}/screenshots`, res.status, Math.round(performance.now() - t0), shots);
+    renderKeyframesStrip(shots);
+    await loadLessonNotesAndArtifacts(lessonId, false);
+  } catch (err) {
+    Logger.error('Capture keyframes failed', err);
+  }
+}
+
+let personalNotesTimeout = null;
+function handlePersonalNotesInput() {
+  personalNoteSaveStatus.textContent = 'Saving...';
+  clearTimeout(personalNotesTimeout);
+  personalNotesTimeout = setTimeout(async () => {
+    if (!activeAllocation) return;
+    const lessonId = activeAllocation.lesson_id;
+    const text = inputPersonalNotes.value;
+    try {
+      const res = await fetch(`/api/lessons/${lessonId}/notes/personal`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personal_notes: text }),
+      });
+      if (res.ok) {
+        personalNoteSaveStatus.textContent = 'Saved ✓';
+        setTimeout(() => { personalNoteSaveStatus.textContent = ''; }, 2000);
+      }
+    } catch (err) {
+      personalNoteSaveStatus.textContent = 'Error saving';
+    }
+  }, 800);
+}
+

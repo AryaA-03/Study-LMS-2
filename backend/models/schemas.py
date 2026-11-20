@@ -172,3 +172,24 @@ class SystemSettingsResponse(BaseModel):
 
 class UpdateSettingsRequest(BaseModel):
     cookies_browser: Optional[str] = Field(None, description="Browser name for --cookies-from-browser (e.g. 'chrome', 'firefox', 'safari', 'brave')")
+
+# --- Notes & Screenshot Schemas ---
+class PersonalNotesUpdate(BaseModel):
+    personal_notes: str
+
+class NoteResponse(BaseModel):
+    id: str
+    course_id: Optional[str] = None
+    lesson_id: str
+    content_markdown: str
+    personal_notes: str = ""
+    is_generated: int = 1
+    updated_at: Optional[str] = None
+
+class ScreenshotResponse(BaseModel):
+    id: str
+    timestamp_sec: int
+    formatted_time: str
+    url: str
+    caption: str
+
