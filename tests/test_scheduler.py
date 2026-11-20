@@ -74,6 +74,7 @@ def test_multi_day_lesson_splitting():
         playback_speed=1.0,
         rest_days=["Sunday"],
         revision_buffer_days=2,
+        schedule_strategy="fixed",
         clock=fake_clock,
     )
 
@@ -123,6 +124,7 @@ def test_playback_speed_affects_allocations():
         playback_speed=1.5,
         rest_days=["Sunday"],
         revision_buffer_days=2,
+        schedule_strategy="fixed",
         clock=fake_clock,
     )
     allocs = sched["allocations"]
@@ -131,9 +133,8 @@ def test_playback_speed_affects_allocations():
     assert allocs[0].raw_minutes == 120.0
 
 def test_behind_schedule_detection():
-    # If finish date encroaches on revision buffer
     # Target date = Friday Nov 27, buffer = 2 days -> deadline_effective = Wednesday Nov 25.
-    # If lessons take 4 study days (Nov 23, 24, 25, 26) -> finishes Nov 26 > Nov 25 -> behind schedule!
+    # 4 lessons (60 min each) -> finishes Nov 26 > Nov 25 -> behind schedule!
     lessons = [
         {"id": f"l-{i}", "title": f"Lesson {i}", "start_sec": 0, "end_sec": 3600, "raw_duration_sec": 3600, "priority": "core"}
         for i in range(4)
@@ -147,15 +148,13 @@ def test_behind_schedule_detection():
         playback_speed=1.0,
         rest_days=["Sunday"],
         revision_buffer_days=2,
+        schedule_strategy="fixed",
         clock=fake_clock,
     )
     assert sched["is_behind_schedule"] is True
     assert sched["projected_finish_date"] == "2026-11-26"
 
 def test_compress_schedule_drops_deep_dive():
-    # Available study days: Mon Nov 23, Tue Nov 24 (2 days * 60 min = 120 min)
-    # Target date: Thu Nov 26 (with 2 days revision buffer: Nov 25, Nov 26)
-    # 2 core lessons (60 min each = 120 min) + 2 deep-dive lessons (60 min each)
     lessons = [
         {"id": "c1", "title": "Core 1", "start_sec": 0, "end_sec": 3600, "raw_duration_sec": 3600, "priority": "core"},
         {"id": "c2", "title": "Core 2", "start_sec": 0, "end_sec": 3600, "raw_duration_sec": 3600, "priority": "core"},
@@ -175,18 +174,14 @@ def test_compress_schedule_drops_deep_dive():
         clock=fake_clock,
     )
 
-    # All deep-dive dropped to fit core topics
     assert dropped_count == 2
     assert deficit_min == 0.0
     assert deficit_msg is None
-    # Only core lessons scheduled
     lesson_ids = {a.lesson_id for a in sched["allocations"]}
     assert lesson_ids == {"c1", "c2"}
     assert sched["is_behind_schedule"] is False
 
 def test_compress_schedule_reports_core_deficit():
-    # When even CORE topics cannot fit before revision buffer, must report exact deficit
-    # Available: 1 study day (60 min). Core needs: 120 min.
     lessons = [
         {"id": "c1", "title": "Core 1", "start_sec": 0, "end_sec": 3600, "raw_duration_sec": 3600, "priority": "core"},
         {"id": "c2", "title": "Core 2", "start_sec": 0, "end_sec": 3600, "raw_duration_sec": 3600, "priority": "core"},
@@ -196,7 +191,7 @@ def test_compress_schedule_reports_core_deficit():
         course_id="c1",
         lessons=lessons,
         start_date=FAKE_TODAY,
-        target_date=date(2026, 11, 25), # buffer = 2 -> deadline_effective = Nov 23 (1 study day)
+        target_date=date(2026, 11, 25),
         minutes_per_day=60,
         playback_speed=1.0,
         rest_days=["Sunday"],
@@ -214,7 +209,6 @@ def test_reflow_skips_and_completed():
         {"id": "l2", "title": "Lesson 2", "start_sec": 0, "end_sec": 3600, "raw_duration_sec": 3600, "priority": "core"},
         {"id": "l3", "title": "Lesson 3", "start_sec": 0, "end_sec": 3600, "raw_duration_sec": 3600, "priority": "core"},
     ]
-    # Initial schedule
     sched = generate_schedule(
         course_id="c1",
         lessons=lessons,
@@ -224,10 +218,10 @@ def test_reflow_skips_and_completed():
         playback_speed=1.0,
         rest_days=["Sunday"],
         revision_buffer_days=2,
+        schedule_strategy="fixed",
         clock=fake_clock,
     )
     allocs = sched["allocations"]
-    # Mark l1 completed, l2 skipped
     allocs[0].is_completed = True
     allocs[1].is_skipped = True
 
@@ -240,11 +234,97 @@ def test_reflow_skips_and_completed():
         playback_speed=1.0,
         rest_days=["Sunday"],
         revision_buffer_days=2,
+        schedule_strategy="fixed",
         clock=fake_clock,
     )
 
-    # Remaining active allocations should only be completed l1 and uncompleted l3
     active_lids = [a.lesson_id for a in reflowed["allocations"] if not a.is_skipped]
     assert "l1" in active_lids
     assert "l3" in active_lids
     assert "l2" not in active_lids
+
+def test_paced_vs_fixed_strategy_spread_to_exam_date():
+    """Verify that 'paced' strategy spreads lessons evenly up to exam deadline (minus buffer),
+
+    while 'fixed' strategy finishes early in a greedy sprint.
+    """
+    # Start: Mon Nov 23. Exam: Tue Dec 22 (29 calendar days).
+    # Revision buffer: 2 days (Dec 21 & Dec 22). Study deadline: Sun Dec 20.
+    # Total available study days (excluding Sundays): Mon-Sat = ~24 study days.
+    # 20 lessons of 30 min each = 600 min.
+    lessons = [
+        {
+            "id": f"toc-{i}",
+            "title": f"TOC Lesson {i}",
+            "start_sec": 0,
+            "end_sec": 1800,
+            "raw_duration_sec": 1800,
+            "priority": "core",
+        }
+        for i in range(20)
+    ]
+    target_exam = date(2026, 12, 22)
+
+    # Strategy 1: FIXED (90 min/day) -> 600 / 90 = ~7 study days -> finishes around Dec 1
+    sched_fixed = generate_schedule(
+        course_id="c1",
+        lessons=lessons,
+        start_date=FAKE_TODAY,
+        target_date=target_exam,
+        minutes_per_day=90,
+        playback_speed=1.0,
+        rest_days=["Sunday"],
+        revision_buffer_days=2,
+        schedule_strategy="fixed",
+        clock=fake_clock,
+    )
+    finish_fixed = sched_fixed["projected_finish_date"]
+    assert finish_fixed < "2026-12-10"  # Finishes very early!
+
+    # Strategy 2: PACED (Spread to Exam Date)
+    # Available study days to Dec 20 = 24 days.
+    # 600 / 24 = 25 min/day.
+    # The lessons should spread across study days up to Dec 15-20!
+    sched_paced = generate_schedule(
+        course_id="c1",
+        lessons=lessons,
+        start_date=FAKE_TODAY,
+        target_date=target_exam,
+        minutes_per_day=90,  # Ignored by paced mode in favor of calculated pace
+        playback_speed=1.0,
+        rest_days=["Sunday"],
+        revision_buffer_days=2,
+        schedule_strategy="paced",
+        clock=fake_clock,
+    )
+    finish_paced = sched_paced["projected_finish_date"]
+    # Paced finish lands on or right near Dec 20!
+    assert finish_paced >= "2026-12-15"
+    assert finish_paced <= "2026-12-20"
+    assert sched_paced["is_behind_schedule"] is False
+    assert sched_paced["effective_daily_target_minutes"] < 50.0  # ~25 min/day
+
+def test_lesson_exclusion_omits_from_schedule():
+    """Verify that lessons marked is_excluded=True are completely omitted from schedule allocations."""
+    lessons = [
+        {"id": "l-concept-1", "title": "DFA Definition", "start_sec": 0, "end_sec": 1800, "raw_duration_sec": 1800, "is_excluded": False},
+        {"id": "l-example-1", "title": "DFA Example 1", "start_sec": 0, "end_sec": 1800, "raw_duration_sec": 1800, "is_excluded": True},
+        {"id": "l-concept-2", "title": "NFA Definition", "start_sec": 0, "end_sec": 1800, "raw_duration_sec": 1800, "is_excluded": False},
+    ]
+
+    sched = generate_schedule(
+        course_id="c1",
+        lessons=lessons,
+        start_date=FAKE_TODAY,
+        target_date=date(2026, 12, 10),
+        minutes_per_day=60,
+        playback_speed=1.0,
+        rest_days=["Sunday"],
+        revision_buffer_days=2,
+        clock=fake_clock,
+    )
+
+    scheduled_ids = {a.lesson_id for a in sched["allocations"]}
+    assert "l-concept-1" in scheduled_ids
+    assert "l-concept-2" in scheduled_ids
+    assert "l-example-1" not in scheduled_ids  # Excluded lesson must NOT be scheduled!

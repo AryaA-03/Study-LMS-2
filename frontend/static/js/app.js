@@ -1,15 +1,53 @@
 /**
- * Learn LMS Client - Frontend Application
- * Strictly communicates with backend OpenAPI endpoints and YouTube IFrame Player API.
+ * Learn LMS Client - Frontend Application (CourseIt & NotebookLM Inspired)
+ * Features:
+ * - Rich F12 browser console logging
+ * - Collapsible split-screen studio & collapsible day cards
+ * - Dual scheduling strategies: Paced to Exam Date vs Fixed Daily Goal
+ * - Granular lesson inclusion & quick smart filtering (Concepts vs Examples)
+ * - YouTube IFrame Player API integration
  */
+
+// --- Structured F12 Console Logger ---
+const Logger = {
+  api(method, url, status, timeMs, data) {
+    const badge = `%c[LearnLMS:API]`;
+    const style = 'background: #4f46e5; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
+    console.groupCollapsed(`${badge} %c${method} ${url} -> ${status} (${timeMs}ms)`, style, 'color: #38bdf8;');
+    if (data) console.log('Payload / Response:', data);
+    console.trace('Callstack');
+    console.groupEnd();
+  },
+  player(action, details) {
+    const badge = `%c[LearnLMS:Player]`;
+    const style = 'background: #dc2626; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
+    console.log(`${badge} ${action}:`, details);
+  },
+  schedule(action, details) {
+    const badge = `%c[LearnLMS:Schedule]`;
+    const style = 'background: #8b5cf6; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
+    console.log(`${badge} ${action}:`, details);
+  },
+  filter(action, count) {
+    const badge = `%c[LearnLMS:Filter]`;
+    const style = 'background: #059669; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
+    console.log(`${badge} ${action} (${count} affected)`);
+  },
+  error(msg, err) {
+    console.error(`%c[LearnLMS:Error] ${msg}`, 'background: #991b1b; color: #ffffff; padding: 2px 5px; font-weight: bold;', err);
+  }
+};
 
 // State
 let currentCourseId = null;
 let currentCourse = null;
 let currentSchedule = null;
+let currentLessons = [];
 let activeAllocation = null;
 let ytPlayer = null;
 let isYtReady = false;
+let collapsedDays = new Set();
+let areAllDaysCollapsed = false;
 
 // DOM Elements
 const courseSelector = document.getElementById('course-selector');
@@ -22,6 +60,16 @@ const workspaceView = document.getElementById('workspace-view');
 const creatorView = document.getElementById('creator-view');
 const courseCreateForm = document.getElementById('course-create-form');
 const btnCancelCreator = document.getElementById('btn-cancel-creator');
+
+const paneStudio = document.getElementById('pane-studio');
+const paneSchedule = document.getElementById('pane-schedule');
+const btnCollapsePlayer = document.getElementById('btn-collapse-player');
+const btnCollapseSchedule = document.getElementById('btn-collapse-schedule');
+
+const pillStrategyPaced = document.getElementById('pill-strategy-paced');
+const pillStrategyFixed = document.getElementById('pill-strategy-fixed');
+const pacingModeLabel = document.getElementById('pacing-mode-label');
+const statDailyTarget = document.getElementById('stat-daily-target');
 
 const diffBanner = document.getElementById('diff-banner');
 const diffText = document.getElementById('diff-text');
@@ -42,6 +90,7 @@ const scheduleDaysContainer = document.getElementById('schedule-days-container')
 const progressPct = document.getElementById('progress-pct');
 const progressBarFill = document.getElementById('progress-bar-fill');
 const statEffectiveLeft = document.getElementById('stat-effective-left');
+const statEffectiveDone = document.getElementById('stat-effective-done');
 const statProjectedFinish = document.getElementById('stat-projected-finish');
 const statTargetDate = document.getElementById('stat-target-date');
 
@@ -51,14 +100,32 @@ const btnReplanNow = document.getElementById('btn-replan-now');
 
 const activeLessonTitle = document.getElementById('active-lesson-title');
 const activeLessonTime = document.getElementById('active-lesson-time');
+const activeLessonEffMin = document.getElementById('active-lesson-eff-min');
 const activeLessonPriority = document.getElementById('active-lesson-priority');
 const activeLessonSplit = document.getElementById('active-lesson-split');
 const btnToggleActiveComplete = document.getElementById('btn-toggle-active-complete');
 const activeCompleteLabel = document.getElementById('active-complete-label');
 const btnSkipActive = document.getElementById('btn-skip-active');
 
+// Curriculum Drawer
+const curriculumDrawer = document.getElementById('curriculum-drawer');
+const btnToggleCurriculum = document.getElementById('btn-toggle-curriculum');
+const btnCloseCurriculum = document.getElementById('btn-close-curriculum');
+const curriculumLessonsList = document.getElementById('curriculum-lessons-list');
+const curriculumSearch = document.getElementById('curriculum-search');
+const btnCurriculumIncludeAll = document.getElementById('btn-curriculum-include-all');
+const btnCurriculumSkipExamples = document.getElementById('btn-curriculum-skip-examples');
+const headerLessonCount = document.getElementById('header-lesson-count');
+
+// Smart Filters
+const btnFilterAll = document.getElementById('btn-filter-all');
+const btnFilterConcepts = document.getElementById('btn-filter-concepts');
+const btnFilterExamples = document.getElementById('btn-filter-examples');
+const btnToggleCollapseAll = document.getElementById('btn-toggle-collapse-all');
+
 // --- YouTube IFrame API Initialization ---
 window.onYouTubeIframeAPIReady = function() {
+  Logger.player('API Ready', 'Initializing YouTube IFrame API instance');
   ytPlayer = new YT.Player('yt-player', {
     height: '100%',
     width: '100%',
@@ -76,17 +143,21 @@ window.onYouTubeIframeAPIReady = function() {
 
 function onPlayerReady(event) {
   isYtReady = true;
-  document.getElementById('yt-player-placeholder').classList.add('hidden');
+  Logger.player('Player Ready', event);
+  const placeholder = document.getElementById('yt-player-placeholder');
+  if (placeholder) placeholder.classList.add('hidden');
 }
 
 function onPlayerStateChange(event) {
-  // Can be used for watch time tracking
+  Logger.player('Player State Change', event.data);
 }
 
 function playVideoSlice(videoId, startSec, endSec) {
   if (!videoId) return;
   const placeholder = document.getElementById('yt-player-placeholder');
   if (placeholder) placeholder.classList.add('hidden');
+
+  Logger.player('Seek & Play Slice', { videoId, startSec, endSec });
 
   if (isYtReady && ytPlayer && ytPlayer.loadVideoById) {
     ytPlayer.loadVideoById({
@@ -99,6 +170,7 @@ function playVideoSlice(videoId, startSec, endSec) {
 
 // --- App Boot ---
 document.addEventListener('DOMContentLoaded', async () => {
+  console.log('%c[LearnLMS] Booting Personal LMS & Exam Prep...', 'color: #8b5cf6; font-size: 14px; font-weight: bold;');
   setupEventListeners();
   setDefaultTargetDate();
   await loadSettings();
@@ -107,7 +179,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 function setDefaultTargetDate() {
   const d = new Date();
-  d.setDate(d.getDate() + 21); // 3 weeks by default
+  d.setDate(d.getDate() + 21);
   const dateStr = d.toISOString().split('T')[0];
   const targetDateInput = document.getElementById('input-target-date');
   if (targetDateInput) targetDateInput.value = dateStr;
@@ -137,16 +209,31 @@ function setupEventListeners() {
     replanCourse('normal', { playback_speed: speed, minutes_per_day: minDay });
   });
 
-  btnActionCompress.addEventListener('click', () => {
-    replanCourse('compress');
-  });
+  pillStrategyPaced.addEventListener('click', () => setStrategy('paced'));
+  pillStrategyFixed.addEventListener('click', () => setStrategy('fixed'));
 
-  btnActionExtend.addEventListener('click', () => {
-    replanCourse('extend');
-  });
+  btnActionCompress.addEventListener('click', () => replanCourse('compress'));
+  btnActionExtend.addEventListener('click', () => replanCourse('extend'));
 
   btnUndoDiff.addEventListener('click', handleUndo);
   btnDismissDiff.addEventListener('click', () => diffBanner.classList.add('hidden'));
+
+  // Collapsible Layout Toggles
+  btnCollapsePlayer.addEventListener('click', togglePlayerCollapse);
+  btnCollapseSchedule.addEventListener('click', toggleScheduleCollapse);
+  btnToggleCollapseAll.addEventListener('click', toggleCollapseAllDays);
+
+  // Curriculum Drawer
+  btnToggleCurriculum.addEventListener('click', () => curriculumDrawer.classList.toggle('hidden'));
+  btnCloseCurriculum.addEventListener('click', () => curriculumDrawer.classList.add('hidden'));
+  curriculumSearch.addEventListener('input', filterCurriculumDrawer);
+  btnCurriculumIncludeAll.addEventListener('click', () => handleFilterLessons(true));
+  btnCurriculumSkipExamples.addEventListener('click', () => handleFilterLessons(false));
+
+  // Quick Filters
+  btnFilterAll.addEventListener('click', () => handleFilterLessons(null));
+  btnFilterConcepts.addEventListener('click', () => handleFilterLessons(false));
+  btnFilterExamples.addEventListener('click', () => handleFilterLessons(true));
 
   // Settings Modal
   btnSettings.addEventListener('click', () => settingsModal.classList.remove('hidden'));
@@ -155,6 +242,66 @@ function setupEventListeners() {
   document.getElementById('btn-cleanup-cache').addEventListener('click', handleCleanupCache);
   document.getElementById('btn-save-keys').addEventListener('click', handleSaveKeys);
   document.getElementById('settings-browser-cookies').addEventListener('change', handleUpdateBrowserCookies);
+}
+
+// --- Layout Collapsing ---
+function togglePlayerCollapse() {
+  const isHidden = document.getElementById('player-wrapper').classList.toggle('hidden');
+  Logger.player('Toggle Player Collapse', { isHidden });
+}
+
+function toggleScheduleCollapse() {
+  if (paneSchedule.classList.contains('hidden')) {
+    paneSchedule.classList.remove('hidden');
+    paneStudio.classList.replace('md:w-full', 'md:w-7/12');
+  } else {
+    paneSchedule.classList.add('hidden');
+    paneStudio.classList.replace('md:w-7/12', 'md:w-full');
+  }
+}
+
+function toggleCollapseAllDays() {
+  areAllDaysCollapsed = !areAllDaysCollapsed;
+  const dayBodies = document.querySelectorAll('.day-body');
+  const dayChevrons = document.querySelectorAll('.day-chevron');
+  dayBodies.forEach(b => {
+    if (areAllDaysCollapsed) b.classList.add('hidden');
+    else b.classList.remove('hidden');
+  });
+  dayChevrons.forEach(c => {
+    c.style.transform = areAllDaysCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+  });
+  btnToggleCollapseAll.textContent = areAllDaysCollapsed ? 'Expand Days' : 'Collapse Days';
+}
+
+window.toggleDayCollapse = function(dayDate) {
+  const body = document.getElementById(`day-body-${dayDate}`);
+  const chevron = document.getElementById(`day-chevron-${dayDate}`);
+  if (!body) return;
+  const isNowHidden = body.classList.toggle('hidden');
+  if (chevron) {
+    chevron.style.transform = isNowHidden ? 'rotate(-90deg)' : 'rotate(0deg)';
+  }
+  if (isNowHidden) collapsedDays.add(dayDate);
+  else collapsedDays.delete(dayDate);
+};
+
+// --- Strategy Switching (Paced vs Fixed) ---
+async function setStrategy(strategy) {
+  if (strategy === 'paced') {
+    pillStrategyPaced.classList.add('bg-violet-600', 'text-white', 'shadow-sm');
+    pillStrategyPaced.classList.remove('text-slate-400');
+    pillStrategyFixed.classList.remove('bg-violet-600', 'text-white', 'shadow-sm');
+    pillStrategyFixed.classList.add('text-slate-400');
+  } else {
+    pillStrategyFixed.classList.add('bg-violet-600', 'text-white', 'shadow-sm');
+    pillStrategyFixed.classList.remove('text-slate-400');
+    pillStrategyPaced.classList.remove('bg-violet-600', 'text-white', 'shadow-sm');
+    pillStrategyPaced.classList.add('text-slate-400');
+  }
+
+  Logger.schedule('Strategy Change', strategy);
+  await replanCourse('normal', { schedule_strategy: strategy });
 }
 
 // --- View Navigation ---
@@ -171,11 +318,13 @@ function showCreatorView() {
 
 // --- API Calls & Handlers ---
 async function refreshCourseList() {
+  const t0 = performance.now();
   try {
     const res = await fetch('/api/courses');
     const courses = await res.json();
-    courseSelector.innerHTML = '';
+    Logger.api('GET', '/api/courses', res.status, Math.round(performance.now() - t0), courses);
 
+    courseSelector.innerHTML = '';
     if (courses.length === 0) {
       courseSelector.innerHTML = '<option value="">No courses yet</option>';
       showCreatorView();
@@ -195,40 +344,72 @@ async function refreshCourseList() {
     courseSelector.value = currentCourseId;
     await loadCourse(currentCourseId);
   } catch (err) {
-    console.error('Error fetching courses:', err);
+    Logger.error('Failed to fetch courses', err);
   }
 }
 
 async function loadCourse(courseId) {
+  const t0 = performance.now();
   try {
     currentCourseId = courseId;
     const res = await fetch(`/api/courses/${courseId}`);
     currentCourse = await res.json();
+    Logger.api('GET', `/api/courses/${courseId}`, res.status, Math.round(performance.now() - t0), currentCourse);
 
     inlinePlaybackSpeed.value = currentCourse.playback_speed;
     inlineMinutesDay.value = currentCourse.minutes_per_day;
 
+    // Update Strategy Buttons
+    const strat = currentCourse.schedule_strategy || 'paced';
+    if (strat === 'paced') {
+      pillStrategyPaced.classList.add('bg-violet-600', 'text-white');
+      pillStrategyPaced.classList.remove('text-slate-400');
+      pillStrategyFixed.classList.remove('bg-violet-600', 'text-white');
+      pillStrategyFixed.classList.add('text-slate-400');
+      pacingModeLabel.textContent = 'Paced to Exam Date';
+    } else {
+      pillStrategyFixed.classList.add('bg-violet-600', 'text-white');
+      pillStrategyFixed.classList.remove('text-slate-400');
+      pillStrategyPaced.classList.remove('bg-violet-600', 'text-white');
+      pillStrategyPaced.classList.add('text-slate-400');
+      pacingModeLabel.textContent = 'Fixed Daily Goal';
+    }
+
+    await loadLessons(courseId);
     await loadSchedule(courseId);
     showWorkspaceView();
   } catch (err) {
-    console.error('Failed to load course:', err);
+    Logger.error('Failed to load course', err);
+  }
+}
+
+async function loadLessons(courseId) {
+  try {
+    const res = await fetch(`/api/courses/${courseId}/lessons`);
+    currentLessons = await res.json();
+    headerLessonCount.textContent = currentLessons.length;
+    renderCurriculumDrawer(currentLessons);
+  } catch (err) {
+    Logger.error('Failed to load lessons', err);
   }
 }
 
 async function loadSchedule(courseId) {
+  const t0 = performance.now();
   try {
     const res = await fetch(`/api/courses/${courseId}/schedule`);
     currentSchedule = await res.json();
+    Logger.api('GET', `/api/courses/${courseId}/schedule`, res.status, Math.round(performance.now() - t0), currentSchedule);
     renderSchedule(currentSchedule);
   } catch (err) {
-    console.error('Failed to load schedule:', err);
+    Logger.error('Failed to load schedule', err);
   }
 }
 
 function renderSchedule(sched) {
   scheduleDaysContainer.innerHTML = '';
 
-  // Update Progress Dashboard Stats
+  // Stats
   const pct = Math.round((sched.completed_effective_minutes / (sched.total_effective_minutes || 1)) * 100);
   progressPct.textContent = `${pct}%`;
   progressBarFill.style.width = `${pct}%`;
@@ -237,8 +418,14 @@ function renderSchedule(sched) {
   const remMins = Math.round(sched.remaining_effective_minutes % 60);
   statEffectiveLeft.textContent = `${remHours}h ${remMins.toString().padStart(2, '0')}m`;
 
+  const doneHours = Math.floor(sched.completed_effective_minutes / 60);
+  const doneMins = Math.round(sched.completed_effective_minutes % 60);
+  statEffectiveDone.textContent = `${doneHours}h ${doneMins.toString().padStart(2, '0')}m`;
+
   statProjectedFinish.textContent = sched.projected_finish_date || '--';
   statTargetDate.textContent = sched.target_date || '--';
+
+  statDailyTarget.textContent = `~${Math.round(sched.effective_daily_target_minutes || 0)} min`;
 
   // Behind Schedule Alert
   if (sched.is_behind_schedule) {
@@ -248,30 +435,31 @@ function renderSchedule(sched) {
     behindScheduleBanner.classList.add('hidden');
   }
 
-  // Render Day Groups
+  // Render Day Groups (CourseIt style)
   sched.days.forEach(day => {
     const dayEl = document.createElement('div');
-    dayEl.className = 'bg-surface-900 border border-slate-800/80 rounded-xl overflow-hidden';
+    dayEl.className = 'bg-surface-900 border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm transition hover:border-slate-700/70';
 
-    // Header
     let badgeHtml = '';
     if (day.is_revision_day) {
-      badgeHtml = '<span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">Revision Buffer</span>';
+      badgeHtml = '<span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800/80 font-mono">Revision Buffer</span>';
     } else if (day.is_rest_day) {
-      badgeHtml = '<span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-400">Rest Day</span>';
+      badgeHtml = '<span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-surface-800 text-slate-400 font-mono">Rest Day</span>';
     }
 
+    const isCollapsed = collapsedDays.has(day.date);
+
     const dayHeader = `
-      <div class="px-3.5 py-2.5 bg-surface-850 border-b border-slate-800/80 flex items-center justify-between text-xs">
+      <div class="px-3.5 py-2.5 bg-surface-850/80 border-b border-slate-800/80 flex items-center justify-between text-xs cursor-pointer select-none" onclick="window.toggleDayCollapse('${day.date}')">
         <div class="flex items-center gap-2">
+          <svg id="day-chevron-${day.date}" class="w-3.5 h-3.5 text-slate-400 transition-transform day-chevron" style="transform: ${isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
           <span class="font-bold text-slate-200">${day.day_name}, ${formatDateDisplay(day.date)}</span>
           ${badgeHtml}
         </div>
-        <span class="text-slate-400 font-mono">${Math.round(day.total_effective_minutes)} min</span>
+        <span class="text-violet-300 font-mono font-medium">${Math.round(day.total_effective_minutes)} min</span>
       </div>
     `;
 
-    // Allocations
     let allocsHtml = '';
     if (day.allocations.length === 0) {
       allocsHtml = `
@@ -280,28 +468,27 @@ function renderSchedule(sched) {
         </div>
       `;
     } else {
-      allocsHtml = `<div class="divide-y divide-slate-800/50">`;
+      allocsHtml = `<div class="divide-y divide-slate-800/40">`;
       day.allocations.forEach(alloc => {
         const isCompleted = alloc.is_completed;
-        const isSkipped = alloc.is_skipped;
         const splitText = alloc.split_count > 1 ? `Part ${alloc.split_index + 1}/${alloc.split_count}` : '';
         const priorityBadge = alloc.priority === 'deep-dive' 
           ? '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-800">Deep-Dive</span>'
-          : '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">Core</span>';
+          : '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded bg-violet-950 text-violet-300 border border-violet-800">Core</span>';
 
         allocsHtml += `
-          <div class="p-3 hover:bg-surface-800/40 transition flex items-start gap-3 cursor-pointer alloc-item ${isCompleted ? 'opacity-60' : ''}" data-alloc-id="${alloc.id}">
-            <input type="checkbox" class="mt-0.5 rounded text-indigo-600 focus:ring-0 alloc-checkbox" data-alloc-id="${alloc.id}" ${isCompleted ? 'checked' : ''}>
+          <div class="p-2.5 hover:bg-surface-850/70 transition flex items-start gap-2.5 cursor-pointer alloc-item ${isCompleted ? 'opacity-50' : ''}" data-alloc-id="${alloc.id}">
+            <input type="checkbox" class="mt-1 rounded text-violet-600 focus:ring-0 alloc-checkbox cursor-pointer" data-alloc-id="${alloc.id}" ${isCompleted ? 'checked' : ''}>
             <div class="flex-1 min-w-0" onclick="window.selectAllocation('${alloc.id}')">
               <div class="flex items-center gap-1.5 mb-0.5">
                 ${priorityBadge}
-                ${splitText ? `<span class="text-[10px] text-amber-400 font-mono">${splitText}</span>` : ''}
+                ${splitText ? `<span class="text-[10px] text-amber-400 font-mono font-medium">${splitText}</span>` : ''}
                 <span class="text-[10px] text-slate-400 font-mono">[${formatDurationSec(alloc.allocated_start_sec)} - ${formatDurationSec(alloc.allocated_end_sec)}]</span>
               </div>
               <h4 class="text-xs font-medium text-slate-200 truncate ${isCompleted ? 'line-through text-slate-400' : ''}">${alloc.lesson_title}</h4>
-              <div class="text-[11px] text-slate-500 mt-0.5 font-mono">${alloc.effective_minutes} min (effective)</div>
+              <div class="text-[10px] text-slate-500 mt-0.5 font-mono">${alloc.effective_minutes} min (effective)</div>
             </div>
-            <button class="text-slate-500 hover:text-amber-400 p-1 text-xs" title="Skip lesson" onclick="window.skipAllocation('${alloc.id}', event)">
+            <button class="text-slate-500 hover:text-amber-400 p-1 text-xs shrink-0" title="Skip lesson" onclick="window.skipAllocation('${alloc.id}', event)">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
             </button>
           </div>
@@ -310,7 +497,7 @@ function renderSchedule(sched) {
       allocsHtml += `</div>`;
     }
 
-    dayEl.innerHTML = dayHeader + allocsHtml;
+    dayEl.innerHTML = dayHeader + `<div id="day-body-${day.date}" class="day-body ${isCollapsed ? 'hidden' : ''}">${allocsHtml}</div>`;
     scheduleDaysContainer.appendChild(dayEl);
   });
 
@@ -333,7 +520,6 @@ function renderSchedule(sched) {
         }
       }
     }
-    // If all completed, select first
     if (sched.days[0]?.allocations[0]) {
       selectAllocation(sched.days[0].allocations[0].id);
     }
@@ -356,7 +542,8 @@ window.selectAllocation = function(allocId) {
 
 function updateActiveLessonUI(alloc) {
   activeLessonTitle.textContent = alloc.lesson_title;
-  activeLessonTime.textContent = `Time Slice: [${formatDurationSec(alloc.allocated_start_sec)} - ${formatDurationSec(alloc.allocated_end_sec)}] • ${alloc.effective_minutes} min`;
+  activeLessonTime.textContent = `[${formatDurationSec(alloc.allocated_start_sec)} - ${formatDurationSec(alloc.allocated_end_sec)}]`;
+  activeLessonEffMin.textContent = `${alloc.effective_minutes} min`;
   activeLessonPriority.textContent = alloc.priority;
   activeLessonSplit.textContent = alloc.split_count > 1 ? `Part ${alloc.split_index + 1} of ${alloc.split_count}` : 'Whole Lesson';
 
@@ -370,32 +557,37 @@ function updateActiveLessonUI(alloc) {
 }
 
 async function toggleAllocation(allocId) {
+  const t0 = performance.now();
   try {
     const res = await fetch(`/api/courses/${currentCourseId}/schedule/allocations/${allocId}/toggle`, {
       method: 'POST',
     });
     const updated = await res.json();
+    Logger.api('POST', `/api/courses/.../allocations/${allocId}/toggle`, res.status, Math.round(performance.now() - t0), updated);
+
     await loadSchedule(currentCourseId);
     if (activeAllocation && activeAllocation.id === allocId) {
       activeAllocation.is_completed = updated.is_completed;
       updateActiveLessonUI(activeAllocation);
     }
   } catch (err) {
-    console.error('Failed to toggle allocation:', err);
+    Logger.error('Failed to toggle allocation', err);
   }
 }
 
 window.skipAllocation = async function(allocId, evt) {
   if (evt) evt.stopPropagation();
   if (!confirm('Skip this lesson allocation and automatically reflow remaining schedule?')) return;
+  const t0 = performance.now();
   try {
     const res = await fetch(`/api/courses/${currentCourseId}/schedule/allocations/${allocId}/skip`, {
       method: 'POST',
     });
     currentSchedule = await res.json();
+    Logger.api('POST', `/api/courses/.../allocations/${allocId}/skip`, res.status, Math.round(performance.now() - t0), currentSchedule);
     renderSchedule(currentSchedule);
   } catch (err) {
-    console.error('Failed to skip allocation:', err);
+    Logger.error('Failed to skip allocation', err);
   }
 };
 
@@ -410,24 +602,27 @@ async function handleSkipActiveAllocation() {
 }
 
 async function replanCourse(mode, params = {}) {
+  const t0 = performance.now();
   try {
     const payload = {
       mode: mode,
       ...params,
     };
+    Logger.schedule(`Replan Requested (Mode: ${mode})`, payload);
     const res = await fetch(`/api/courses/${currentCourseId}/schedule/replan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     const data = await res.json();
+    Logger.api('POST', `/api/courses/.../schedule/replan`, res.status, Math.round(performance.now() - t0), data);
+
     if (data.success) {
       currentSchedule = data.schedule;
       renderSchedule(currentSchedule);
 
-      // Show Diff Banner
       const diff = data.diff;
-      let diffMsg = `Finish date: ${diff.old_finish_date || '--'} → ${diff.new_finish_date || '--'}`;
+      let diffMsg = `Finish: ${diff.old_finish_date || '--'} → ${diff.new_finish_date || '--'}`;
       if (diff.dropped_deep_dive_count > 0) {
         diffMsg += ` • Dropped ${diff.dropped_deep_dive_count} deep-dive topics to compress schedule.`;
       }
@@ -438,21 +633,97 @@ async function replanCourse(mode, params = {}) {
       diffBanner.classList.remove('hidden');
     }
   } catch (err) {
-    console.error('Failed to replan schedule:', err);
+    Logger.error('Failed to replan schedule', err);
   }
 }
 
 async function handleUndo() {
+  const t0 = performance.now();
   try {
     const res = await fetch(`/api/courses/${currentCourseId}/schedule/undo`, {
       method: 'POST',
     });
     currentSchedule = await res.json();
+    Logger.api('POST', `/api/courses/.../schedule/undo`, res.status, Math.round(performance.now() - t0), currentSchedule);
     renderSchedule(currentSchedule);
     diffBanner.classList.add('hidden');
   } catch (err) {
-    alert('No earlier snapshot to undo or error reverting.');
+    Logger.error('Undo failed', err);
+    alert('No earlier snapshot to undo.');
   }
+}
+
+// --- Smart Filtering & Curriculum Drawer ---
+async function handleFilterLessons(includeExamples) {
+  const t0 = performance.now();
+  try {
+    const payload = {};
+    if (includeExamples !== null) {
+      payload.include_examples = includeExamples;
+    }
+    const res = await fetch(`/api/courses/${currentCourseId}/lessons/filter`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const updatedLessons = await res.json();
+    Logger.api('POST', `/api/courses/.../lessons/filter`, res.status, Math.round(performance.now() - t0), updatedLessons);
+    currentLessons = updatedLessons;
+    renderCurriculumDrawer(currentLessons);
+
+    // Regenerate schedule to reflect included/excluded lessons
+    await fetch(`/api/courses/${currentCourseId}/schedule/generate`, { method: 'POST' });
+    await loadSchedule(currentCourseId);
+  } catch (err) {
+    Logger.error('Failed to filter lessons', err);
+  }
+}
+
+window.toggleLessonExclude = async function(lessonId) {
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/lessons/${lessonId}/toggle-exclude`, {
+      method: 'POST',
+    });
+    const updated = await res.json();
+    Logger.api('POST', `/api/courses/.../lessons/${lessonId}/toggle-exclude`, res.status, Math.round(performance.now() - t0), updated);
+
+    // Update in local state
+    const idx = currentLessons.findIndex(l => l.id === lessonId);
+    if (idx !== -1) currentLessons[idx] = updated;
+    renderCurriculumDrawer(currentLessons);
+
+    // Regenerate schedule
+    await fetch(`/api/courses/${currentCourseId}/schedule/generate`, { method: 'POST' });
+    await loadSchedule(currentCourseId);
+  } catch (err) {
+    Logger.error('Failed to toggle lesson exclusion', err);
+  }
+};
+
+function renderCurriculumDrawer(lessons) {
+  curriculumLessonsList.innerHTML = '';
+  lessons.forEach(l => {
+    const item = document.createElement('div');
+    item.className = `p-2 rounded-lg flex items-start gap-2.5 text-xs hover:bg-surface-800/60 ${l.is_excluded ? 'opacity-40' : ''}`;
+    item.innerHTML = `
+      <input type="checkbox" class="mt-0.5 rounded text-violet-600 focus:ring-0 cursor-pointer" ${!l.is_excluded ? 'checked' : ''} onchange="window.toggleLessonExclude('${l.id}')">
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-1.5 mb-0.5">
+          <span class="text-[9px] uppercase px-1 rounded ${l.priority === 'core' ? 'bg-violet-950 text-violet-300' : 'bg-purple-950 text-purple-300'}">${l.priority}</span>
+          <span class="text-[10px] text-slate-400 font-mono">${formatDurationSec(l.raw_duration_sec)}</span>
+        </div>
+        <div class="font-medium text-slate-200 truncate ${l.is_excluded ? 'line-through text-slate-500' : ''}">${l.title}</div>
+      </div>
+    `;
+    curriculumLessonsList.appendChild(item);
+  });
+}
+
+function filterCurriculumDrawer() {
+  const q = curriculumSearch.value.toLowerCase();
+  const filtered = currentLessons.filter(l => l.title.toLowerCase().includes(q));
+  renderCurriculumDrawer(filtered);
 }
 
 // --- Course Creator & Discovery ---
@@ -461,7 +732,8 @@ async function handleCourseCreate(e) {
   const title = document.getElementById('input-course-title').value.trim();
   const goalQuery = document.getElementById('input-goal-query').value.trim();
   const targetDate = document.getElementById('input-target-date').value;
-  const minutesDay = parseInt(document.getElementById('input-minutes-day').value, 10);
+  const strategy = document.getElementById('input-schedule-strategy').value;
+  const minutesDay = parseInt(document.getElementById('input-minutes-day')?.value || '90', 10);
   const playbackSpeed = parseFloat(document.getElementById('input-playback-speed').value);
   const revBuffer = parseInt(document.getElementById('input-rev-buffer').value, 10);
 
@@ -475,8 +747,8 @@ async function handleCourseCreate(e) {
   spinner.classList.remove('hidden');
   btnText.textContent = 'Discovering sources...';
 
+  const t0 = performance.now();
   try {
-    // 1. Create Course Record
     const coursePayload = {
       title: title,
       goal_query: goalQuery,
@@ -485,6 +757,7 @@ async function handleCourseCreate(e) {
       playback_speed: playbackSpeed,
       rest_days: restDays,
       revision_buffer_days: revBuffer,
+      schedule_strategy: strategy,
     };
 
     const resCourse = await fetch('/api/courses', {
@@ -494,32 +767,37 @@ async function handleCourseCreate(e) {
     });
     const courseData = await resCourse.json();
     currentCourseId = courseData.id;
+    Logger.api('POST', '/api/courses', resCourse.status, Math.round(performance.now() - t0), courseData);
 
-    // Check if goalQuery is direct YouTube URL
+    // If direct YouTube link
     if (goalQuery.includes('youtube.com') || goalQuery.includes('youtu.be')) {
+      const t1 = performance.now();
       const resImport = await fetch(`/api/courses/${currentCourseId}/sources/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: goalQuery, is_approved: true }),
       });
-      // Generate initial schedule directly
+      const importData = await resImport.json();
+      Logger.api('POST', `/api/courses/.../sources/import`, resImport.status, Math.round(performance.now() - t1), importData);
+
       await fetch(`/api/courses/${currentCourseId}/schedule/generate`, { method: 'POST' });
       await refreshCourseList();
       return;
     }
 
-    // 2. Autonomous Discovery via yt-dlp
-    const resDiscovery = await fetch(`/api/courses/${currentCourseId}/discover`, {
-      method: 'POST',
-    });
+    // Autonomous Discovery
+    const t2 = performance.now();
+    const resDiscovery = await fetch(`/api/courses/${currentCourseId}/discover`, { method: 'POST' });
     const discovery = await resDiscovery.json();
+    Logger.api('POST', `/api/courses/.../discover`, resDiscovery.status, Math.round(performance.now() - t2), discovery);
 
     renderApprovalGate(discovery);
   } catch (err) {
+    Logger.error('Failed to create course / discover', err);
     alert('Failed to discover sources: ' + err.message);
   } finally {
     spinner.classList.add('hidden');
-    btnText.textContent = 'Discover & Build Roadmap';
+    btnText.textContent = 'Discover & Build Study Plan';
   }
 }
 
@@ -535,11 +813,11 @@ function renderApprovalGate(discovery) {
   } else {
     playlists.forEach(pl => {
       const item = document.createElement('label');
-      item.className = 'flex items-start gap-2.5 p-2 rounded-lg bg-surface-900 border border-slate-700/60 cursor-pointer hover:bg-surface-850 text-xs';
+      item.className = 'flex items-start gap-2.5 p-2 rounded-xl bg-surface-900 border border-slate-700/60 cursor-pointer hover:bg-surface-850 text-xs';
       item.innerHTML = `
-        <input type="checkbox" name="approved_source" value="${pl.source_id}" checked class="mt-0.5 text-indigo-600 rounded">
+        <input type="checkbox" name="approved_source" value="${pl.source_id}" checked class="mt-0.5 text-violet-600 rounded">
         <div>
-          <div class="font-medium text-slate-200">${pl.title}</div>
+          <div class="font-semibold text-slate-200">${pl.title}</div>
           <div class="text-[11px] text-slate-400">${pl.channel || 'YouTube'} • ${pl.item_count || 'Playlist'}</div>
         </div>
       `;
@@ -552,9 +830,9 @@ function renderApprovalGate(discovery) {
   } else {
     videos.forEach(v => {
       const item = document.createElement('label');
-      item.className = 'flex items-start gap-2.5 p-2 rounded-lg bg-surface-900 border border-slate-700/60 cursor-pointer hover:bg-surface-850 text-xs';
+      item.className = 'flex items-start gap-2.5 p-2 rounded-xl bg-surface-900 border border-slate-700/60 cursor-pointer hover:bg-surface-850 text-xs';
       item.innerHTML = `
-        <input type="checkbox" name="approved_source" value="${v.source_id}" checked class="mt-0.5 text-indigo-600 rounded">
+        <input type="checkbox" name="approved_source" value="${v.source_id}" checked class="mt-0.5 text-violet-600 rounded">
         <div>
           <div class="font-medium text-slate-200 line-clamp-1">${v.title}</div>
           <div class="text-[11px] text-slate-400">${v.channel || 'YouTube'} • ${v.duration_str || ''}</div>
@@ -590,13 +868,13 @@ async function handleApproveSources() {
       }),
     });
 
-    // Generate Schedule
     await fetch(`/api/courses/${currentCourseId}/schedule/generate`, {
       method: 'POST',
     });
 
     await refreshCourseList();
   } catch (err) {
+    Logger.error('Error approving sources', err);
     alert('Error approving sources: ' + err.message);
   } finally {
     btnApproveSelected.textContent = 'Approve & Generate Schedule';
@@ -617,22 +895,14 @@ async function loadSettings() {
     const totalBytes = s.transcripts_size_bytes + s.screenshots_size_bytes;
     document.getElementById('settings-total-disk').textContent = formatBytes(totalBytes);
 
-    // API Key Badges
     const badgeGemini = document.getElementById('badge-gemini');
     if (s.has_gemini_key) {
-      badgeGemini.classList.replace('bg-slate-800', 'bg-emerald-900');
+      badgeGemini.classList.replace('bg-slate-800', 'bg-emerald-950');
       badgeGemini.classList.replace('text-slate-400', 'text-emerald-300');
       badgeGemini.textContent = 'Gemini (Connected)';
     }
-
-    const badgeGroq = document.getElementById('badge-groq');
-    if (s.has_groq_key) {
-      badgeGroq.classList.replace('bg-slate-800', 'bg-emerald-900');
-      badgeGroq.classList.replace('text-slate-400', 'text-emerald-300');
-      badgeGroq.textContent = 'Groq (Connected)';
-    }
   } catch (err) {
-    console.error('Failed to load settings:', err);
+    Logger.error('Failed to load settings', err);
   }
 }
 
@@ -665,10 +935,8 @@ async function handleCleanupCache() {
 
 async function handleSaveKeys() {
   const gemini = document.getElementById('input-key-gemini').value.trim();
-  const groq = document.getElementById('input-key-groq').value.trim();
   const updates = {};
   if (gemini) updates.GEMINI_API_KEY = gemini;
-  if (groq) updates.GROQ_API_KEY = groq;
 
   if (Object.keys(updates).length === 0) return;
 
@@ -681,7 +949,6 @@ async function handleSaveKeys() {
     const data = await res.json();
     alert(data.message);
     document.getElementById('input-key-gemini').value = '';
-    document.getElementById('input-key-groq').value = '';
     await loadSettings();
   } catch (err) {
     alert('Failed to save keys: ' + err.message);

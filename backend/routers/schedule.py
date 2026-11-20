@@ -3,6 +3,7 @@
 import uuid
 import json
 import sqlite3
+import logging
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,6 +27,7 @@ from backend.scheduler.engine import (
     default_clock,
 )
 
+logger = logging.getLogger("learn_lms.schedule")
 router = APIRouter(prefix="/api/courses/{course_id}/schedule", tags=["schedule"])
 
 @router.post("/generate", response_model=ScheduleResponse)
@@ -41,26 +43,28 @@ def generate_course_schedule(
         """
         SELECT l.* FROM lessons l
         JOIN sources s ON l.source_id = s.id
-        WHERE l.course_id = ? AND s.is_approved = 1
+        WHERE l.course_id = ? AND s.is_approved = 1 AND l.is_excluded = 0
         ORDER BY l.order_index ASC;
         """,
         (course_id,),
     ).fetchall()
 
     if not lessons:
-        # Fallback to any lessons in course if no source attached
         lessons = db.execute(
-            "SELECT * FROM lessons WHERE course_id = ? ORDER BY order_index ASC;",
+            "SELECT * FROM lessons WHERE course_id = ? AND is_excluded = 0 ORDER BY order_index ASC;",
             (course_id,),
         ).fetchall()
 
     if not lessons:
-        raise HTTPException(status_code=400, detail="No approved lessons found to schedule. Please approve candidate sources first.")
+        raise HTTPException(status_code=400, detail="No active approved lessons found to schedule. Check source approvals or lesson filters.")
 
     lesson_dicts = [dict(l) for l in lessons]
     rest_days = json.loads(course["rest_days"])
     target_d = datetime.strptime(course["target_date"], "%Y-%m-%d").date()
     today = default_clock()
+    strategy = course["schedule_strategy"] if "schedule_strategy" in course.keys() else "paced"
+
+    logger.info(f"[Schedule] Generating schedule for course '{course['title']}' | Strategy: {strategy} | Target: {course['target_date']}")
 
     sched_result = generate_schedule(
         course_id=course_id,
@@ -71,6 +75,7 @@ def generate_course_schedule(
         playback_speed=course["playback_speed"],
         rest_days=rest_days,
         revision_buffer_days=course["revision_buffer_days"],
+        schedule_strategy=strategy,
     )
 
     # Save initial snapshot if existing allocations were present
@@ -134,8 +139,8 @@ def get_course_schedule(course_id: str, db: sqlite3.Connection = Depends(get_db)
     rest_days = json.loads(course["rest_days"])
     target_d = datetime.strptime(course["target_date"], "%Y-%m-%d").date()
     rev_buffer = course["revision_buffer_days"]
+    strategy = course["schedule_strategy"] if "schedule_strategy" in course.keys() else "paced"
 
-    # Group allocations by date
     from collections import defaultdict
     allocs_by_date = defaultdict(list)
     total_effective = 0.0
@@ -168,7 +173,6 @@ def get_course_schedule(course_id: str, db: sqlite3.Connection = Depends(get_db)
             if r["is_completed"]:
                 completed_effective += r["effective_minutes"]
 
-    # Build continuous day calendar from min(today, min_alloc_date) to max(target_date, max_alloc_date)
     today = default_clock()
     min_date = today
     if dates_seen:
@@ -180,7 +184,6 @@ def get_course_schedule(course_id: str, db: sqlite3.Connection = Depends(get_db)
         latest_alloc = max(datetime.strptime(d, "%Y-%m-%d").date() for d in dates_seen)
         max_date = max(target_d, latest_alloc)
 
-    # Revision days are target_d - (rev_buffer - 1) up to target_d
     revision_dates_set = set()
     if rev_buffer > 0:
         for i in range(rev_buffer):
@@ -220,6 +223,17 @@ def get_course_schedule(course_id: str, db: sqlite3.Connection = Depends(get_db)
         except Exception:
             pass
 
+    # Compute daily target minutes
+    daily_target = float(course["minutes_per_day"])
+    if strategy == "paced":
+        try:
+            eff_deadline = target_d - timedelta(days=rev_buffer)
+            study_dates, _, _ = get_study_dates(today, eff_deadline, rest_days, revision_buffer_days=0)
+            if len(study_dates) > 0 and remaining_eff > 0:
+                daily_target = round(remaining_eff / len(study_dates), 1)
+        except Exception:
+            pass
+
     return ScheduleResponse(
         course_id=course_id,
         days=days,
@@ -230,6 +244,8 @@ def get_course_schedule(course_id: str, db: sqlite3.Connection = Depends(get_db)
         target_date=course["target_date"],
         is_behind_schedule=is_behind,
         revision_buffer_days=rev_buffer,
+        schedule_strategy=strategy,
+        effective_daily_target_minutes=daily_target,
     )
 
 @router.post("/allocations/{allocation_id}/toggle", response_model=AllocationResponse)
@@ -258,6 +274,7 @@ def toggle_allocation(
         "UPDATE schedule_allocations SET is_completed = ?, completed_at = ? WHERE id = ?;",
         (new_completed, completed_at, allocation_id),
     )
+    logger.info(f"[Schedule] Toggled allocation {allocation_id} completion: {bool(new_completed)}")
 
     updated = db.execute(
         """
@@ -305,13 +322,12 @@ def skip_allocation(
     if not target_alloc:
         raise HTTPException(status_code=404, detail="Allocation not found")
 
-    # Mark skipped
+    logger.info(f"[Schedule] Skipped allocation {allocation_id} - triggering automatic reflow")
     db.execute(
         "UPDATE schedule_allocations SET is_skipped = 1, skipped_at = ? WHERE id = ?;",
         (datetime.now().isoformat(), allocation_id),
     )
 
-    # Automatically reflow remaining uncompleted allocations
     replan_req = ReplanRequest(mode="normal")
     replan_schedule(course_id, replan_req, db)
     return get_course_schedule(course_id, db)
@@ -345,22 +361,25 @@ def replan_schedule(
         for r in old_alloc_rows
     ]
 
-    # Apply any updated course parameters
+    # Apply updated course parameters
     minutes_per_day = req.minutes_per_day or course["minutes_per_day"]
     playback_speed = req.playback_speed or course["playback_speed"]
     rest_days = req.rest_days if req.rest_days is not None else json.loads(course["rest_days"])
     target_date_str = req.target_date or course["target_date"]
     rev_buffer = req.revision_buffer_days if req.revision_buffer_days is not None else course["revision_buffer_days"]
+    strategy = req.schedule_strategy or (course["schedule_strategy"] if "schedule_strategy" in course.keys() else "paced")
 
     target_d = datetime.strptime(target_date_str, "%Y-%m-%d").date()
     today = default_clock()
 
-    # Fetch lessons
+    logger.info(f"[Schedule] Replanning course {course_id} | Mode: {req.mode} | Strategy: {strategy} | Speed: {playback_speed}x")
+
+    # Fetch lessons (excluding is_excluded)
     lessons_rows = db.execute(
         """
         SELECT l.* FROM lessons l
         JOIN sources s ON l.source_id = s.id
-        WHERE l.course_id = ? AND s.is_approved = 1
+        WHERE l.course_id = ? AND s.is_approved = 1 AND l.is_excluded = 0
         ORDER BY l.order_index ASC;
         """,
         (course_id,),
@@ -383,16 +402,16 @@ def replan_schedule(
             revision_buffer_days=rev_buffer,
         )
     elif req.mode == "extend":
-        # First reflow everything
         sched_res = reflow_overdue_and_remaining(
             course_id=course_id,
             allocations=old_allocs,
             lessons=lessons,
-            target_date=target_d + timedelta(days=365), # Temporarily expand
+            target_date=target_d + timedelta(days=365),
             minutes_per_day=minutes_per_day,
             playback_speed=playback_speed,
             rest_days=rest_days,
             revision_buffer_days=rev_buffer,
+            schedule_strategy=strategy,
         )
         if sched_res["projected_finish_date"]:
             new_proj = datetime.strptime(sched_res["projected_finish_date"], "%Y-%m-%d").date()
@@ -401,7 +420,6 @@ def replan_schedule(
             sched_res["target_date"] = target_date_str
             sched_res["is_behind_schedule"] = False
     else:
-        # Normal reflow
         sched_res = reflow_overdue_and_remaining(
             course_id=course_id,
             allocations=old_allocs,
@@ -411,6 +429,7 @@ def replan_schedule(
             playback_speed=playback_speed,
             rest_days=rest_days,
             revision_buffer_days=rev_buffer,
+            schedule_strategy=strategy,
         )
 
     # Compute diff between old and new
@@ -431,7 +450,6 @@ def replan_schedule(
         deficit_message=deficit_message,
     )
 
-    # Save snapshot before writing new allocations
     snapshot_id = save_snapshot(
         course_id=course_id,
         reason=f"replan_{req.mode}",
@@ -441,7 +459,7 @@ def replan_schedule(
         db=db,
     )
 
-    # Update course settings if changed
+    # Update course settings
     db.execute(
         """
         UPDATE courses SET
@@ -450,10 +468,11 @@ def replan_schedule(
             rest_days = ?,
             target_date = ?,
             revision_buffer_days = ?,
+            schedule_strategy = ?,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?;
         """,
-        (minutes_per_day, playback_speed, json.dumps(rest_days), target_date_str, rev_buffer, course_id),
+        (minutes_per_day, playback_speed, json.dumps(rest_days), target_date_str, rev_buffer, strategy, course_id),
     )
 
     # Overwrite allocations with new plan
@@ -504,7 +523,6 @@ def undo_last_replan(course_id: str, db: sqlite3.Connection = Depends(get_db)):
     course_state = state.get("course", {})
     allocations_state = state.get("allocations", [])
 
-    # Restore course settings
     if course_state:
         db.execute(
             """
@@ -514,6 +532,7 @@ def undo_last_replan(course_id: str, db: sqlite3.Connection = Depends(get_db)):
                 rest_days = ?,
                 target_date = ?,
                 revision_buffer_days = ?,
+                schedule_strategy = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?;
             """,
@@ -523,11 +542,11 @@ def undo_last_replan(course_id: str, db: sqlite3.Connection = Depends(get_db)):
                 json.dumps(course_state.get("rest_days")),
                 course_state.get("target_date"),
                 course_state.get("revision_buffer_days"),
+                course_state.get("schedule_strategy", "paced"),
                 course_id,
             ),
         )
 
-    # Restore allocations
     db.execute("DELETE FROM schedule_allocations WHERE course_id = ?;", (course_id,))
     for a in allocations_state:
         db.execute(
@@ -552,8 +571,8 @@ def undo_last_replan(course_id: str, db: sqlite3.Connection = Depends(get_db)):
             ),
         )
 
-    # Delete the snapshot now that it has been restored
     db.execute("DELETE FROM schedule_snapshots WHERE id = ?;", (snapshot["id"],))
+    logger.info(f"[Schedule] Restored snapshot {snapshot['id']} for course {course_id}")
 
     return get_course_schedule(course_id, db)
 
@@ -566,6 +585,7 @@ def save_snapshot(
     db: sqlite3.Connection,
 ) -> str:
     snapshot_id = str(uuid.uuid4())
+    strategy = course_row["schedule_strategy"] if "schedule_strategy" in course_row.keys() else "paced"
     snapshot_payload = {
         "course": {
             "minutes_per_day": course_row["minutes_per_day"],
@@ -573,6 +593,7 @@ def save_snapshot(
             "rest_days": json.loads(course_row["rest_days"]),
             "target_date": course_row["target_date"],
             "revision_buffer_days": course_row["revision_buffer_days"],
+            "schedule_strategy": strategy,
         },
         "allocations": allocations,
     }

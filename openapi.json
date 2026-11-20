@@ -278,6 +278,114 @@
         }
       }
     },
+    "/api/courses/{course_id}/lessons/filter": {
+      "post": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Filter Course Lessons",
+        "description": "Smart filtering to include/exclude question & example videos or specific lessons.",
+        "operationId": "filter_course_lessons_api_courses__course_id__lessons_filter_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LessonFilterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LessonResponse"
+                  },
+                  "title": "Response Filter Course Lessons Api Courses  Course Id  Lessons Filter Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/lessons/{lesson_id}/toggle-exclude": {
+      "post": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Toggle Lesson Exclusion",
+        "operationId": "toggle_lesson_exclusion_api_courses__course_id__lessons__lesson_id__toggle_exclude_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LessonResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/courses/{course_id}/sources": {
       "get": {
         "tags": [
@@ -1020,6 +1128,12 @@
             "title": "Revision Buffer Days",
             "description": "Days reserved before exam strictly for revision",
             "default": 2
+          },
+          "schedule_strategy": {
+            "type": "string",
+            "title": "Schedule Strategy",
+            "description": "'paced' (Spread to Exam Date) or 'fixed' (Fixed Daily Goal)",
+            "default": "paced"
           }
         },
         "type": "object",
@@ -1071,6 +1185,11 @@
             "type": "integer",
             "title": "Revision Buffer Days"
           },
+          "schedule_strategy": {
+            "type": "string",
+            "title": "Schedule Strategy",
+            "default": "paced"
+          },
           "status": {
             "type": "string",
             "title": "Status"
@@ -1110,6 +1229,11 @@
             "type": "boolean",
             "title": "Is Behind Schedule",
             "default": false
+          },
+          "effective_daily_target_minutes": {
+            "type": "number",
+            "title": "Effective Daily Target Minutes",
+            "default": 0.0
           },
           "created_at": {
             "type": "string",
@@ -1245,6 +1369,52 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "LessonFilterRequest": {
+        "properties": {
+          "include_examples": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Examples",
+            "description": "Set True to include, False to exclude questions/examples videos"
+          },
+          "lesson_ids_to_include": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lesson Ids To Include"
+          },
+          "lesson_ids_to_exclude": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lesson Ids To Exclude"
+          }
+        },
+        "type": "object",
+        "title": "LessonFilterRequest"
+      },
       "LessonResponse": {
         "properties": {
           "id": {
@@ -1331,6 +1501,11 @@
             "type": "boolean",
             "title": "Is Tested Out",
             "default": false
+          },
+          "is_excluded": {
+            "type": "boolean",
+            "title": "Is Excluded",
+            "default": false
           }
         },
         "type": "object",
@@ -1354,6 +1529,18 @@
             "title": "Mode",
             "description": "'normal', 'compress', or 'extend'",
             "default": "normal"
+          },
+          "schedule_strategy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Strategy",
+            "description": "'paced' or 'fixed'"
           },
           "minutes_per_day": {
             "anyOf": [
@@ -1494,6 +1681,16 @@
           "revision_buffer_days": {
             "type": "integer",
             "title": "Revision Buffer Days"
+          },
+          "schedule_strategy": {
+            "type": "string",
+            "title": "Schedule Strategy",
+            "default": "paced"
+          },
+          "effective_daily_target_minutes": {
+            "type": "number",
+            "title": "Effective Daily Target Minutes",
+            "default": 0.0
           }
         },
         "type": "object",

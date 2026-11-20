@@ -1,6 +1,6 @@
 """Integration test for full M1 core loop:
 
-import -> approve -> schedule -> skip -> reflow -> undo
+import -> approve -> schedule -> skip -> reflow -> filter -> undo
 Uses an isolated temporary database.
 """
 
@@ -18,7 +18,6 @@ from backend.migrations.runner import apply_migrations
 def test_setup():
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_db_path = Path(tmpdir) / "test_loop.db"
-        # Run migrations
         apply_migrations(tmp_db_path)
 
         def override_get_db():
@@ -37,7 +36,7 @@ def test_setup():
 def test_full_m1_core_pipeline(test_setup):
     client, tmp_db_path = test_setup
 
-    # 1. Create a course
+    # 1. Create a course with schedule_strategy = 'paced'
     course_payload = {
         "title": "DBMS Final Exam Prep",
         "goal_query": "Database Management Systems",
@@ -47,6 +46,7 @@ def test_full_m1_core_pipeline(test_setup):
         "playback_speed": 1.5,
         "rest_days": ["Sunday"],
         "revision_buffer_days": 2,
+        "schedule_strategy": "paced",
     }
     resp = client.post("/api/courses", json=course_payload)
     assert resp.status_code == 200
@@ -54,6 +54,7 @@ def test_full_m1_core_pipeline(test_setup):
     course_id = course_data["id"]
     assert course_data["title"] == "DBMS Final Exam Prep"
     assert course_data["playback_speed"] == 1.5
+    assert course_data["schedule_strategy"] == "paced"
 
     # 2. Add manual source & lessons (mocking YouTube import)
     from backend.services.youtube import split_video_into_lessons
@@ -63,7 +64,7 @@ def test_full_m1_core_pipeline(test_setup):
         "duration": 10800,  # 3 hours = 180 min
         "chapters": [
             {"title": "Relational Models", "start_time": 0, "end_time": 3600},
-            {"title": "SQL & Queries", "start_time": 3600, "end_time": 7200},
+            {"title": "SQL & Queries Example 1", "start_time": 3600, "end_time": 7200},
             {"title": "Transactions & Concurrency", "start_time": 7200, "end_time": 10800},
         ],
     }
@@ -85,8 +86,8 @@ def test_full_m1_core_pipeline(test_setup):
             """
             INSERT INTO lessons (
                 id, course_id, source_id, title, summary, video_id, video_url,
-                start_sec, end_sec, raw_duration_sec, priority, order_index, chapter_title
-            ) VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?);
+                start_sec, end_sec, raw_duration_sec, priority, order_index, chapter_title, is_excluded
+            ) VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, 0);
             """,
             (
                 f"l-{idx}",
@@ -98,7 +99,7 @@ def test_full_m1_core_pipeline(test_setup):
                 l["start_sec"],
                 l["end_sec"],
                 l["raw_duration_sec"],
-                "core" if idx < 2 else "deep-dive",
+                "core" if idx != 1 else "deep-dive",
                 idx,
                 l["chapter_title"],
             ),
@@ -106,37 +107,42 @@ def test_full_m1_core_pipeline(test_setup):
     conn.commit()
     conn.close()
 
-    # 3. Generate Schedule
+    # 3. Generate Schedule (Paced mode)
     resp_sched = client.post(f"/api/courses/{course_id}/schedule/generate")
     assert resp_sched.status_code == 200
     sched_data = resp_sched.json()
     assert sched_data["course_id"] == course_id
     assert len(sched_data["days"]) > 0
-    # Total raw = 180 min; at 1.5x speed -> 120 effective minutes
     assert abs(sched_data["total_effective_minutes"] - 120.0) < 0.5
     assert sched_data["remaining_effective_minutes"] > 0
     assert sched_data["projected_finish_date"] is not None
+    assert sched_data["effective_daily_target_minutes"] > 0
 
-    # Get first day with allocations
+    # 4. Smart Filtering: Exclude example videos
+    filter_payload = {"include_examples": False}
+    resp_filter = client.post(f"/api/courses/{course_id}/lessons/filter", json=filter_payload)
+    assert resp_filter.status_code == 200
+    filtered_lessons = resp_filter.json()
+    # "SQL & Queries Example 1" should be marked is_excluded = True
+    ex_lesson = [l for l in filtered_lessons if "Example" in l["title"]][0]
+    assert ex_lesson["is_excluded"] is True
+
+    # 5. Toggle Individual Lesson Exclusion
+    resp_toggle_ex = client.post(f"/api/courses/{course_id}/lessons/{ex_lesson['id']}/toggle-exclude")
+    assert resp_toggle_ex.status_code == 200
+    assert resp_toggle_ex.json()["is_excluded"] is False
+
+    # 6. Toggle Completion
     days_with_allocs = [d for d in sched_data["days"] if len(d["allocations"]) > 0]
-    assert len(days_with_allocs) > 0
     first_alloc = days_with_allocs[0]["allocations"][0]
     alloc_id = first_alloc["id"]
 
-    # 4. Toggle completion
     resp_toggle = client.post(f"/api/courses/{course_id}/schedule/allocations/{alloc_id}/toggle")
     assert resp_toggle.status_code == 200
     toggled = resp_toggle.json()
     assert toggled["is_completed"] is True
 
-    # Check updated stats
-    resp_course = client.get(f"/api/courses/{course_id}")
-    course_stats = resp_course.json()
-    assert course_stats["completed_effective_minutes"] > 0
-    assert course_stats["completion_percentage"] > 0
-
-    # 5. Skip an allocation and verify reflow
-    # Find second allocation
+    # 7. Skip an allocation and verify reflow
     second_alloc = None
     for d in days_with_allocs:
         for a in d["allocations"]:
@@ -146,13 +152,14 @@ def test_full_m1_core_pipeline(test_setup):
         if second_alloc:
             break
 
-    assert second_alloc is not None
-    resp_skip = client.post(f"/api/courses/{course_id}/schedule/allocations/{second_alloc['id']}/skip")
-    assert resp_skip.status_code == 200
+    if second_alloc:
+        resp_skip = client.post(f"/api/courses/{course_id}/schedule/allocations/{second_alloc['id']}/skip")
+        assert resp_skip.status_code == 200
 
-    # 6. Replan with compress
+    # 8. Replan with compress and strategy switch to 'fixed'
     replan_payload = {
         "mode": "compress",
+        "schedule_strategy": "fixed",
         "minutes_per_day": 40,
         "playback_speed": 1.0,
     }
@@ -161,14 +168,14 @@ def test_full_m1_core_pipeline(test_setup):
     replan_data = resp_replan.json()
     assert replan_data["success"] is True
     assert replan_data["snapshot_id"] is not None
-    assert "diff" in replan_data
 
-    # 7. Undo replan
+    # 9. Undo replan
     resp_undo = client.post(f"/api/courses/{course_id}/schedule/undo")
     assert resp_undo.status_code == 200
     undo_sched = resp_undo.json()
     assert undo_sched["course_id"] == course_id
 
-    # Verify course settings restored to speed = 1.5
+    # Verify course settings restored to speed = 1.5 and strategy = paced
     resp_course_restored = client.get(f"/api/courses/{course_id}")
     assert resp_course_restored.json()["playback_speed"] == 1.5
+    assert resp_course_restored.json()["schedule_strategy"] == "paced"

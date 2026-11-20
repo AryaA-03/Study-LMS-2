@@ -1,12 +1,22 @@
 """Main FastAPI application for Learn LMS & Exam Prep."""
 
 import json
+import time
+import logging
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+
+# Configure Rich Terminal Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] [%(name)s]: %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("learn_lms")
 
 from backend.config import BASE_DIR
 from backend.routers import courses, schedule, settings
@@ -25,6 +35,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Request Logging Middleware for Terminal Observability
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    duration_ms = round((time.time() - start_time) * 1000, 1)
+    # Don't clutter with static asset polling
+    if not request.url.path.startswith("/static"):
+        logger.info(f"{request.method} {request.url.path} -> {response.status_code} ({duration_ms}ms)")
+    return response
 
 # Include Routers
 app.include_router(courses.router)

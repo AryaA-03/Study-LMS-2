@@ -3,7 +3,11 @@
 Pure Python, zero LLM calls, fully unit-tested with an injectable clock.
 Handles:
 - Injectable clock (local calendar dates, default Asia/Kolkata)
+- Dual Scheduling Strategies:
+  * "paced": Spreads lessons evenly across available study days until the exam revision buffer.
+  * "fixed": Packs lessons greedily into user's fixed daily budget.
 - Playback speed scaling (effective_minutes = raw_minutes / playback_speed)
+- Granular lesson exclusion / filtering (skip questions/examples or custom selection)
 - Multi-day lesson splitting by [start_sec, end_sec]
 - Weekly rest days & exam revision buffer
 - Dynamic reflow of overdue/skipped lessons
@@ -15,9 +19,12 @@ from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional, Tuple, Callable
 import json
 import math
+import logging
 from zoneinfo import ZoneInfo
 
 from backend.config import LOCAL_TZ
+
+logger = logging.getLogger("learn_lms.scheduler")
 
 def default_clock() -> date:
     """Default clock returning today's date in local timezone."""
@@ -153,6 +160,7 @@ def generate_schedule(
     playback_speed: float,
     rest_days: List[str],
     revision_buffer_days: int = 2,
+    schedule_strategy: str = "paced",
     completed_lesson_ids: Optional[set] = None,
     skipped_lesson_ids: Optional[set] = None,
     clock: Optional[Callable[[], date]] = None,
@@ -161,13 +169,14 @@ def generate_schedule(
 
     Args:
         course_id: Course ID
-        lessons: List of lesson dicts (id, title, raw_duration_sec, start_sec, end_sec, priority, video_id, video_url)
+        lessons: List of lesson dicts (id, title, raw_duration_sec, start_sec, end_sec, priority, is_excluded, etc.)
         start_date: Start date for scheduling
         target_date: Exam target date
-        minutes_per_day: Daily study budget in effective minutes
+        minutes_per_day: Fixed daily study budget in effective minutes (used if strategy='fixed')
         playback_speed: Speed factor (e.g. 1.25, 1.5)
         rest_days: e.g. ["Sunday"]
         revision_buffer_days: e.g. 2 days reserved strictly for revision
+        schedule_strategy: 'paced' (Spread to Exam Date) or 'fixed' (Fixed Daily Goal)
         completed_lesson_ids: Lessons already completed
         skipped_lesson_ids: Lessons skipped
         clock: Injectable clock function returning date
@@ -181,15 +190,46 @@ def generate_schedule(
     if skipped_lesson_ids is None:
         skipped_lesson_ids = set()
 
-    # Filter lessons to schedule (exclude tested out or already handled)
+    # Filter lessons to schedule (exclude tested out or explicitly excluded)
     active_lessons = [
         l for l in lessons
-        if not l.get("is_tested_out", False)
+        if not l.get("is_tested_out", False) and not l.get("is_excluded", False)
     ]
+
+    # Calculate total remaining effective minutes to pace
+    remaining_lessons = [
+        l for l in active_lessons
+        if l["id"] not in completed_lesson_ids and l["id"] not in skipped_lesson_ids
+    ]
+    total_remaining_eff_min = sum(
+        calculate_effective_minutes(l.get("raw_duration_sec", 0), playback_speed)
+        for l in remaining_lessons
+    )
+
+    # Determine daily study budget based on strategy
+    deadline_effective = target_date - timedelta(days=revision_buffer_days)
+    study_dates, _, _ = get_study_dates(start_date, deadline_effective, rest_days, revision_buffer_days=0)
+    
+    allocated_daily_budget = float(minutes_per_day)
+    if schedule_strategy == "paced":
+        if len(study_dates) > 0 and total_remaining_eff_min > 0:
+            # Spread evenly across all available study days
+            paced_budget = total_remaining_eff_min / len(study_dates)
+            allocated_daily_budget = max(5.0, round(paced_budget, 1))
+            logger.info(
+                f"[Scheduler] Strategy: PACED | Remaining: {round(total_remaining_eff_min, 1)}m | "
+                f"Study Days: {len(study_dates)} | Daily Target: {allocated_daily_budget}m/day"
+            )
+        else:
+            allocated_daily_budget = float(minutes_per_day)
+    else:
+        logger.info(
+            f"[Scheduler] Strategy: FIXED | Daily Budget: {allocated_daily_budget}m/day"
+        )
 
     allocations: List[ScheduleAllocation] = []
     curr_date = start_date
-    curr_day_remaining_min = float(minutes_per_day)
+    curr_day_remaining_min = allocated_daily_budget
 
     def advance_to_next_study_day(d: date) -> date:
         next_d = d + timedelta(days=1)
@@ -219,7 +259,6 @@ def generate_schedule(
         is_comp = lid in completed_lesson_ids
         is_skip = lid in skipped_lesson_ids
 
-        # If already completed or skipped before today, keep existing state
         total_effective = calculate_effective_minutes(raw_duration, playback_speed)
 
         # Multi-day splitting loop
@@ -230,7 +269,7 @@ def generate_schedule(
         while remaining_raw_sec > 0:
             if curr_day_remaining_min <= 0.05:  # Less than 3 seconds remaining
                 curr_date = advance_to_next_study_day(curr_date)
-                curr_day_remaining_min = float(minutes_per_day)
+                curr_day_remaining_min = allocated_daily_budget
 
             # Available raw seconds today based on remaining effective minutes
             max_raw_sec_today = int(curr_day_remaining_min * 60.0 * playback_speed)
@@ -262,7 +301,7 @@ def generate_schedule(
 
                 # Advance to next study day for remaining slice
                 curr_date = advance_to_next_study_day(curr_date)
-                curr_day_remaining_min = float(minutes_per_day)
+                curr_day_remaining_min = allocated_daily_budget
 
         total_splits = len(split_segments)
         for idx, (alloc_date, s_start, s_end, s_eff) in enumerate(split_segments):
@@ -290,11 +329,11 @@ def generate_schedule(
     # Compute projected finish date
     projected_finish_date = None
     if allocations:
-        dates_used = [datetime.strptime(a.scheduled_date, "%Y-%m-%d").date() for a in allocations]
-        projected_finish_date = max(dates_used)
+        dates_used = [datetime.strptime(a.scheduled_date, "%Y-%m-%d").date() for a in allocations if not a.is_skipped]
+        if dates_used:
+            projected_finish_date = max(dates_used)
 
     # Check if behind schedule (finish date encroaches on revision buffer or exceeds target_date)
-    deadline_effective = target_date - timedelta(days=revision_buffer_days)
     is_behind = False
     if projected_finish_date and projected_finish_date > deadline_effective:
         is_behind = True
@@ -308,6 +347,8 @@ def generate_schedule(
         "playback_speed": playback_speed,
         "rest_days": rest_days,
         "revision_buffer_days": revision_buffer_days,
+        "schedule_strategy": schedule_strategy,
+        "effective_daily_target_minutes": allocated_daily_budget,
     }
 
 def reflow_overdue_and_remaining(
@@ -319,6 +360,7 @@ def reflow_overdue_and_remaining(
     playback_speed: float,
     rest_days: List[str],
     revision_buffer_days: int = 2,
+    schedule_strategy: str = "paced",
     clock: Optional[Callable[[], date]] = None,
 ) -> Dict[str, Any]:
     """Reflows uncompleted or overdue allocations starting from today forward."""
@@ -334,7 +376,7 @@ def reflow_overdue_and_remaining(
     # Lessons that still need scheduling
     uncompleted_lessons = [
         l for l in lessons
-        if l["id"] not in completed_lesson_ids and l["id"] not in skipped_lesson_ids and not l.get("is_tested_out", False)
+        if l["id"] not in completed_lesson_ids and l["id"] not in skipped_lesson_ids and not l.get("is_tested_out", False) and not l.get("is_excluded", False)
     ]
 
     reflow_result = generate_schedule(
@@ -346,6 +388,7 @@ def reflow_overdue_and_remaining(
         playback_speed=playback_speed,
         rest_days=rest_days,
         revision_buffer_days=revision_buffer_days,
+        schedule_strategy=schedule_strategy,
         clock=clock,
     )
 
@@ -372,26 +415,19 @@ def compress_schedule(
     revision_buffer_days: int = 2,
     clock: Optional[Callable[[], date]] = None,
 ) -> Tuple[Dict[str, Any], int, float, Optional[str]]:
-    """Compresses schedule by progressively dropping deep-dive topics.
-
-    If after dropping all deep-dive topics core topics still do not fit,
-    calculates exact deficit_minutes and returns helpful deficit advice.
-
-    Returns:
-        (schedule_result, dropped_count, deficit_minutes, deficit_message)
-    """
+    """Compresses schedule by progressively dropping deep-dive topics."""
     if clock is None:
         clock = default_clock
     today = clock()
     deadline_effective = target_date - timedelta(days=revision_buffer_days)
 
-    # Count study days available between today and deadline_effective
     study_dates, _, _ = get_study_dates(today, deadline_effective, rest_days, revision_buffer_days=0)
     available_study_minutes = len(study_dates) * minutes_per_day
 
-    # Sort lessons: core first, deep-dive last
-    core_lessons = [l for l in lessons if l.get("priority", "core") == "core"]
-    deep_dive_lessons = [l for l in lessons if l.get("priority", "core") == "deep-dive"]
+    # Exclude already excluded lessons
+    active_lessons = [l for l in lessons if not l.get("is_excluded", False)]
+    core_lessons = [l for l in active_lessons if l.get("priority", "core") == "core"]
+    deep_dive_lessons = [l for l in active_lessons if l.get("priority", "core") == "deep-dive"]
 
     core_raw_sec = sum(l.get("raw_duration_sec", 0) for l in core_lessons)
     core_effective_min = calculate_effective_minutes(core_raw_sec, playback_speed)
@@ -399,7 +435,6 @@ def compress_schedule(
     dropped_count = 0
     candidate_lessons = list(core_lessons)
 
-    # Try fitting as many deep-dive lessons as possible
     remaining_budget_for_deep_dive = available_study_minutes - core_effective_min
     included_deep_dive = []
     dropped_deep_dive = []
@@ -415,7 +450,6 @@ def compress_schedule(
     dropped_count = len(dropped_deep_dive)
     all_included = candidate_lessons + included_deep_dive
 
-    # Check for deficit in core topics
     deficit_minutes = 0.0
     deficit_message = None
     if core_effective_min > available_study_minutes:
@@ -436,6 +470,7 @@ def compress_schedule(
         playback_speed=playback_speed,
         rest_days=rest_days,
         revision_buffer_days=revision_buffer_days,
+        schedule_strategy="fixed",
         clock=clock,
     )
 

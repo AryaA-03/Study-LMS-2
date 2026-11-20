@@ -13,6 +13,7 @@ class CourseCreateRequest(BaseModel):
     playback_speed: float = Field(1.0, ge=0.5, le=3.0, description="Playback speed scaling factor")
     rest_days: List[str] = Field(default_factory=lambda: ["Sunday"], description="Weekly rest days")
     revision_buffer_days: int = Field(2, ge=0, le=14, description="Days reserved before exam strictly for revision")
+    schedule_strategy: str = Field("paced", description="'paced' (Spread to Exam Date) or 'fixed' (Fixed Daily Goal)")
 
 class CourseUpdateRequest(BaseModel):
     title: Optional[str] = None
@@ -21,6 +22,7 @@ class CourseUpdateRequest(BaseModel):
     playback_speed: Optional[float] = Field(None, ge=0.5, le=3.0)
     rest_days: Optional[List[str]] = None
     revision_buffer_days: Optional[int] = Field(None, ge=0, le=14)
+    schedule_strategy: Optional[str] = None
 
 class CourseResponse(BaseModel):
     id: str
@@ -32,6 +34,7 @@ class CourseResponse(BaseModel):
     playback_speed: float
     rest_days: List[str]
     revision_buffer_days: int
+    schedule_strategy: str = "paced"
     status: str
     total_effective_minutes: float = 0.0
     completed_effective_minutes: float = 0.0
@@ -39,6 +42,7 @@ class CourseResponse(BaseModel):
     completion_percentage: float = 0.0
     projected_finish_date: Optional[str] = None
     is_behind_schedule: bool = False
+    effective_daily_target_minutes: float = 0.0
     created_at: str
 
 # --- Source Schemas ---
@@ -81,6 +85,12 @@ class LessonResponse(BaseModel):
     order_index: int
     chapter_title: Optional[str] = None
     is_tested_out: bool = False
+    is_excluded: bool = False
+
+class LessonFilterRequest(BaseModel):
+    include_examples: Optional[bool] = Field(None, description="Set True to include, False to exclude questions/examples videos")
+    lesson_ids_to_include: Optional[List[str]] = None
+    lesson_ids_to_exclude: Optional[List[str]] = None
 
 # --- Allocation & Schedule Schemas ---
 class AllocationResponse(BaseModel):
@@ -119,10 +129,13 @@ class ScheduleResponse(BaseModel):
     target_date: str
     is_behind_schedule: bool
     revision_buffer_days: int
+    schedule_strategy: str = "paced"
+    effective_daily_target_minutes: float = 0.0
 
 # --- Replan, Diff & Undo Schemas ---
 class ReplanRequest(BaseModel):
     mode: str = Field("normal", description="'normal', 'compress', or 'extend'")
+    schedule_strategy: Optional[str] = Field(None, description="'paced' or 'fixed'")
     minutes_per_day: Optional[int] = Field(None, ge=10, le=720)
     playback_speed: Optional[float] = Field(None, ge=0.5, le=3.0)
     rest_days: Optional[List[str]] = None

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" class="dark h-full">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,19 +13,23 @@
         extend: {
           colors: {
             brand: {
-              50: '#eef2ff',
-              100: '#e0e7ff',
-              500: '#6366f1',
-              600: '#4f46e5',
-              700: '#4338ca',
-              900: '#312e81',
+              50: '#f5f3ff',
+              100: '#ede9fe',
+              500: '#8b5cf6',
+              600: '#7c3aed',
+              700: '#6d28d9',
             },
             surface: {
+              700: '#334155',
               800: '#1e293b',
-              850: '#172033',
+              850: '#151f32',
               900: '#0f172a',
-              950: '#090d16',
+              950: '#080d1a',
             }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', 'monospace'],
           }
         }
       }
@@ -34,228 +38,327 @@
   <!-- YouTube IFrame API -->
   <script src="https://www.youtube.com/iframe_api"></script>
   <style>
-    /* Custom scrollbars */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #0f172a; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    /* Smooth transitions and scrollbars */
+    * { box-sizing: border-box; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
     ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    .glass-nav {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
   </style>
 </head>
-<body class="bg-surface-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-brand-500 selection:text-white">
+<body class="bg-surface-950 text-slate-100 h-full flex flex-col font-sans antialiased selection:bg-brand-600 selection:text-white overflow-hidden">
 
-  <!-- Navigation Bar -->
-  <header class="border-b border-slate-800 bg-surface-900/90 backdrop-blur sticky top-0 z-40 px-4 py-3 flex items-center justify-between">
+  <!-- Top Glassmorphic Navigation -->
+  <header class="border-b border-slate-800/80 glass-nav z-40 px-4 py-2.5 flex items-center justify-between shrink-0">
     <div class="flex items-center space-x-3">
-      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/30">
+      <!-- App Brand Logo -->
+      <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/25 ring-1 ring-white/20">
         L
       </div>
       <div>
-        <h1 class="text-base font-semibold tracking-tight text-white flex items-center gap-2">
-          Learn LMS
-          <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800/60 font-mono">Exam Prep</span>
-        </h1>
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-bold tracking-tight text-white">Learn LMS</span>
+          <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-950/80 text-violet-300 border border-violet-800/60 font-mono">Exam Studio</span>
+        </div>
       </div>
     </div>
 
-    <!-- Center Course Selector -->
+    <!-- Center: Course Selector & Strategy Switcher -->
     <div class="flex items-center space-x-2">
-      <select id="course-selector" class="bg-surface-800 text-sm border border-slate-700 text-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500 max-w-xs">
+      <select id="course-selector" class="bg-surface-850 text-xs border border-slate-700/80 text-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-500 max-w-xs truncate shadow-inner">
         <option value="">Loading courses...</option>
       </select>
-      <button id="btn-new-course" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition flex items-center gap-1 shadow-sm">
+      <button id="btn-new-course" class="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20 active:scale-95">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         New Goal
       </button>
+
+      <!-- Strategy Toggle Pill (Paced vs Fixed) -->
+      <div class="hidden lg:flex items-center bg-surface-900 border border-slate-700/80 rounded-lg p-0.5 text-[11px] ml-2">
+        <button id="pill-strategy-paced" class="px-2.5 py-1 rounded-md font-medium transition strategy-btn bg-violet-600 text-white shadow-sm" title="Spread lessons evenly across all days until exam">
+          🎯 Paced to Exam
+        </button>
+        <button id="pill-strategy-fixed" class="px-2.5 py-1 rounded-md font-medium transition strategy-btn text-slate-400 hover:text-slate-200" title="Fixed daily minutes (Sprint mode)">
+          ⚡ Fixed Daily
+        </button>
+      </div>
     </div>
 
-    <!-- Right Controls: Settings & Status -->
-    <div class="flex items-center space-x-3">
-      <div id="env-badge" class="hidden sm:inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-400 font-mono">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-        <span id="env-label">Local Dev</span>
+    <!-- Right Controls: View Collapse Toggles, Curriculum Drawer & Settings -->
+    <div class="flex items-center space-x-2">
+      <!-- Curriculum Drawer Toggle -->
+      <button id="btn-toggle-curriculum" class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-850 hover:bg-surface-800 text-xs text-slate-300 border border-slate-700/70 transition" title="Inspect & Filter Playlist Videos">
+        <svg class="w-3.5 h-3.5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/></svg>
+        <span>Curriculum (<span id="header-lesson-count">0</span>)</span>
+      </button>
+
+      <!-- Layout Collapse Toggles -->
+      <div class="hidden md:flex items-center bg-surface-900 border border-slate-800 rounded-lg p-0.5">
+        <button id="btn-collapse-player" class="p-1.5 text-slate-400 hover:text-white rounded hover:bg-surface-800 transition" title="Toggle Player Focus / Theater">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        </button>
+        <button id="btn-collapse-schedule" class="p-1.5 text-slate-400 hover:text-white rounded hover:bg-surface-800 transition" title="Toggle Schedule Sidebar">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        </button>
       </div>
-      <button id="btn-settings" class="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition" title="Settings & Maintenance">
+
+      <!-- Settings Modal Button -->
+      <button id="btn-settings" class="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-surface-800 rounded-lg transition" title="Settings, Storage Guard & Maintenance">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
       </button>
     </div>
   </header>
 
-  <!-- Diff & Notification Banner -->
-  <div id="diff-banner" class="hidden bg-indigo-950/80 border-b border-indigo-800/80 px-4 py-2.5 text-xs text-indigo-200 flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      <span class="font-semibold text-white">Schedule Updated:</span>
-      <span id="diff-text"></span>
+  <!-- Diff & Undo Notification Banner -->
+  <div id="diff-banner" class="hidden bg-indigo-950/90 border-b border-indigo-700/80 px-4 py-2 text-xs text-indigo-200 flex items-center justify-between shrink-0 shadow-md">
+    <div class="flex items-center gap-2 truncate">
+      <span class="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+      <span class="font-semibold text-white">Schedule Adjusted:</span>
+      <span id="diff-text" class="truncate font-mono"></span>
     </div>
-    <div class="flex items-center gap-2">
-      <button id="btn-undo-diff" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-2.5 py-1 rounded transition">Undo Change</button>
+    <div class="flex items-center gap-2 shrink-0">
+      <button id="btn-undo-diff" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-2.5 py-1 rounded transition active:scale-95 shadow">Undo Change</button>
       <button id="btn-dismiss-diff" class="text-indigo-400 hover:text-white px-1">✕</button>
     </div>
   </div>
 
   <!-- Behind Schedule Alert Banner -->
-  <div id="behind-schedule-banner" class="hidden bg-amber-950/70 border-b border-amber-800/70 px-4 py-3 text-xs text-amber-200 flex flex-wrap items-center justify-between gap-2">
+  <div id="behind-schedule-banner" class="hidden bg-amber-950/80 border-b border-amber-800/80 px-4 py-2.5 text-xs text-amber-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
     <div class="flex items-center gap-2">
       <svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
       <div>
-        <span class="font-semibold text-white">Behind Schedule:</span>
-        <span id="behind-schedule-msg">Projected finish date encroaches on your revision buffer.</span>
+        <span class="font-bold text-white">Behind Schedule:</span>
+        <span id="behind-schedule-msg">Projected finish date encroaches on your 2-day revision buffer.</span>
       </div>
     </div>
     <div class="flex items-center gap-2">
-      <button id="btn-action-compress" class="bg-amber-600 hover:bg-amber-500 text-white font-medium px-2.5 py-1 rounded transition">Compress (Drop Deep-Dives)</button>
+      <button id="btn-action-compress" class="bg-amber-600 hover:bg-amber-500 text-white font-semibold px-2.5 py-1 rounded transition shadow">Compress (Drop Deep-Dives)</button>
       <button id="btn-action-extend" class="bg-slate-700 hover:bg-slate-600 text-white font-medium px-2.5 py-1 rounded transition">Extend Deadline</button>
     </div>
   </div>
 
-  <!-- Main Content Container -->
-  <main class="flex-1 flex overflow-hidden">
+  <!-- Main Split-Screen Workspace -->
+  <main class="flex-1 flex overflow-hidden relative">
 
-    <!-- View A: Split-Screen Study Workspace (Default when course selected) -->
+    <!-- View A: Split Workspace (Studio Pane + Schedule Pane) -->
     <div id="workspace-view" class="flex-1 flex flex-col md:flex-row overflow-hidden w-full">
       
-      <!-- Left Pane: YouTube Player & Active Lesson Control -->
-      <section class="w-full md:w-7/12 flex flex-col border-b md:border-b-0 md:border-r border-slate-800 bg-surface-900 overflow-y-auto">
+      <!-- Left Pane: Studio (YouTube Player & Grounded Notes) -->
+      <section id="pane-studio" class="w-full md:w-7/12 flex flex-col border-b md:border-b-0 md:border-r border-slate-800 bg-surface-900 overflow-y-auto transition-all duration-300">
         
-        <!-- Video Player Wrapper -->
-        <div class="relative w-full bg-black aspect-video flex items-center justify-center border-b border-slate-800">
+        <!-- Video Player Frame -->
+        <div id="player-wrapper" class="relative w-full bg-black aspect-video flex items-center justify-center border-b border-slate-800/90 shadow-2xl shrink-0">
           <div id="player-container" class="w-full h-full flex items-center justify-center">
             <div id="yt-player-placeholder" class="text-slate-500 text-xs flex flex-col items-center">
               <svg class="w-12 h-12 mb-2 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              Select a lesson to begin playback
+              Select a lesson from the schedule to begin playback
             </div>
             <div id="yt-player" class="w-full h-full"></div>
           </div>
         </div>
 
-        <!-- Active Lesson Action Card -->
-        <div class="p-4 border-b border-slate-800 bg-surface-850">
+        <!-- Active Lesson Action Card (CourseIt Style) -->
+        <div class="p-4 border-b border-slate-800/80 bg-surface-850 shrink-0">
           <div class="flex items-start justify-between gap-4">
-            <div>
+            <div class="min-w-0">
               <div class="flex items-center gap-2 mb-1">
-                <span id="active-lesson-priority" class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-indigo-900/60 text-indigo-300 border border-indigo-700/50">Core</span>
-                <span id="active-lesson-split" class="text-[10px] text-slate-400 font-mono">Whole Lesson</span>
+                <span id="active-lesson-priority" class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-violet-950/80 text-violet-300 border border-violet-700/60 font-mono">Core</span>
+                <span id="active-lesson-split" class="text-[10px] text-amber-400 font-mono font-medium">Whole Lesson</span>
               </div>
-              <h2 id="active-lesson-title" class="text-base font-semibold text-white">Select a lesson from the schedule</h2>
-              <p id="active-lesson-time" class="text-xs text-slate-400 font-mono mt-0.5">00:00 - 00:00</p>
+              <h2 id="active-lesson-title" class="text-base font-bold text-white tracking-tight truncate">Select a lesson to begin study</h2>
+              <div class="flex items-center gap-2 mt-1 text-xs text-slate-400 font-mono">
+                <span id="active-lesson-time">00:00 - 00:00</span>
+                <span>•</span>
+                <span id="active-lesson-eff-min">0 min</span>
+              </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <button id="btn-toggle-active-complete" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-sm">
+              <button id="btn-toggle-active-complete" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-md shadow-emerald-600/20 active:scale-95">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                 <span id="active-complete-label">Mark Complete</span>
               </button>
-              <button id="btn-skip-active" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 transition">
+              <button id="btn-skip-active" class="bg-surface-800 hover:bg-surface-700 text-slate-300 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 transition" title="Skip this lesson & reflow">
                 Skip
               </button>
             </div>
           </div>
         </div>
 
-        <!-- Grounded Notes & Lesson Summary Pane -->
-        <div class="p-4 flex-1">
-          <div class="flex items-center justify-between mb-3">
-            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Lesson Notes & Citations</h3>
-            <span class="text-[11px] text-slate-500">Click timestamps to seek video</span>
+        <!-- NotebookLM-Inspired Grounded Notes & Citations Section -->
+        <div class="p-4 flex-1 flex flex-col">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Grounded Study Notes</h3>
+              <span class="text-[10px] px-1.5 py-0.2 rounded bg-surface-800 text-slate-400 font-mono">Citations Active</span>
+            </div>
+            <span class="text-[11px] text-slate-500">Click timestamps to jump player</span>
           </div>
-          <div id="notes-content" class="bg-surface-800/50 rounded-xl p-4 border border-slate-800 text-sm text-slate-300 leading-relaxed min-h-[160px]">
-            <p class="text-slate-500 italic text-xs">Structured notes, keyframe bookmarks, and cited chunks will appear here as you progress.</p>
+
+          <div id="notes-content" class="bg-surface-850/60 rounded-xl p-4 border border-slate-800 text-sm text-slate-300 leading-relaxed flex-1 min-h-[180px]">
+            <p class="text-slate-500 italic text-xs">Lesson notes, keyframe video bookmarks, and cited chunks will generate and populate here as you study.</p>
           </div>
         </div>
       </section>
 
-      <!-- Right Pane: Day-Wise Adaptive Schedule & Tracker -->
-      <section class="w-full md:w-5/12 flex flex-col bg-surface-950 overflow-hidden">
+      <!-- Right Pane: CourseIt-Inspired Day-Wise Schedule & Pacing -->
+      <section id="pane-schedule" class="w-full md:w-5/12 flex flex-col bg-surface-950 overflow-hidden transition-all duration-300">
         
-        <!-- Progress Dashboard -->
-        <div class="p-4 border-b border-slate-800 bg-surface-900/50">
-          <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
-            <span class="font-medium text-slate-300">Course Mastery & Watch Time</span>
-            <span id="progress-pct" class="font-semibold text-indigo-400">0%</span>
-          </div>
-          <!-- Progress Bar -->
-          <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden mb-3">
-            <div id="progress-bar-fill" class="h-full bg-indigo-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+        <!-- Pacing & Progress Dashboard Header -->
+        <div class="p-4 border-b border-slate-800/80 bg-surface-900/60 shrink-0">
+          
+          <!-- Top Row: Pacing Alignment Card -->
+          <div id="pacing-status-card" class="bg-gradient-to-br from-surface-850 to-surface-900 p-3 rounded-xl border border-slate-800 mb-3 shadow-inner">
+            <div class="flex items-center justify-between text-xs mb-1">
+              <span class="text-slate-400 font-medium">Exam Pacing Target:</span>
+              <span id="pacing-mode-label" class="text-violet-400 font-bold font-mono">Paced to Exam Date</span>
+            </div>
+            <div class="flex items-baseline justify-between">
+              <div>
+                <span id="stat-daily-target" class="text-lg font-bold text-white">~35 min</span>
+                <span class="text-[11px] text-slate-400">/ study day</span>
+              </div>
+              <div class="text-right text-xs">
+                <div class="text-[10px] uppercase text-slate-500">Finish Date</div>
+                <div id="stat-projected-finish" class="font-bold text-violet-300 font-mono">--</div>
+              </div>
+              <div class="text-right text-xs">
+                <div class="text-[10px] uppercase text-slate-500">Exam Date</div>
+                <div id="stat-target-date" class="font-bold text-emerald-400 font-mono">--</div>
+              </div>
+            </div>
           </div>
 
-          <!-- Stats Grid -->
-          <div class="grid grid-cols-3 gap-2 text-center text-xs">
-            <div class="bg-surface-800/60 p-2 rounded-lg border border-slate-800">
-              <div class="text-[10px] text-slate-400 uppercase">Effective Left</div>
-              <div id="stat-effective-left" class="text-sm font-semibold text-white mt-0.5">0h 00m</div>
-            </div>
-            <div class="bg-surface-800/60 p-2 rounded-lg border border-slate-800">
-              <div class="text-[10px] text-slate-400 uppercase">Finish Date</div>
-              <div id="stat-projected-finish" class="text-sm font-semibold text-indigo-300 mt-0.5">--</div>
-            </div>
-            <div class="bg-surface-800/60 p-2 rounded-lg border border-slate-800">
-              <div class="text-[10px] text-slate-400 uppercase">Exam Date</div>
-              <div id="stat-target-date" class="text-sm font-semibold text-emerald-400 mt-0.5">--</div>
-            </div>
+          <!-- Progress Bar & Completion Stats -->
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
+            <span class="font-medium text-slate-300">Course Completion</span>
+            <span id="progress-pct" class="font-bold text-violet-400 font-mono">0%</span>
+          </div>
+          <div class="w-full h-2 rounded-full bg-surface-800 overflow-hidden mb-2 ring-1 ring-slate-800">
+            <div id="progress-bar-fill" class="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+          </div>
+          <div class="flex justify-between text-[11px] text-slate-400 font-mono">
+            <span>Effective Left: <strong id="stat-effective-left" class="text-white">0h 00m</strong></span>
+            <span>Completed: <strong id="stat-effective-done" class="text-emerald-400">0h 00m</strong></span>
           </div>
         </div>
 
-        <!-- Replan & Settings Bar -->
-        <div class="px-4 py-2.5 border-b border-slate-800 bg-surface-900/30 flex items-center justify-between text-xs">
+        <!-- Filter Bar & Collapsible Controls (CourseIt Style) -->
+        <div class="px-4 py-2 border-b border-slate-800/80 bg-surface-900/40 flex items-center justify-between text-xs shrink-0">
+          <div class="flex items-center gap-1">
+            <span class="text-[11px] text-slate-400 mr-1">Filter:</span>
+            <button id="btn-filter-all" class="px-2 py-0.5 rounded text-[11px] font-medium bg-surface-800 text-white border border-slate-700">All</button>
+            <button id="btn-filter-concepts" class="px-2 py-0.5 rounded text-[11px] font-medium text-slate-400 hover:text-white hover:bg-surface-800 border border-transparent">Concepts Only</button>
+            <button id="btn-filter-examples" class="px-2 py-0.5 rounded text-[11px] font-medium text-slate-400 hover:text-white hover:bg-surface-800 border border-transparent">Examples</button>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="btn-toggle-collapse-all" class="text-[11px] text-violet-400 hover:text-violet-300 font-medium">Collapse Days</button>
+          </div>
+        </div>
+
+        <!-- Day-Wise Schedule Scrollable Timeline -->
+        <div id="schedule-days-container" class="flex-1 overflow-y-auto p-4 space-y-3">
+          <!-- Injected dynamically via app.js -->
+        </div>
+
+        <!-- Inline Speed & Replan Footer -->
+        <div class="px-4 py-2.5 border-t border-slate-800/80 bg-surface-900/60 flex items-center justify-between text-xs shrink-0">
           <div class="flex items-center space-x-2">
-            <label class="text-slate-400">Speed:</label>
-            <select id="inline-playback-speed" class="bg-surface-800 text-slate-200 border border-slate-700 rounded px-2 py-1 focus:ring-1 focus:ring-brand-500">
+            <label class="text-slate-400 font-medium">Speed:</label>
+            <select id="inline-playback-speed" class="bg-surface-850 text-slate-200 border border-slate-700 rounded px-2 py-1 text-xs">
               <option value="1.0">1.0x</option>
               <option value="1.25">1.25x</option>
               <option value="1.5">1.5x</option>
               <option value="2.0">2.0x</option>
             </select>
-            <label class="text-slate-400 ml-2">Min/Day:</label>
-            <input type="number" id="inline-minutes-day" class="w-14 bg-surface-800 text-slate-200 border border-slate-700 rounded px-2 py-1 text-center" min="15" max="480" step="15" value="90">
+            <label class="text-slate-400 font-medium ml-1">Min/Day:</label>
+            <input type="number" id="inline-minutes-day" class="w-14 bg-surface-850 text-slate-200 border border-slate-700 rounded px-2 py-1 text-xs text-center" min="15" max="480" step="15" value="90">
           </div>
-          <button id="btn-replan-now" class="bg-slate-800 hover:bg-slate-700 text-indigo-300 font-medium px-2.5 py-1 rounded border border-indigo-900/60 transition">
+          <button id="btn-replan-now" class="bg-violet-600 hover:bg-violet-500 text-white font-semibold px-3 py-1 rounded-lg shadow-sm transition active:scale-95">
             Apply Replan
           </button>
-        </div>
-
-        <!-- Day-Wise Schedule List -->
-        <div id="schedule-days-container" class="flex-1 overflow-y-auto p-4 space-y-4">
-          <!-- Populated dynamically via app.js -->
         </div>
       </section>
     </div>
 
-    <!-- View B: Course Creator / Goal Discovery & Approval Gate -->
+    <!-- Curriculum Drawer (NotebookLM Source Inspector) -->
+    <aside id="curriculum-drawer" class="hidden absolute right-0 top-0 bottom-0 w-80 md:w-96 bg-surface-900 border-l border-slate-800 shadow-2xl z-30 flex flex-col transition-transform duration-300">
+      <div class="p-3.5 border-b border-slate-800 flex items-center justify-between bg-surface-850">
+        <div>
+          <h3 class="text-xs font-bold uppercase tracking-wider text-white">Course Curriculum</h3>
+          <p class="text-[11px] text-slate-400">Toggle videos to include or skip</p>
+        </div>
+        <button id="btn-close-curriculum" class="text-slate-400 hover:text-white p-1">✕</button>
+      </div>
+
+      <div class="p-3 border-b border-slate-800 flex items-center gap-2">
+        <input type="text" id="curriculum-search" placeholder="Search lessons..." class="w-full bg-surface-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-brand-500">
+      </div>
+
+      <div class="px-3 py-2 border-b border-slate-800 bg-surface-900/50 flex justify-between text-[11px]">
+        <button id="btn-curriculum-include-all" class="text-violet-400 hover:text-violet-300">Select All</button>
+        <button id="btn-curriculum-skip-examples" class="text-amber-400 hover:text-amber-300">Skip All Examples</button>
+      </div>
+
+      <div id="curriculum-lessons-list" class="flex-1 overflow-y-auto p-3 space-y-1.5 divide-y divide-slate-800/40">
+        <!-- Injected via JS -->
+      </div>
+    </aside>
+
+    <!-- View B: Course Creator & Autonomous Discovery -->
     <div id="creator-view" class="hidden flex-1 overflow-y-auto p-6 max-w-4xl mx-auto w-full">
-      <div class="bg-surface-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-        <h2 class="text-xl font-bold text-white mb-1">Set Your Learning Goal</h2>
-        <p class="text-xs text-slate-400 mb-6">Enter an exam or study topic to autonomously discover YouTube videos & playlists, or paste a URL directly.</p>
+      <div class="bg-surface-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
+        <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+          <div>
+            <h2 class="text-lg font-bold text-white tracking-tight">Create Learning Goal or Import URL</h2>
+            <p class="text-xs text-slate-400">Discover YouTube playlists autonomously or paste a video/playlist link.</p>
+          </div>
+          <button id="btn-cancel-creator" class="text-xs text-slate-400 hover:text-white">✕ Close</button>
+        </div>
 
         <form id="course-create-form" class="space-y-4">
           <div>
             <label class="block text-xs font-semibold uppercase text-slate-300 mb-1">Course Title</label>
-            <input type="text" id="input-course-title" required placeholder="e.g. DBMS End-Term Prep" class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <input type="text" id="input-course-title" required placeholder="e.g. Theory of Computation / TOC Exam Prep" class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-500">
           </div>
 
           <div>
-            <label class="block text-xs font-semibold uppercase text-slate-300 mb-1">Goal or Topic / YouTube URL</label>
-            <input type="text" id="input-goal-query" required placeholder="e.g. Database Management Systems, Normalization, SQL or YouTube playlist URL" class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <label class="block text-xs font-semibold uppercase text-slate-300 mb-1">Goal Topic or Direct YouTube Playlist URL</label>
+            <input type="text" id="input-goal-query" required placeholder="Paste YouTube playlist URL or enter topic: e.g. Theory of Computation, Neso Academy" class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-500">
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
             <div>
-              <label class="block text-xs font-semibold uppercase text-slate-300 mb-1">Target Exam Date</label>
-              <input type="date" id="input-target-date" required class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <label class="block text-xs font-semibold uppercase text-slate-300 mb-1">Exam Date</label>
+              <input type="date" id="input-target-date" required class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-500">
             </div>
             <div>
-              <label class="block text-xs font-semibold uppercase text-slate-300 mb-1">Minutes Per Day</label>
-              <input type="number" id="input-minutes-day" value="90" min="15" max="720" required class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <label class="block text-xs font-semibold uppercase text-slate-300 mb-1">Scheduling Mode</label>
+              <select id="input-schedule-strategy" class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-500">
+                <option value="paced" selected>Paced to Exam</option>
+                <option value="fixed">Fixed Daily Budget</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-300 mb-1">Daily Target (Min)</label>
+              <input type="number" id="input-minutes-day" value="90" min="15" max="480" step="15" required class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-500">
             </div>
             <div>
               <label class="block text-xs font-semibold uppercase text-slate-300 mb-1">Playback Speed</label>
-              <select id="input-playback-speed" class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                <option value="1.0">1.0x (Normal)</option>
-                <option value="1.25">1.25x</option>
-                <option value="1.5" selected>1.5x (Fast)</option>
-                <option value="2.0">2.0x (Double)</option>
+              <select id="input-playback-speed" class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-500">
+                <option value="1.0">1.0x</option>
+                <option value="1.25" selected>1.25x (Recommended)</option>
+                <option value="1.5">1.5x</option>
+                <option value="2.0">2.0x</option>
               </select>
             </div>
             <div>
               <label class="block text-xs font-semibold uppercase text-slate-300 mb-1">Revision Buffer</label>
-              <input type="number" id="input-rev-buffer" value="2" min="0" max="14" required class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <input type="number" id="input-rev-buffer" value="2" min="0" max="14" required class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-500">
             </div>
           </div>
 
@@ -263,59 +366,42 @@
             <label class="block text-xs font-semibold uppercase text-slate-300 mb-1">Weekly Rest Days</label>
             <div class="flex flex-wrap gap-2 text-xs">
               <label class="flex items-center gap-1.5 bg-surface-800 border border-slate-700 px-2.5 py-1.5 rounded-lg cursor-pointer">
-                <input type="checkbox" name="rest_day" value="Sunday" checked class="rounded text-indigo-600 focus:ring-0"> Sunday
+                <input type="checkbox" name="rest_day" value="Sunday" checked class="rounded text-violet-600 focus:ring-0"> Sunday
               </label>
               <label class="flex items-center gap-1.5 bg-surface-800 border border-slate-700 px-2.5 py-1.5 rounded-lg cursor-pointer">
-                <input type="checkbox" name="rest_day" value="Saturday" class="rounded text-indigo-600 focus:ring-0"> Saturday
-              </label>
-              <label class="flex items-center gap-1.5 bg-surface-800 border border-slate-700 px-2.5 py-1.5 rounded-lg cursor-pointer">
-                <input type="checkbox" name="rest_day" value="Friday" class="rounded text-indigo-600 focus:ring-0"> Friday
+                <input type="checkbox" name="rest_day" value="Saturday" class="rounded text-violet-600 focus:ring-0"> Saturday
               </label>
             </div>
           </div>
 
-          <div class="pt-2 flex justify-end gap-3">
-            <button type="button" id="btn-cancel-creator" class="px-4 py-2 rounded-lg bg-surface-800 hover:bg-surface-700 text-xs font-medium text-slate-300 transition">Cancel</button>
-            <button type="submit" id="btn-submit-creator" class="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 transition flex items-center gap-2">
-              <span id="creator-btn-text">Discover & Build Roadmap</span>
+          <div class="pt-3 flex justify-end gap-3">
+            <button type="submit" id="btn-submit-creator" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-xs font-bold text-white shadow-lg shadow-violet-600/30 transition flex items-center gap-2">
+              <span id="creator-btn-text">Discover & Build Study Plan</span>
               <div id="creator-spinner" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             </button>
           </div>
         </form>
 
-        <!-- Approval Gate Container (Shows after discovery) -->
+        <!-- Approval Gate Container -->
         <div id="approval-gate" class="hidden mt-8 pt-6 border-t border-slate-800">
           <div class="flex items-center justify-between mb-4">
             <div>
               <h3 class="text-base font-bold text-white">Source Approval Gate</h3>
-              <p class="text-xs text-slate-400">Select which candidate videos and playlists you want included in your curriculum.</p>
+              <p class="text-xs text-slate-400">Select candidate playlists or videos to generate your curriculum.</p>
             </div>
-            <button id="btn-approve-selected" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-md transition flex items-center gap-1.5">
-              <span>Approve & Generate Schedule</span>
+            <button id="btn-approve-selected" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-md transition">
+              Approve & Generate Schedule
             </button>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <!-- Candidate Playlists -->
             <div class="bg-surface-800/40 p-4 rounded-xl border border-slate-800">
-              <h4 class="text-xs font-semibold uppercase text-indigo-300 mb-2 flex items-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-                Discovered Playlists
-              </h4>
-              <div id="candidate-playlists-list" class="space-y-2">
-                <!-- Injected via JS -->
-              </div>
+              <h4 class="text-xs font-bold uppercase text-violet-300 mb-2">Discovered Playlists</h4>
+              <div id="candidate-playlists-list" class="space-y-2"></div>
             </div>
-
-            <!-- Candidate Videos -->
             <div class="bg-surface-800/40 p-4 rounded-xl border border-slate-800">
-              <h4 class="text-xs font-semibold uppercase text-indigo-300 mb-2 flex items-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                Discovered Videos
-              </h4>
-              <div id="candidate-videos-list" class="space-y-2 max-h-96 overflow-y-auto">
-                <!-- Injected via JS -->
-              </div>
+              <h4 class="text-xs font-bold uppercase text-violet-300 mb-2">Discovered Videos</h4>
+              <div id="candidate-videos-list" class="space-y-2 max-h-96 overflow-y-auto"></div>
             </div>
           </div>
         </div>
@@ -325,29 +411,26 @@
   </main>
 
   <!-- Settings & Storage Guard Modal -->
-  <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+  <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-surface-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
       <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
         <h3 class="text-base font-bold text-white flex items-center gap-2">
-          <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
           Settings & Storage Guard
         </h3>
         <button id="btn-close-settings" class="text-slate-400 hover:text-white p-1">✕</button>
       </div>
 
       <div class="space-y-4 text-xs">
-        <!-- yt-dlp Maintenance -->
         <div class="bg-surface-800 p-3 rounded-xl border border-slate-700/60 flex items-center justify-between">
           <div>
             <div class="font-semibold text-white">yt-dlp Extractor</div>
-            <div class="text-slate-400 mt-0.5">Version: <span id="settings-ytdlp-version" class="text-indigo-300 font-mono">--</span></div>
+            <div class="text-slate-400 mt-0.5">Version: <span id="settings-ytdlp-version" class="text-violet-300 font-mono">--</span></div>
           </div>
-          <button id="btn-update-ytdlp" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-2.5 py-1.5 rounded-lg transition">
+          <button id="btn-update-ytdlp" class="bg-violet-600 hover:bg-violet-500 text-white font-medium px-2.5 py-1.5 rounded-lg transition">
             Update yt-dlp
           </button>
         </div>
 
-        <!-- Browser Cookies -->
         <div>
           <label class="block font-semibold text-slate-300 mb-1">Use Browser Cookies (--cookies-from-browser)</label>
           <select id="settings-browser-cookies" class="w-full bg-surface-800 border border-slate-700 rounded-lg p-2 text-slate-200">
@@ -357,10 +440,8 @@
             <option value="safari">Apple Safari</option>
             <option value="brave">Brave Browser</option>
           </select>
-          <p class="text-[10px] text-slate-500 mt-1">Helps prevent YouTube bot check / age verification issues.</p>
         </div>
 
-        <!-- Storage Guard -->
         <div class="bg-surface-800 p-3 rounded-xl border border-slate-700/60">
           <div class="font-semibold text-white mb-2 flex items-center justify-between">
             <span>Disk Usage (Cached Media)</span>
@@ -376,19 +457,14 @@
           </button>
         </div>
 
-        <!-- API Keys -->
         <div class="border-t border-slate-800 pt-3">
           <label class="block font-semibold text-slate-300 mb-1">LLM API Key (Stored securely in .env)</label>
           <div class="space-y-2">
             <div class="flex items-center gap-2">
-              <span id="badge-gemini" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400">Gemini</span>
+              <span id="badge-gemini" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 font-mono">Gemini</span>
               <input type="password" id="input-key-gemini" placeholder="Paste Gemini API Key" class="flex-1 bg-surface-800 border border-slate-700 rounded px-2.5 py-1 text-white font-mono text-[11px]">
             </div>
-            <div class="flex items-center gap-2">
-              <span id="badge-groq" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400">Groq</span>
-              <input type="password" id="input-key-groq" placeholder="Paste Groq API Key" class="flex-1 bg-surface-800 border border-slate-700 rounded px-2.5 py-1 text-white font-mono text-[11px]">
-            </div>
-            <button id="btn-save-keys" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-1.5 rounded-lg transition mt-2">
+            <button id="btn-save-keys" class="w-full bg-violet-600 hover:bg-violet-500 text-white font-semibold py-1.5 rounded-lg transition mt-2">
               Save Keys to .env
             </button>
           </div>

@@ -3,6 +3,7 @@
 import uuid
 import json
 import sqlite3
+import logging
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from backend.database import get_db
@@ -15,14 +16,16 @@ from backend.models.schemas import (
     SourceResponse,
     LessonResponse,
     CandidateDiscoveryResponse,
+    LessonFilterRequest,
 )
 from backend.services.youtube import (
     discover_candidates,
     extract_metadata,
     split_video_into_lessons,
 )
-from backend.scheduler.engine import calculate_effective_minutes
+from backend.scheduler.engine import calculate_effective_minutes, get_study_dates, is_rest_day, default_clock
 
+logger = logging.getLogger("learn_lms.courses")
 router = APIRouter(prefix="/api/courses", tags=["courses"])
 
 @router.post("", response_model=CourseResponse)
@@ -32,12 +35,15 @@ def create_course(
 ):
     course_id = str(uuid.uuid4())
     rest_days_json = json.dumps(req.rest_days)
+    strategy = req.schedule_strategy or "paced"
+    logger.info(f"[Courses] Creating new course '{req.title}' (Strategy: {strategy}, Target: {req.target_date})")
+
     db.execute(
         """
         INSERT INTO courses (
             id, title, goal_query, source_preferences, target_date,
-            minutes_per_day, playback_speed, rest_days, revision_buffer_days
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            minutes_per_day, playback_speed, rest_days, revision_buffer_days, schedule_strategy
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """,
         (
             course_id,
@@ -49,6 +55,7 @@ def create_course(
             req.playback_speed,
             rest_days_json,
             req.revision_buffer_days,
+            strategy,
         ),
     )
     return get_course(course_id, db)
@@ -58,7 +65,6 @@ def list_courses(db: sqlite3.Connection = Depends(get_db)):
     rows = db.execute("SELECT * FROM courses ORDER BY created_at DESC;").fetchall()
     results = []
     for row in rows:
-        cid = row["id"]
         results.append(compute_course_stats(row, db))
     return results
 
@@ -104,6 +110,21 @@ def compute_course_stats(course_row: sqlite3.Row, db: sqlite3.Connection) -> Cou
         except Exception:
             pass
 
+    # Compute effective daily target minutes
+    strategy = course_row["schedule_strategy"] if "schedule_strategy" in course_row.keys() else "paced"
+    daily_target = float(course_row["minutes_per_day"])
+    if strategy == "paced" and course_row["target_date"]:
+        try:
+            today = default_clock()
+            targ_d = datetime.strptime(course_row["target_date"], "%Y-%m-%d").date()
+            eff_deadline = targ_d - timedelta(days=course_row["revision_buffer_days"])
+            rest_days = json.loads(course_row["rest_days"])
+            study_dates, _, _ = get_study_dates(today, eff_deadline, rest_days, revision_buffer_days=0)
+            if len(study_dates) > 0 and remaining_effective > 0:
+                daily_target = round(remaining_effective / len(study_dates), 1)
+        except Exception:
+            pass
+
     return CourseResponse(
         id=course_row["id"],
         title=course_row["title"],
@@ -114,6 +135,7 @@ def compute_course_stats(course_row: sqlite3.Row, db: sqlite3.Connection) -> Cou
         playback_speed=course_row["playback_speed"],
         rest_days=json.loads(course_row["rest_days"]),
         revision_buffer_days=course_row["revision_buffer_days"],
+        schedule_strategy=strategy,
         status=course_row["status"],
         total_effective_minutes=round(total_effective, 1),
         completed_effective_minutes=round(completed_effective, 1),
@@ -121,6 +143,7 @@ def compute_course_stats(course_row: sqlite3.Row, db: sqlite3.Connection) -> Cou
         completion_percentage=pct,
         projected_finish_date=projected,
         is_behind_schedule=is_behind,
+        effective_daily_target_minutes=daily_target,
         created_at=str(course_row["created_at"]),
     )
 
@@ -138,7 +161,8 @@ def discover_sources(
     if course["source_preferences"]:
         search_query += f" {course['source_preferences']}"
 
-    # Get browser cookies setting if present
+    logger.info(f"[Courses] Autonomous discovery triggered for course {course_id} (Query: '{search_query}')")
+
     cookie_row = db.execute("SELECT value FROM system_settings WHERE key = 'cookies_browser';").fetchone()
     cookies_browser = cookie_row["value"] if cookie_row else None
 
@@ -148,7 +172,6 @@ def discover_sources(
     for v in discovery["candidate_videos"]:
         sid = str(uuid.uuid4())
         meta_json = json.dumps(v)
-        # Check if already present
         existing = db.execute(
             "SELECT id FROM sources WHERE course_id = ? AND external_id = ?;",
             (course_id, v["id"]),
@@ -199,12 +222,14 @@ def import_source(
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
 
+    logger.info(f"[Courses] Importing manual URL: {req.url} into course {course_id}")
     cookie_row = db.execute("SELECT value FROM system_settings WHERE key = 'cookies_browser';").fetchone()
     cookies_browser = cookie_row["value"] if cookie_row else None
 
     try:
         meta = extract_metadata(req.url, cookies_browser=cookies_browser)
     except Exception as e:
+        logger.error(f"[Courses] Metadata extraction failed for {req.url}: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to fetch metadata from URL: {str(e)}")
 
     source_type = "youtube_playlist" if ("entries" in meta or "playlist" in req.url.lower()) else "youtube_video"
@@ -227,8 +252,8 @@ def import_source(
     )
 
     if req.is_approved:
-        # Create lessons from this source
-        create_lessons_from_meta(course_id, source_id, meta, db)
+        created_ids = create_lessons_from_meta(course_id, source_id, meta, db)
+        logger.info(f"[Courses] Created {len(created_ids)} lessons from approved source '{title}'")
 
     return get_source_by_id(source_id, db)
 
@@ -248,12 +273,17 @@ def create_lessons_from_meta(
             lessons = split_video_into_lessons(entry)
             for l in lessons:
                 lid = str(uuid.uuid4())
+                # Auto-detect if title sounds like an example or exercise
+                t_lower = l["title"].lower()
+                is_example = any(kw in t_lower for kw in ["example", "problem", "question", "gate", "exercise", "practice"])
+                priority = "deep-dive" if is_example else l.get("priority", "core")
+
                 db.execute(
                     """
                     INSERT INTO lessons (
                         id, course_id, source_id, title, summary, video_id, video_url,
-                        start_sec, end_sec, raw_duration_sec, priority, order_index, chapter_title
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                        start_sec, end_sec, raw_duration_sec, priority, order_index, chapter_title, is_excluded
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);
                     """,
                     (
                         lid,
@@ -266,7 +296,7 @@ def create_lessons_from_meta(
                         l["start_sec"],
                         l["end_sec"],
                         l["raw_duration_sec"],
-                        l.get("priority", "core"),
+                        priority,
                         len(created_lesson_ids),
                         l.get("chapter_title", ""),
                     ),
@@ -277,12 +307,16 @@ def create_lessons_from_meta(
         lessons = split_video_into_lessons(meta)
         for l in lessons:
             lid = str(uuid.uuid4())
+            t_lower = l["title"].lower()
+            is_example = any(kw in t_lower for kw in ["example", "problem", "question", "gate", "exercise", "practice"])
+            priority = "deep-dive" if is_example else l.get("priority", "core")
+
             db.execute(
                 """
                 INSERT INTO lessons (
                     id, course_id, source_id, title, summary, video_id, video_url,
-                    start_sec, end_sec, raw_duration_sec, priority, order_index, chapter_title
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    start_sec, end_sec, raw_duration_sec, priority, order_index, chapter_title, is_excluded
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);
                 """,
                 (
                     lid,
@@ -295,7 +329,7 @@ def create_lessons_from_meta(
                     l["start_sec"],
                     l["end_sec"],
                     l["raw_duration_sec"],
-                    l.get("priority", "core"),
+                    priority,
                     len(created_lesson_ids),
                     l.get("chapter_title", ""),
                 ),
@@ -327,25 +361,22 @@ def approve_sources(
         if not s_row:
             continue
 
-        # Mark approved
         db.execute("UPDATE sources SET is_approved = 1 WHERE id = ?;", (sid,))
 
-        # Check if lessons already exist for this source
         existing_lessons = db.execute("SELECT count(*) as c FROM lessons WHERE source_id = ?;", (sid,)).fetchone()
         if existing_lessons["c"] == 0 and s_row["url"]:
-            # Extract full metadata and generate lessons
             try:
                 meta = extract_metadata(s_row["url"], cookies_browser=cookies_browser)
                 create_lessons_from_meta(course_id, sid, meta, db)
             except Exception as e:
-                # If extraction fails, create a placeholder single lesson so user can proceed
+                logger.error(f"[Courses] Fallback placeholder created for {s_row['url']}: {e}")
                 lid = str(uuid.uuid4())
                 db.execute(
                     """
                     INSERT INTO lessons (
                         id, course_id, source_id, title, summary, video_id, video_url,
-                        start_sec, end_sec, raw_duration_sec, priority, order_index
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 900, 900, 'core', 0);
+                        start_sec, end_sec, raw_duration_sec, priority, order_index, is_excluded
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 900, 900, 'core', 0, 0);
                     """,
                     (lid, course_id, sid, s_row["title"], "", s_row["external_id"], s_row["url"]),
                 )
@@ -353,6 +384,77 @@ def approve_sources(
         approved_sources.append(get_source_by_id(sid, db))
 
     return approved_sources
+
+@router.post("/{course_id}/lessons/filter", response_model=List[LessonResponse])
+def filter_course_lessons(
+    course_id: str,
+    req: LessonFilterRequest,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Smart filtering to include/exclude question & example videos or specific lessons."""
+    course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    # If include_examples is explicitly given
+    if req.include_examples is not None:
+        kw_patterns = ["%example%", "%problem%", "%question%", "%exercise%", "%practice%"]
+        where_clause = " OR ".join(["LOWER(title) LIKE ?" for _ in kw_patterns])
+        exclude_val = 0 if req.include_examples else 1
+        db.execute(
+            f"UPDATE lessons SET is_excluded = ? WHERE course_id = ? AND ({where_clause});",
+            [exclude_val, course_id] + kw_patterns,
+        )
+        logger.info(f"[Courses] Filtered example videos in course {course_id} (include_examples={req.include_examples})")
+
+    if req.lesson_ids_to_include:
+        placeholders = ",".join("?" * len(req.lesson_ids_to_include))
+        db.execute(
+            f"UPDATE lessons SET is_excluded = 0 WHERE course_id = ? AND id IN ({placeholders});",
+            [course_id] + req.lesson_ids_to_include,
+        )
+
+    if req.lesson_ids_to_exclude:
+        placeholders = ",".join("?" * len(req.lesson_ids_to_exclude))
+        db.execute(
+            f"UPDATE lessons SET is_excluded = 1 WHERE course_id = ? AND id IN ({placeholders});",
+            [course_id] + req.lesson_ids_to_exclude,
+        )
+
+    return list_lessons(course_id, db)
+
+@router.post("/{course_id}/lessons/{lesson_id}/toggle-exclude", response_model=LessonResponse)
+def toggle_lesson_exclusion(
+    course_id: str,
+    lesson_id: str,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    row = db.execute("SELECT * FROM lessons WHERE id = ? AND course_id = ?;", (lesson_id, course_id)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    new_val = 0 if row["is_excluded"] else 1
+    db.execute("UPDATE lessons SET is_excluded = ? WHERE id = ?;", (new_val, lesson_id))
+    logger.info(f"[Courses] Toggled lesson {lesson_id} exclusion: is_excluded={new_val}")
+
+    updated = db.execute("SELECT * FROM lessons WHERE id = ?;", (lesson_id,)).fetchone()
+    return LessonResponse(
+        id=updated["id"],
+        course_id=updated["course_id"],
+        source_id=updated["source_id"],
+        title=updated["title"],
+        summary=updated["summary"] or "",
+        video_id=updated["video_id"],
+        video_url=updated["video_url"],
+        start_sec=updated["start_sec"],
+        end_sec=updated["end_sec"],
+        raw_duration_sec=updated["raw_duration_sec"],
+        priority=updated["priority"],
+        order_index=updated["order_index"],
+        chapter_title=updated["chapter_title"],
+        is_tested_out=bool(updated["is_tested_out"]),
+        is_excluded=bool(updated["is_excluded"]),
+    )
 
 @router.get("/{course_id}/sources", response_model=List[SourceResponse])
 def list_sources(course_id: str, db: sqlite3.Connection = Depends(get_db)):
@@ -395,6 +497,7 @@ def list_lessons(course_id: str, db: sqlite3.Connection = Depends(get_db)):
             order_index=r["order_index"],
             chapter_title=r["chapter_title"],
             is_tested_out=bool(r["is_tested_out"]),
+            is_excluded=bool(r["is_excluded"]),
         )
         for r in rows
     ]
