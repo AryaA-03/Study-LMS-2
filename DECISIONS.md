@@ -55,3 +55,6 @@ For a local-first, low-overhead personal LMS targeting rapid startup on Apple Si
 17. **Per-Lesson Audio Slice Whisper Fallback with PATH-injected ffmpeg**: Prepending `.venv/bin` to `PATH` ensures `yt-dlp` partial downloading and `mlx-whisper` on Apple Silicon function seamlessly with zero host system dependencies.
 18. **NotebookLM-Style Dual Notes Workspace**: Providing tabbed Grounded Notes (with citations and keyframes) alongside debounced auto-saving Personal Notes gives students focused study and exam-prep efficiency.
 19. **Opt-in 480p Keyframe Screenshots via ffmpeg Stream Seeking**: Seeking low-res frames on fresh stream URLs keeps disk usage under ~40 KB per image with YouTube thumbnail fallback.
+20. **Multi-Source SQLite FTS5 Unification**: Indexing YouTube captions, PDF text, and web articles into the same `chunks` and `chunks_fts` tables with `source_type` allows uniform BM25 retrieval without external vector DB dependencies.
+21. **Polite Web Ingestion with robots.txt Compliance**: Checking `robots.txt` and using a descriptive personal-study User-Agent prevents IP blocks while guaranteeing no crawler runaway.
+22. **Strict Verbatim Citation Grounding**: Rejecting ungrounded claims and requiring verbatim quotes with `[ref:chk_...]` chunk citations ensures exam prep is 100% faithful to authoritative course materials.

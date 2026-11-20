@@ -193,3 +193,26 @@ class ScreenshotResponse(BaseModel):
     url: str
     caption: str
 
+# --- Multi-Source & Q&A Schemas ---
+class WebSourceImportRequest(BaseModel):
+    url: str
+    title: Optional[str] = None
+
+class QARequest(BaseModel):
+    query: str
+
+class CitationItem(BaseModel):
+    chunk_id: str
+    source_title: str
+    source_type: str = "youtube_video"
+    start_sec: Optional[int] = None
+    excerpt: str
+
+class QAResponse(BaseModel):
+    id: str
+    course_id: str
+    query: str
+    answer_markdown: str
+    citations: List[CitationItem] = Field(default_factory=list)
+
+

@@ -138,6 +138,25 @@ const btnCaptureKeyframes = document.getElementById('btn-capture-keyframes');
 const btnRegenerateNotes = document.getElementById('btn-regenerate-notes');
 const keyframesStrip = document.getElementById('keyframes-strip');
 
+// Multi-Source & Q&A Elements
+const tabQaNotebook = document.getElementById('tab-qa-notebook');
+const paneQaNotebook = document.getElementById('pane-qa-notebook');
+const qaMessagesList = document.getElementById('qa-messages-list');
+const qaInputForm = document.getElementById('qa-input-form');
+const inputQaQuery = document.getElementById('input-qa-query');
+const btnSubmitQa = document.getElementById('btn-submit-qa');
+const qaBtnText = document.getElementById('qa-btn-text');
+const qaSpinner = document.getElementById('qa-spinner');
+
+const sourcesPillsList = document.getElementById('sources-pills-list');
+const btnOpenAddSource = document.getElementById('btn-open-add-source');
+const addSourceModal = document.getElementById('add-source-modal');
+const btnCloseAddSource = document.getElementById('btn-close-add-source');
+const tabSrcPdf = document.getElementById('tab-src-pdf');
+const tabSrcWeb = document.getElementById('tab-src-web');
+const formUploadPdf = document.getElementById('form-upload-pdf');
+const formImportWeb = document.getElementById('form-import-web');
+
 // --- YouTube IFrame API Initialization ---
 window.onYouTubeIframeAPIReady = function() {
   Logger.player('API Ready', 'Initializing YouTube IFrame API instance');
@@ -271,12 +290,22 @@ function setupEventListeners() {
   // Notes Tabs & Actions
   tabGroundedNotes.addEventListener('click', () => switchNotesTab('grounded'));
   tabPersonalNotes.addEventListener('click', () => switchNotesTab('personal'));
+  tabQaNotebook.addEventListener('click', () => switchNotesTab('qa'));
+  qaInputForm.addEventListener('submit', handleAskQuestion);
   btnTranscribeLesson.addEventListener('click', handleTranscribeLesson);
   btnCaptureKeyframes.addEventListener('click', handleCaptureKeyframes);
   btnRegenerateNotes.addEventListener('click', () => {
     if (activeAllocation) loadLessonNotesAndArtifacts(activeAllocation.lesson_id, true);
   });
   inputPersonalNotes.addEventListener('input', handlePersonalNotesInput);
+
+  // Add Source Modal & Tabs
+  btnOpenAddSource.addEventListener('click', () => addSourceModal.classList.remove('hidden'));
+  btnCloseAddSource.addEventListener('click', () => addSourceModal.classList.add('hidden'));
+  tabSrcPdf.addEventListener('click', () => switchSourceModalTab('pdf'));
+  tabSrcWeb.addEventListener('click', () => switchSourceModalTab('web'));
+  formUploadPdf.addEventListener('submit', handleUploadPdf);
+  formImportWeb.addEventListener('submit', handleImportWeb);
 }
 
 // --- Layout Collapsing ---
@@ -411,6 +440,7 @@ async function loadCourse(courseId) {
     }
 
     await loadLessons(courseId);
+    await loadCourseSources(courseId);
     await loadSchedule(courseId);
     showWorkspaceView();
   } catch (err) {
@@ -1031,22 +1061,32 @@ function formatBytes(bytes) {
 
 // --- Notes, Transcription & Keyframe Functions ---
 function switchNotesTab(tab) {
+  tabGroundedNotes.classList.remove('bg-surface-800', 'text-white');
+  tabGroundedNotes.classList.add('text-slate-400');
+  tabPersonalNotes.classList.remove('bg-surface-800', 'text-white');
+  tabPersonalNotes.classList.add('text-slate-400');
+  tabQaNotebook.classList.remove('bg-surface-800', 'text-white');
+  tabQaNotebook.classList.add('text-slate-400');
+
+  paneGroundedNotes.classList.add('hidden');
+  panePersonalNotes.classList.add('hidden');
+  paneQaNotebook.classList.add('hidden');
+
   if (tab === 'grounded') {
     tabGroundedNotes.classList.add('bg-surface-800', 'text-white');
     tabGroundedNotes.classList.remove('text-slate-400');
-    tabPersonalNotes.classList.remove('bg-surface-800', 'text-white');
-    tabPersonalNotes.classList.add('text-slate-400');
-
     paneGroundedNotes.classList.remove('hidden');
-    panePersonalNotes.classList.add('hidden');
-  } else {
+  } else if (tab === 'personal') {
     tabPersonalNotes.classList.add('bg-surface-800', 'text-white');
     tabPersonalNotes.classList.remove('text-slate-400');
-    tabGroundedNotes.classList.remove('bg-surface-800', 'text-white');
-    tabGroundedNotes.classList.add('text-slate-400');
-
     panePersonalNotes.classList.remove('hidden');
-    paneGroundedNotes.classList.add('hidden');
+  } else if (tab === 'qa') {
+    tabQaNotebook.classList.add('bg-surface-800', 'text-white');
+    tabQaNotebook.classList.remove('text-slate-400');
+    paneQaNotebook.classList.remove('hidden');
+    if (currentCourseId) {
+      loadQAHistory(currentCourseId);
+    }
   }
 }
 
@@ -1224,4 +1264,297 @@ function handlePersonalNotesInput() {
     }
   }, 800);
 }
+
+// --- Multi-Source & Q&A Functions ---
+function switchSourceModalTab(tab) {
+  if (tab === 'pdf') {
+    tabSrcPdf.classList.add('bg-surface-800', 'text-white');
+    tabSrcPdf.classList.remove('text-slate-400');
+    tabSrcWeb.classList.remove('bg-surface-800', 'text-white');
+    tabSrcWeb.classList.add('text-slate-400');
+    formUploadPdf.classList.remove('hidden');
+    formImportWeb.classList.add('hidden');
+  } else {
+    tabSrcWeb.classList.add('bg-surface-800', 'text-white');
+    tabSrcWeb.classList.remove('text-slate-400');
+    tabSrcPdf.classList.remove('bg-surface-800', 'text-white');
+    tabSrcPdf.classList.add('text-slate-400');
+    formImportWeb.classList.remove('hidden');
+    formUploadPdf.classList.add('hidden');
+  }
+}
+
+async function loadCourseSources(courseId) {
+  if (!courseId) return;
+  try {
+    const res = await fetch(`/api/courses/${courseId}/sources`);
+    if (!res.ok) return;
+    const sources = await res.json();
+    renderSourcesPills(sources);
+  } catch (err) {
+    Logger.error('Failed to load course sources', err);
+  }
+}
+
+function renderSourcesPills(sources) {
+  if (!sourcesPillsList) return;
+  sourcesPillsList.innerHTML = '<span class="text-[11px] text-slate-500 font-medium shrink-0">SOURCES:</span>';
+  if (!sources || sources.length === 0) {
+    sourcesPillsList.innerHTML += '<span class="text-[11px] text-slate-500 italic">No sources attached yet</span>';
+    return;
+  }
+
+  sources.forEach(s => {
+    const pill = document.createElement('span');
+    pill.className = 'px-2 py-0.5 rounded text-[10px] font-mono flex items-center gap-1 shrink-0 ';
+    let icon = '▶';
+    if (s.source_type === 'pdf') {
+      icon = '📄';
+      pill.className += 'bg-blue-950/80 text-blue-300 border border-blue-800/60';
+    } else if (s.source_type === 'web_page') {
+      icon = '🌐';
+      pill.className += 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60';
+    } else {
+      pill.className += 'bg-violet-950/80 text-violet-300 border border-violet-800/60';
+    }
+    const chunkInfo = s.metadata && s.metadata.chunk_count ? ` (${s.metadata.chunk_count} chk)` : '';
+    pill.innerHTML = `<span>${icon}</span> <span class="max-w-[120px] truncate" title="${s.title}">${s.title}</span><span class="text-slate-400 text-[9px]">${chunkInfo}</span>`;
+    sourcesPillsList.appendChild(pill);
+  });
+}
+
+async function handleUploadPdf(e) {
+  e.preventDefault();
+  if (!currentCourseId) return;
+  const fileInput = document.getElementById('input-pdf-file');
+  const titleInput = document.getElementById('input-pdf-title');
+  if (!fileInput.files || fileInput.files.length === 0) return;
+
+  const btn = document.getElementById('btn-submit-pdf');
+  const oldText = btn.textContent;
+  btn.textContent = 'Uploading & Chunking...';
+  btn.disabled = true;
+
+  const fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+  if (titleInput.value.trim()) {
+    fd.append('title', titleInput.value.trim());
+  }
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/sources/pdf`, {
+      method: 'POST',
+      body: fd,
+    });
+    const data = await res.json();
+    Logger.api('POST', `/api/courses/${currentCourseId}/sources/pdf`, res.status, Math.round(performance.now() - t0), data);
+    addSourceModal.classList.add('hidden');
+    formUploadPdf.reset();
+    await loadCourseSources(currentCourseId);
+    alert(`PDF uploaded successfully: "${data.title}" indexed into ${data.chunk_count} chunks.`);
+  } catch (err) {
+    Logger.error('PDF upload failed', err);
+    alert('Failed to upload PDF: ' + err.message);
+  } finally {
+    btn.textContent = oldText;
+    btn.disabled = false;
+  }
+}
+
+async function handleImportWeb(e) {
+  e.preventDefault();
+  if (!currentCourseId) return;
+  const urlInput = document.getElementById('input-web-url');
+  const titleInput = document.getElementById('input-web-title');
+  const url = urlInput.value.trim();
+  if (!url) return;
+
+  const btn = document.getElementById('btn-submit-web');
+  const oldText = btn.textContent;
+  btn.textContent = 'Fetching Article...';
+  btn.disabled = true;
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/sources/web`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: url,
+        title: titleInput.value.trim() || undefined,
+      }),
+    });
+    const data = await res.json();
+    Logger.api('POST', `/api/courses/${currentCourseId}/sources/web`, res.status, Math.round(performance.now() - t0), data);
+    if (!res.ok) {
+      alert('Failed to import web article: ' + (data.detail || 'Error'));
+    } else {
+      addSourceModal.classList.add('hidden');
+      formImportWeb.reset();
+      await loadCourseSources(currentCourseId);
+      alert(`Article imported: "${data.title}" indexed into ${data.chunk_count} chunks.`);
+    }
+  } catch (err) {
+    Logger.error('Web import failed', err);
+    alert('Failed to import web article: ' + err.message);
+  } finally {
+    btn.textContent = oldText;
+    btn.disabled = false;
+  }
+}
+
+async function loadQAHistory(courseId) {
+  if (!courseId) return;
+  try {
+    const res = await fetch(`/api/courses/${courseId}/qa`);
+    if (!res.ok) return;
+    const threads = await res.json();
+    renderQAThreads(threads);
+  } catch (err) {
+    Logger.error('Failed to load QA history', err);
+  }
+}
+
+function renderQAThreads(threads) {
+  if (!qaMessagesList) return;
+  if (!threads || threads.length === 0) {
+    qaMessagesList.innerHTML = `
+      <div class="p-3 bg-surface-900/80 rounded-xl border border-slate-800 text-xs text-slate-300">
+        <p class="font-bold text-white mb-1">Grounded Q&A Workspace</p>
+        <p class="text-slate-400 leading-relaxed">Ask any conceptual question, request a summary, or verify exam formulas. All answers cite exact verbatim source passages from YouTube transcripts, uploaded PDFs, and web articles.</p>
+      </div>
+    `;
+    return;
+  }
+
+  qaMessagesList.innerHTML = '';
+  threads.forEach(t => {
+    const item = document.createElement('div');
+    item.className = 'space-y-2';
+
+    // Question balloon
+    const qDiv = document.createElement('div');
+    qDiv.className = 'flex items-start gap-2 justify-end';
+    qDiv.innerHTML = `
+      <div class="bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-xs px-3.5 py-2 rounded-2xl rounded-tr-sm max-w-[85%] shadow-md">
+        ${escapeHtml(t.query)}
+      </div>
+    `;
+    item.appendChild(qDiv);
+
+    // Answer balloon
+    const aDiv = document.createElement('div');
+    aDiv.className = 'qa-answer-bubble flex items-start gap-2';
+
+    let answerHtml = formatGroundedAnswerHtml(t.answer_markdown);
+    let citationsHtml = '';
+    if (t.citations && t.citations.length > 0) {
+      citationsHtml = `
+        <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex flex-wrap gap-1.5">
+          <span class="text-[10px] text-slate-500 font-semibold uppercase shrink-0">Citations:</span>
+          ${t.citations.map(c => {
+            const timeTag = c.start_sec !== null && c.start_sec !== undefined ? ` [${formatDurationSec(c.start_sec)}]` : '';
+            return `<button type="button" onclick="${c.start_sec !== null && c.start_sec !== undefined ? `window.seekToSeconds(${c.start_sec})` : ''}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-950 text-violet-300 border border-violet-800/50 font-mono text-[10px] hover:bg-violet-900 transition" title="${escapeHtml(c.excerpt)}">
+              <span>📌</span> ${escapeHtml(c.source_title)}${timeTag}
+            </button>`;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    aDiv.innerHTML = `
+      <div class="w-6 h-6 rounded-full bg-violet-950 border border-violet-700/60 text-violet-300 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">LM</div>
+      <div class="bg-surface-900 border border-slate-800 text-slate-200 text-xs px-3.5 py-2.5 rounded-2xl rounded-tl-sm max-w-[90%] shadow-lg space-y-1.5 leading-relaxed">
+        ${answerHtml}
+        ${citationsHtml}
+      </div>
+    `;
+    item.appendChild(aDiv);
+    qaMessagesList.appendChild(item);
+  });
+
+  qaMessagesList.scrollTop = qaMessagesList.scrollHeight;
+}
+
+function formatGroundedAnswerHtml(markdown) {
+  if (!markdown) return '';
+  let html = markdown
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Citations [ref:chk_...]
+  html = html.replace(/\[ref:([a-zA-Z0-9_]+)\]/g, '<span class="text-violet-400 font-mono text-[10px] bg-surface-950 px-1 py-0.2 rounded border border-violet-900/60 font-semibold">[ref:$1]</span>');
+
+  // Timestamps [MM:SS]
+  html = html.replace(/\[(\d{1,2}):(\d{2})\]/g, (match, p1, p2) => {
+    const s = parseInt(p1, 10) * 60 + parseInt(p2, 10);
+    return `<button type="button" onclick="window.seekToSeconds(${s})" class="inline-flex items-center font-mono text-[10px] font-bold text-violet-300 hover:text-white bg-violet-950/80 px-1 rounded border border-violet-700/50 cursor-pointer">▶ ${match}</button>`;
+  });
+
+  // Bullets
+  html = html.replace(/^- (.*$)/gim, '<div class="ml-2 flex items-start gap-1.5"><span class="text-violet-400 mt-0.5">•</span><span>$1</span></div>');
+
+  // Bold
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
+  return html.replace(/\n\n/g, '<br>');
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+async function handleAskQuestion(e) {
+  e.preventDefault();
+  if (!currentCourseId) return;
+  const q = inputQaQuery.value.trim();
+  if (!q) return;
+
+  qaBtnText.textContent = '';
+  qaSpinner.classList.remove('hidden');
+  btnSubmitQa.disabled = true;
+
+  // Append user message immediately
+  const tempMsg = document.createElement('div');
+  tempMsg.className = 'space-y-2';
+  tempMsg.innerHTML = `
+    <div class="flex items-start gap-2 justify-end">
+      <div class="bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-xs px-3.5 py-2 rounded-2xl rounded-tr-sm max-w-[85%] shadow-md">
+        ${escapeHtml(q)}
+      </div>
+    </div>
+    <div class="flex items-start gap-2">
+      <div class="w-6 h-6 rounded-full bg-violet-950 border border-violet-700/60 text-violet-300 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">LM</div>
+      <div class="bg-surface-900 border border-slate-800 text-slate-400 text-xs px-3.5 py-2 rounded-2xl rounded-tl-sm flex items-center gap-2">
+        <div class="w-3.5 h-3.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin"></div>
+        <span>Searching FTS5 evidence chunks & synthesizing answer...</span>
+      </div>
+    </div>
+  `;
+  qaMessagesList.appendChild(tempMsg);
+  qaMessagesList.scrollTop = qaMessagesList.scrollHeight;
+  inputQaQuery.value = '';
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/qa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q }),
+    });
+    const data = await res.json();
+    Logger.api('POST', `/api/courses/${currentCourseId}/qa`, res.status, Math.round(performance.now() - t0), data);
+    await loadQAHistory(currentCourseId);
+  } catch (err) {
+    Logger.error('Grounded Q&A failed', err);
+    alert('Failed to get answer: ' + err.message);
+  } finally {
+    qaBtnText.textContent = 'Ask';
+    qaSpinner.classList.add('hidden');
+    btnSubmitQa.disabled = false;
+  }
+}
+
 

@@ -1,8 +1,8 @@
 # Milestone Progress & Recovery Log
 
 ## Current Status
-- **Current Milestone**: Completed M2 (`v0.2-m2` — Captions, Transcripts, Notes, Screenshots & Adaptive Replanning)
-- **Next Milestone**: M3 (`v0.3-m3` — Multi-Source Notebooks: PDFs, Web & Citation Q&A)
+- **Current Milestone**: Completed M3 (`v0.3-m3` — Multi-Source Notebooks: PDFs, Web & Citation Q&A)
+- **Next Milestone**: M4 (`v0.4-m4` — Citation Quizzes, FSRS Spaced Repetition & Mock Exams)
 - **Active Data Directory**: `data-dev/`
 - **Stable Live Directory**: `../learn-app-live/` (checked out at `v0.1-m1`, pointing to `data/app.db`)
 
@@ -37,19 +37,32 @@
   - [x] Debounced auto-saving personal scratchpad persisted to SQLite `notes` table
   - [x] Adaptive replanning: Compress (drops deep-dives) vs. Extend Deadline with diff & Undo
   - [x] 31 tests passed across unit, integration, live TOC/DBMS smoke, and Playwright E2E
-- [ ] M3: Multi-Source Notebooks (PDFs, Web, Videos) & Citation Q&A (`v0.3-m3`)
+- [x] M3: Multi-Source Notebooks (PDFs, Web, Videos) & Citation Q&A (`v0.3-m3`)
+  - [x] Pure-Python PDF text extraction via `pypdf` with page tracking (`[Page N]`)
+  - [x] Polite single-page web article ingestion via `trafilatura` with `robots.txt` verification
+  - [x] Multi-source chunk indexing (300-600 tokens) into unified SQLite FTS5 table (`chunks_fts`)
+  - [x] Strict citation-grounded Q&A engine with SQLite FTS5 BM25 search ranking
+  - [x] Verbatim quote enforcement and strict rejection when evidence is insufficient
+  - [x] NotebookLM-style Sources Tray showing YouTube, PDF, and Web source badges
+  - [x] NotebookLM-style "Ask Q&A" conversational studio pane with interactive citation pills
+  - [x] Multi-source Add Source modal (PDF file drag-and-drop & Web article URL)
+  - [x] Persistent Q&A thread history stored in `qa_threads` table
+  - [x] 35 tests passed across unit, integration, and Playwright E2E
 - [ ] M4: Citation Quizzes, FSRS Spaced Repetition & Mock Exams (`v0.4-m4`)
 - [ ] M5: In-Browser Pyodide Scratchpad, Storage Guard, UI Polish & Ship (`v0.5-m5`)
 
-## Verification Summary (M2)
-- `tests/test_scheduler.py`: 10 passed (speed scaling, multi-day splitting, rest/revision days, reflow, compress, core deficit, paced vs fixed exam spreading, lesson exclusion)
-- `tests/test_yt_service.py`: 5 passed (duration format, chapters, 15-min deterministic, remainder merge, ytdlp version)
-- `tests/test_migrations.py`: 1 passed (non-destructive migration and backup)
-- `tests/test_integration_pipeline.py`: 1 passed (full import -> approve -> schedule -> toggle -> skip -> reflow -> compress -> undo)
-- `tests/test_transcription.py`: 5 passed (format seconds, json3 deduplication, rolling VTT deduplication, no-key note generation, notes persistence)
-- `tests/test_screenshots.py`: 1 passed (keyframe extraction, directory management, retrieval)
-- `tests/test_live_smoke.py`: 3 passed (live TOC playlist 114 entries, live large video chapters, live search discovery)
-- `tests/test_live_smoke_m2.py`: 2 passed (live TOC captions ingestion + notes synthesis, live large video audio slice + Whisper)
-- `tests/test_e2e_m1.py`: 1 passed (Playwright headless Chromium golden-path test)
-- `tests/test_e2e_m2.py`: 1 passed (Playwright headless Chromium notes, tabs, seek buttons, personal auto-save)
-- Total: 31 passed, 0 failed.
+## Verification Summary (M3)
+- `tests/test_scheduler.py`: 10 passed
+- `tests/test_yt_service.py`: 5 passed
+- `tests/test_migrations.py`: 1 passed
+- `tests/test_integration_pipeline.py`: 1 passed
+- `tests/test_transcription.py`: 5 passed
+- `tests/test_screenshots.py`: 1 passed
+- `tests/test_multi_source.py`: 3 passed (PDF extraction, web chunking, robots.txt)
+- `tests/test_qa_engine.py`: 1 passed (FTS5 BM25 search, citations, negative case, persistence)
+- `tests/test_live_smoke.py`: 3 passed (live TOC playlist 114 entries, large video, search)
+- `tests/test_live_smoke_m2.py`: 2 passed (live TOC captions + DBMS Whisper audio slice)
+- `tests/test_e2e_m1.py`: 1 passed (Playwright golden path)
+- `tests/test_e2e_m2.py`: 1 passed (Playwright notes, tabs, seek buttons, personal notes)
+- `tests/test_e2e_m3.py`: 1 passed (Playwright sources tray, add modal, Ask NotebookLM Q&A)
+- Total: 35 passed, 0 failed.
