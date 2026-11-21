@@ -330,8 +330,132 @@ function onPlayerReady(event) {
   if (placeholder) placeholder.classList.add('hidden');
 }
 
+let playerTimeSyncInterval = null;
+let isAutoAdvanceEnabled = localStorage.getItem('learn_lms_auto_advance') !== 'false';
+let isAutoAdvancing = false;
+
 function onPlayerStateChange(event) {
   Logger.player('Player State Change', event.data);
+
+  if (event.data === 1) { // PLAYING
+    startPlayerTimeSync();
+  } else {
+    stopPlayerTimeSync();
+  }
+
+  if (event.data === 0) { // ENDED
+    if (isAutoAdvanceEnabled && activeAllocation && !isAutoAdvancing) {
+      triggerAutoAdvance();
+    }
+  }
+}
+
+function startPlayerTimeSync() {
+  if (playerTimeSyncInterval) clearInterval(playerTimeSyncInterval);
+  playerTimeSyncInterval = setInterval(() => {
+    if (!isYtReady || !ytPlayer || !ytPlayer.getCurrentTime) return;
+    try {
+      const curTime = ytPlayer.getCurrentTime();
+      syncLiveNoteTimestamp(curTime);
+
+      // Auto-advance check at slice boundary
+      if (isAutoAdvanceEnabled && activeAllocation && !isAutoAdvancing) {
+        const endSec = activeAllocation.allocated_end_sec;
+        if (endSec && curTime >= (endSec - 0.75)) {
+          triggerAutoAdvance();
+        }
+      }
+    } catch (e) {
+      // Ignore transient errors
+    }
+  }, 350);
+}
+
+function stopPlayerTimeSync() {
+  if (playerTimeSyncInterval) {
+    clearInterval(playerTimeSyncInterval);
+    playerTimeSyncInterval = null;
+  }
+}
+
+function syncLiveNoteTimestamp(curTime) {
+  const container = document.getElementById('grounded-notes-container');
+  if (!container) return;
+
+  const buttons = container.querySelectorAll('.timestamp-link, .qa-citation-badge');
+  if (!buttons || buttons.length === 0) return;
+
+  let closestBtn = null;
+  let minDiff = Infinity;
+
+  buttons.forEach(btn => {
+    const secStr = btn.getAttribute('data-timestamp-sec');
+    if (!secStr) return;
+    const sec = parseFloat(secStr);
+    if (sec <= (curTime + 0.5)) {
+      const diff = curTime - sec;
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestBtn = btn;
+      }
+    }
+  });
+
+  // Remove active highlight from all buttons
+  buttons.forEach(b => {
+    b.classList.remove('active-live-timestamp', 'ring-2', 'ring-indigo-500', 'bg-indigo-600', '!text-white', 'scale-105');
+  });
+
+  // Highlight active button if within 60s
+  if (closestBtn && minDiff < 60) {
+    closestBtn.classList.add('active-live-timestamp', 'ring-2', 'ring-indigo-500', 'bg-indigo-600', '!text-white', 'scale-105');
+  }
+}
+
+async function triggerAutoAdvance() {
+  if (isAutoAdvancing || !activeAllocation) return;
+  isAutoAdvancing = true;
+  showToast('⚡ Slice complete! Auto-advancing to next lesson...', 'success');
+
+  const currentAllocId = activeAllocation.id;
+
+  // 1. Mark current allocation complete
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/schedule/allocations/${currentAllocId}/complete`, {
+      method: 'POST'
+    });
+    if (res.ok) {
+      const updatedSched = await res.json();
+      currentSchedule = updatedSched;
+      renderSchedule(updatedSched);
+    }
+  } catch (err) {
+    Logger.error('Auto-advance completion error', err);
+  }
+
+  // 2. Find next incomplete allocation in currentSchedule
+  let nextAlloc = null;
+  if (currentSchedule && currentSchedule.days) {
+    for (const d of currentSchedule.days) {
+      for (const a of d.allocations) {
+        if (!a.is_completed && !a.is_skipped && a.id !== currentAllocId) {
+          nextAlloc = a;
+          break;
+        }
+      }
+      if (nextAlloc) break;
+    }
+  }
+
+  if (nextAlloc) {
+    setTimeout(() => {
+      selectAllocation(nextAlloc.id);
+      isAutoAdvancing = false;
+    }, 700);
+  } else {
+    showToast('🏆 Course Complete! All scheduled lessons completed.', 'success');
+    isAutoAdvancing = false;
+  }
 }
 
 function playVideoSlice(videoId, startSec, endSec) {
@@ -476,6 +600,66 @@ function setupEventListeners() {
 
   btnToggleActiveComplete.addEventListener('click', handleToggleActiveAllocation);
   btnSkipActive.addEventListener('click', handleSkipActiveAllocation);
+
+  // Auto-Advance Toggle
+  const btnAutoAdv = document.getElementById('btn-toggle-auto-advance');
+  const lblAutoAdv = document.getElementById('auto-advance-label');
+  if (btnAutoAdv && lblAutoAdv) {
+    const updateAutoAdvUI = () => {
+      lblAutoAdv.textContent = isAutoAdvanceEnabled ? 'ON' : 'OFF';
+      if (isAutoAdvanceEnabled) {
+        btnAutoAdv.className = 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/80 text-amber-700 dark:text-amber-300 text-xs px-2.5 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700/80 transition flex items-center gap-1.5 active:scale-95 shadow-sm';
+      } else {
+        btnAutoAdv.className = 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 transition flex items-center gap-1.5 active:scale-95';
+      }
+    };
+    updateAutoAdvUI();
+    btnAutoAdv.addEventListener('click', () => {
+      isAutoAdvanceEnabled = !isAutoAdvanceEnabled;
+      localStorage.setItem('learn_lms_auto_advance', isAutoAdvanceEnabled ? 'true' : 'false');
+      updateAutoAdvUI();
+      showToast(`Auto-Advance turned ${isAutoAdvanceEnabled ? 'ON' : 'OFF'}`, 'info');
+    });
+  }
+
+  // Global Keyboard Shortcuts for Frictionless Study
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+    if (document.activeElement?.isContentEditable) return;
+
+    if (e.code === 'Space') {
+      if (isYtReady && ytPlayer && ytPlayer.getPlayerState) {
+        e.preventDefault();
+        const state = ytPlayer.getPlayerState();
+        if (state === 1) {
+          ytPlayer.pauseVideo();
+          showToast('⏸ Paused', 'info');
+        } else {
+          ytPlayer.playVideo();
+          showToast('▶ Playing', 'info');
+        }
+      }
+    } else if (e.code === 'BracketLeft' || (e.code === 'ArrowLeft' && e.altKey)) {
+      if (isYtReady && ytPlayer && ytPlayer.getCurrentTime) {
+        e.preventDefault();
+        const t = Math.max(0, ytPlayer.getCurrentTime() - 10);
+        window.seekToSeconds(t);
+        showToast('⏪ -10s', 'info');
+      }
+    } else if (e.code === 'BracketRight' || (e.code === 'ArrowRight' && e.altKey)) {
+      if (isYtReady && ytPlayer && ytPlayer.getCurrentTime) {
+        e.preventDefault();
+        const t = ytPlayer.getCurrentTime() + 10;
+        window.seekToSeconds(t);
+        showToast('⏩ +10s', 'info');
+      }
+    } else if (e.code === 'KeyM' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      btnToggleActiveComplete.click();
+    } else if (e.code === 'Escape') {
+      document.querySelectorAll('.fixed.z-50:not(.hidden)').forEach(m => m.classList.add('hidden'));
+    }
+  });
 
   btnReplanNow.addEventListener('click', () => {
     const speed = parseFloat(inlinePlaybackSpeed.value);
@@ -1218,7 +1402,11 @@ function renderSchedule(sched) {
   sched.days.forEach(day => {
     const isToday = (day.date === todayStr);
     const dayEl = document.createElement('div');
-    dayEl.className = `day-group-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm transition hover:border-slate-300 dark:hover:border-slate-700 ${isToday ? 'ring-2 ring-indigo-500 dark:ring-indigo-400 shadow-md shadow-indigo-500/15' : ''}`;
+    dayEl.className = `day-group-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm transition-all duration-150 hover:border-slate-300 dark:hover:border-slate-700 ${isToday ? 'ring-2 ring-indigo-500 dark:ring-indigo-400 shadow-md shadow-indigo-500/15' : ''}`;
+    dayEl.setAttribute('data-day-date', day.date);
+    dayEl.setAttribute('ondragover', 'window.handleDayDragOver(event, this)');
+    dayEl.setAttribute('ondragleave', 'window.handleDayDragLeave(event, this)');
+    dayEl.setAttribute('ondrop', `window.handleDayDrop(event, this, '${day.date}')`);
 
     let badgeHtml = '';
     if (isToday) {
@@ -1247,7 +1435,7 @@ function renderSchedule(sched) {
     if (day.allocations.length === 0) {
       allocsHtml = `
         <div class="p-3 text-xs text-slate-400 dark:text-slate-500 italic text-center">
-          ${day.is_revision_day ? 'Dedicated strictly for comprehensive revision & mock exams.' : day.is_rest_day ? 'Rest & recharge day.' : 'No study allocations.'}
+          ${day.is_revision_day ? 'Dedicated strictly for comprehensive revision & mock exams.' : day.is_rest_day ? 'Rest & recharge day.' : 'No study allocations. Drag lessons here to schedule.'}
         </div>
       `;
     } else {
@@ -1260,7 +1448,17 @@ function renderSchedule(sched) {
           : `<button type="button" class="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-mono hover:scale-105 active:scale-95 transition" onclick="window.toggleAllocPriority('${alloc.lesson_id}', event)" title="Click to toggle Priority (Core / Deep-Dive)">Core</button>`;
 
         allocsHtml += `
-          <div class="allocation-card p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition flex items-start gap-2.5 cursor-pointer alloc-item group ${isCompleted ? 'opacity-50' : ''}" data-alloc-id="${alloc.id}" onclick="window.selectAllocation('${alloc.id}')">
+          <div class="allocation-card p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition flex items-start gap-2 cursor-pointer alloc-item group ${isCompleted ? 'opacity-50' : ''}" 
+               data-alloc-id="${alloc.id}" 
+               data-source-date="${day.date}"
+               draggable="true"
+               ondragstart="window.handleCardDragStart(event, '${alloc.id}', '${day.date}')"
+               ondragend="window.handleCardDragEnd(event, this)"
+               onclick="window.selectAllocation('${alloc.id}')">
+            
+            <div class="drag-handle text-slate-300 dark:text-slate-600 hover:text-indigo-500 cursor-grab active:cursor-grabbing shrink-0 mt-1 select-none" title="Drag to move to another day">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/></svg>
+            </div>
             <input type="checkbox" class="btn-complete-allocation mt-1 rounded text-indigo-600 focus:ring-0 alloc-checkbox cursor-pointer" data-alloc-id="${alloc.id}" ${isCompleted ? 'checked' : ''} onclick="event.stopPropagation()">
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-1.5 mb-1 flex-wrap">
@@ -1313,6 +1511,83 @@ function renderSchedule(sched) {
     }
   }
 }
+
+// --- Drag-and-Drop Schedule Reordering Handlers ---
+window.draggedAllocInfo = null;
+
+window.handleCardDragStart = function(event, allocId, sourceDate) {
+  event.stopPropagation();
+  window.draggedAllocInfo = { allocId, sourceDate };
+  try {
+    event.dataTransfer.setData('text/plain', JSON.stringify({ allocId, sourceDate }));
+    event.dataTransfer.effectAllowed = 'move';
+  } catch (e) {}
+  const target = event.currentTarget || event.target;
+  target.classList.add('opacity-40', 'scale-95', 'ring-2', 'ring-indigo-500');
+};
+
+window.handleCardDragEnd = function(event, cardEl) {
+  if (cardEl) {
+    cardEl.classList.remove('opacity-40', 'scale-95', 'ring-2', 'ring-indigo-500');
+  }
+  window.draggedAllocInfo = null;
+  document.querySelectorAll('.day-group-card').forEach(d => {
+    d.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/40', 'dark:bg-indigo-950/40');
+  });
+};
+
+window.handleDayDragOver = function(event, dayEl) {
+  event.preventDefault();
+  try { event.dataTransfer.dropEffect = 'move'; } catch (e) {}
+  dayEl.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50/40', 'dark:bg-indigo-950/40');
+};
+
+window.handleDayDragLeave = function(event, dayEl) {
+  if (!dayEl.contains(event.relatedTarget)) {
+    dayEl.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/40', 'dark:bg-indigo-950/40');
+  }
+};
+
+window.handleDayDrop = async function(event, dayEl, targetDate) {
+  event.preventDefault();
+  dayEl.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/40', 'dark:bg-indigo-950/40');
+
+  let data = window.draggedAllocInfo;
+  if (!data) {
+    try {
+      data = JSON.parse(event.dataTransfer.getData('text/plain'));
+    } catch (e) {
+      return;
+    }
+  }
+
+  if (!data || !data.allocId) return;
+  const { allocId, sourceDate } = data;
+
+  if (sourceDate === targetDate) {
+    return; // Dropped on same day
+  }
+
+  showToast(`Moving lesson to ${formatDateDisplay(targetDate)}...`, 'info');
+
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/schedule/allocations/${allocId}/reschedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_date: targetDate }),
+    });
+    if (!res.ok) {
+      throw new Error(`Server returned ${res.status}`);
+    }
+    const updatedSched = await res.json();
+    currentSchedule = updatedSched;
+    renderSchedule(updatedSched);
+    showToast(`✓ Lesson moved to ${formatDateDisplay(targetDate)}!`, 'success');
+  } catch (err) {
+    Logger.error('Reschedule drop error', err);
+    showToast(`Failed to move lesson: ${err.message}`, 'error');
+  }
+};
 
 window.selectAllocation = function(allocId) {
   if (!currentSchedule) return;
@@ -2169,7 +2444,7 @@ function renderMarkdownNotes(markdownText) {
     } else {
       totalSec = parseInt(p1, 10) * 60 + parseInt(p2, 10);
     }
-    return `<button type="button" onclick="window.seekToSeconds(${totalSec})" class="timestamp-link inline-flex items-center gap-1 font-mono text-[11px] font-medium bg-violet-950/90 hover:bg-violet-800 text-violet-300 border border-violet-700/60 rounded px-1.5 py-0.5 cursor-pointer transition shadow-sm active:scale-95" title="Jump video to ${match}"><span>▶</span> ${match}</button>`;
+    return `<button type="button" data-timestamp-sec="${totalSec}" onclick="window.seekToSeconds(${totalSec})" class="timestamp-link inline-flex items-center gap-1 font-mono text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/90 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80 rounded-md px-2 py-0.5 cursor-pointer transition shadow-sm active:scale-95" title="Jump video to ${match}"><span>▶</span> ${match}</button>`;
   });
 
   notesContent.innerHTML = html;
@@ -2503,7 +2778,7 @@ function renderQAThreads(threads) {
           <span class="text-[10px] text-slate-500 font-semibold uppercase shrink-0">Citations:</span>
           ${t.citations.map(c => {
             const timeTag = c.start_sec !== null && c.start_sec !== undefined ? ` [${formatDurationSec(c.start_sec)}]` : '';
-            return `<button type="button" onclick="${c.start_sec !== null && c.start_sec !== undefined ? `window.seekToSeconds(${c.start_sec})` : ''}" class="qa-citation-badge inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-950 text-violet-300 border border-violet-800/50 font-mono text-[10px] hover:bg-violet-900 transition" title="${escapeHtml(c.excerpt)}">
+            return `<button type="button" data-timestamp-sec="${c.start_sec !== null && c.start_sec !== undefined ? c.start_sec : ''}" onclick="${c.start_sec !== null && c.start_sec !== undefined ? `window.seekToSeconds(${c.start_sec})` : ''}" class="qa-citation-badge inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-950 text-violet-300 border border-violet-800/50 font-mono text-[10px] hover:bg-violet-900 transition" title="${escapeHtml(c.excerpt)}">
               <span>📌</span> ${escapeHtml(c.source_title)}${timeTag}
             </button>`;
           }).join('')}
@@ -2538,7 +2813,7 @@ function formatGroundedAnswerHtml(markdown) {
   // Timestamps [MM:SS]
   html = html.replace(/\[(\d{1,2}):(\d{2})\]/g, (match, p1, p2) => {
     const s = parseInt(p1, 10) * 60 + parseInt(p2, 10);
-    return `<button type="button" onclick="window.seekToSeconds(${s})" class="inline-flex items-center font-mono text-[10px] font-bold text-violet-300 hover:text-white bg-violet-950/80 px-1 rounded border border-violet-700/50 cursor-pointer">▶ ${match}</button>`;
+    return `<button type="button" data-timestamp-sec="${s}" onclick="window.seekToSeconds(${s})" class="inline-flex items-center font-mono text-[10px] font-bold text-violet-300 hover:text-white bg-violet-950/80 px-1 rounded border border-violet-700/50 cursor-pointer">▶ ${match}</button>`;
   });
 
   // Bullets
@@ -3010,17 +3285,37 @@ async function handleCreateCardManual(e) {
 // DIAGNOSTIC PRE-TEST & TIMED MOCK EXAM (M4)
 // ==========================================
 let diagnosticQuiz = null;
+let diagnosticTimerInterval = null;
+let diagnosticSecondsLeft = 180; // 3-minute timed test
+
+function updateDiagnosticTimerBadge() {
+  const badge = document.getElementById('diagnostic-timer-badge');
+  if (!badge) return;
+  const m = Math.floor(diagnosticSecondsLeft / 60);
+  const s = diagnosticSecondsLeft % 60;
+  badge.textContent = `⏱️ ${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  if (diagnosticSecondsLeft <= 30) {
+    badge.className = 'text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-400/40 animate-pulse';
+  } else {
+    badge.className = 'text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-400/40';
+  }
+}
 
 async function openDiagnosticPreTest() {
   if (!currentCourseId) {
-    alert('Please select or create a course first.');
+    showToast('Please select or create a course first.', 'warning');
     return;
   }
   diagnosticModal.classList.remove('hidden');
+  diagnosticSecondsLeft = 180;
+  updateDiagnosticTimerBadge();
+
+  if (diagnosticTimerInterval) clearInterval(diagnosticTimerInterval);
+
   diagnosticContentContainer.innerHTML = `
-    <div class="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
-      <div class="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
-      <span>Generating diagnostic questions across course topics...</span>
+    <div class="flex items-center justify-center gap-3 py-16 text-slate-500 dark:text-slate-400 text-xs">
+      <div class="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+      <span class="font-medium">Synthesizing 5 high-yield diagnostic questions across your syllabus...</span>
     </div>
   `;
 
@@ -3032,59 +3327,127 @@ async function openDiagnosticPreTest() {
       body: JSON.stringify({
         quiz_type: 'diagnostic',
         question_count: 5,
-        title: 'Diagnostic Pre-Test',
+        title: '3-Minute Course Diagnostic Pre-Test',
       }),
     });
     diagnosticQuiz = await res.json();
     Logger.api('POST', `/api/courses/${currentCourseId}/quizzes/generate (diagnostic)`, res.status, Math.round(performance.now() - t0), diagnosticQuiz);
 
-    diagnosticContentContainer.innerHTML = diagnosticQuiz.questions.map((q, idx) => `
-      <div class="p-3.5 bg-surface-850 rounded-xl border border-slate-700/80 space-y-2">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-bold text-white">${idx + 1}. ${escapeHtml(q.question)}</span>
-          <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">[${escapeHtml(q.chunk_id)}]</span>
+    if (!diagnosticQuiz.questions || diagnosticQuiz.questions.length === 0) {
+      diagnosticContentContainer.innerHTML = `
+        <div class="p-6 text-center text-xs text-slate-500">
+          No syllabus questions could be generated. Ensure your course has approved lessons or transcripts.
         </div>
-        <div class="space-y-1.5 pt-1">
+      `;
+      return;
+    }
+
+    diagnosticContentContainer.innerHTML = diagnosticQuiz.questions.map((q, idx) => `
+      <div class="p-4 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-3 transition hover:border-slate-300 dark:hover:border-slate-600">
+        <div class="flex items-start justify-between gap-3">
+          <span class="text-xs font-bold text-slate-900 dark:text-white leading-relaxed">${idx + 1}. ${escapeHtml(q.question)}</span>
+          <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 shrink-0">Topic ${idx + 1}</span>
+        </div>
+        <div class="space-y-2 pt-1">
           ${q.options.map((opt, optIdx) => `
-            <label class="diagnostic-option flex items-center gap-2 p-2 rounded-lg border border-slate-700 text-xs text-slate-300 hover:bg-surface-800 cursor-pointer">
-              <input type="radio" name="diag_q_${q.id}" value="${optIdx}" class="text-amber-500 focus:ring-0">
-              <span>${escapeHtml(opt)}</span>
+            <label class="diagnostic-option-card flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 hover:border-amber-400 dark:hover:border-amber-500 cursor-pointer transition active:scale-[0.99] select-none" onclick="window.selectDiagOption(this)">
+              <input type="radio" name="diag_q_${q.id}" value="${optIdx}" class="text-amber-500 focus:ring-0 cursor-pointer">
+              <span class="flex-1">${escapeHtml(opt)}</span>
             </label>
           `).join('')}
         </div>
       </div>
     `).join('');
+
+    // Start 3-minute countdown timer
+    diagnosticTimerInterval = setInterval(() => {
+      diagnosticSecondsLeft--;
+      updateDiagnosticTimerBadge();
+      if (diagnosticSecondsLeft <= 0) {
+        clearInterval(diagnosticTimerInterval);
+        showToast('⏱️ Time expired! Submitting your diagnostic answers...', 'info');
+        handleSubmitDiagnostic();
+      }
+    }, 1000);
+
   } catch (err) {
     Logger.error('Diagnostic generation failed', err);
-    diagnosticContentContainer.innerHTML = `<div class="p-4 text-xs text-red-400">Failed to load diagnostic test: ${escapeHtml(err.message)}</div>`;
+    diagnosticContentContainer.innerHTML = `<div class="p-6 text-xs text-rose-500 font-medium">Failed to load diagnostic test: ${escapeHtml(err.message)}</div>`;
   }
 }
 
+window.selectDiagOption = function(labelEl) {
+  const container = labelEl.closest('.space-y-2');
+  if (container) {
+    container.querySelectorAll('.diagnostic-option-card').forEach(c => {
+      c.classList.remove('ring-2', 'ring-amber-500', 'border-amber-500', 'bg-amber-50/50', 'dark:bg-amber-950/30');
+    });
+  }
+  labelEl.classList.add('ring-2', 'ring-amber-500', 'border-amber-500', 'bg-amber-50/50', 'dark:bg-amber-950/30');
+};
+
 async function handleSubmitDiagnostic() {
   if (!diagnosticQuiz) return;
+  if (diagnosticTimerInterval) clearInterval(diagnosticTimerInterval);
+
   const answers = {};
   for (const q of diagnosticQuiz.questions) {
     const checked = document.querySelector(`input[name="diag_q_${q.id}"]:checked`);
     if (checked) answers[q.id] = parseInt(checked.value, 10);
   }
 
+  const timeSpent = 180 - diagnosticSecondsLeft;
+  diagnosticContentContainer.innerHTML = `
+    <div class="flex items-center justify-center gap-3 py-16 text-slate-500 text-xs">
+      <div class="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+      <span class="font-medium">Evaluating topic mastery and optimizing your schedule...</span>
+    </div>
+  `;
+
   const t0 = performance.now();
   try {
     const res = await fetch(`/api/courses/${currentCourseId}/quizzes/${diagnosticQuiz.id}/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answers, time_taken_seconds: 60 }),
+      body: JSON.stringify({ answers, time_taken_seconds: Math.max(10, timeSpent) }),
     });
     const result = await res.json();
     Logger.api('POST', `/api/courses/${currentCourseId}/quizzes/${diagnosticQuiz.id}/submit`, res.status, Math.round(performance.now() - t0), result);
 
     const testedOutCount = (result.tested_out_lessons || []).length;
-    alert(`Diagnostic Complete! Score: ${result.score}%\nTested Out: ${testedOutCount} topics.\nYour schedule has been dynamically reflowed.`);
-    diagnosticModal.classList.add('hidden');
+
+    // Celebratory Results Screen
+    diagnosticContentContainer.innerHTML = `
+      <div class="py-8 px-4 text-center space-y-4">
+        <div class="w-16 h-16 mx-auto rounded-full bg-gradient-to-tr from-amber-500 to-emerald-500 flex items-center justify-center text-white text-2xl shadow-lg shadow-emerald-500/20">
+          ✓
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-slate-900 dark:text-white">Diagnostic Assessment Complete!</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Score: <strong class="text-amber-600 dark:text-amber-400 text-sm font-mono">${result.score}%</strong> (${result.correct_count} of ${result.total_questions} questions correct)</p>
+        </div>
+        <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/80 max-w-md mx-auto text-xs text-emerald-800 dark:text-emerald-300">
+          <div class="font-bold text-sm mb-1">🎉 ${testedOutCount} Topics Mastered & Tested Out!</div>
+          <p>These lessons have been removed from your active schedule, reclaiming effective study hours before your exam!</p>
+        </div>
+        <div class="pt-2">
+          <button id="btn-finish-diagnostic" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-emerald-500/20 transition active:scale-95">
+            Return to Updated Schedule
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btn-finish-diagnostic')?.addEventListener('click', () => {
+      diagnosticModal.classList.add('hidden');
+    });
+
+    showToast(`🎉 Diagnostic complete! ${testedOutCount} topics tested out.`, 'success');
     await loadSchedule(currentCourseId);
+
   } catch (err) {
     Logger.error('Diagnostic submission failed', err);
-    alert('Submission failed: ' + err.message);
+    showToast(`Submission failed: ${err.message}`, 'error');
   }
 }
 

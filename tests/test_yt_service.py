@@ -95,3 +95,34 @@ def test_ytdlp_version_installed():
     ver = get_ytdlp_version()
     assert ver != "unknown"
     assert len(ver) > 4
+
+def test_sub_3_minute_chapter_merging():
+    """Verifies that chapters shorter than 3 minutes (180s) merge with adjacent chapters."""
+    video_meta = {
+        "id": "vid_short_chapters",
+        "title": "TOC Course Lecture",
+        "webpage_url": "https://www.youtube.com/watch?v=vid_short_chapters",
+        "duration": 3600,
+        "chapters": [
+            {"title": "Intro Bumper", "start_time": 0, "end_time": 42},          # 42s (< 180s) -> merge into next
+            {"title": "Finite State Machine", "start_time": 42, "end_time": 600}, # 558s
+            {"title": "Micro Break", "start_time": 600, "end_time": 640},        # 40s (< 180s) -> merge into next
+            {"title": "Deterministic Automata", "start_time": 640, "end_time": 1800},
+            {"title": "Outro Clip", "start_time": 1800, "end_time": 1830},       # 30s (< 180s, trailing) -> merge into previous
+        ],
+    }
+
+    lessons = split_video_into_lessons(video_meta, min_chapter_sec=180)
+    # The 5 chapters should collapse into 2 robust lessons >= 180s each:
+    # Lesson 0: 0 to 600 ("Finite State Machine", 600s)
+    # Lesson 1: 600 to 1830 ("Deterministic Automata", 1230s)
+    assert len(lessons) == 2
+    assert lessons[0]["start_sec"] == 0
+    assert lessons[0]["end_sec"] == 600
+    assert lessons[0]["raw_duration_sec"] == 600
+    assert lessons[0]["chapter_title"] == "Finite State Machine"
+
+    assert lessons[1]["start_sec"] == 600
+    assert lessons[1]["end_sec"] == 1830
+    assert lessons[1]["raw_duration_sec"] == 1230
+    assert lessons[1]["chapter_title"] == "Deterministic Automata"

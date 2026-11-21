@@ -469,3 +469,107 @@ def test_ui_personal_notes_toolbar_and_save(ui_test_server):
         assert "Saved" in save_status or "✓" in save_status
 
         browser.close()
+
+def test_ui_diagnostic_pre_test_3m_flow(ui_test_server):
+    """Verifies 3-minute diagnostic pre-test generation, timer, interactive answers, and mastery results screen."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+
+        page.goto(ui_test_server)
+        page.wait_for_selector("#btn-diagnostic-test")
+
+        # 1. Click Diagnostic button
+        page.click("#btn-diagnostic-test", force=True)
+        page.wait_for_selector("#diagnostic-modal:not(.hidden)")
+
+        # 2. Check 3-minute timer badge
+        page.wait_for_selector("#diagnostic-timer-badge")
+        timer_text = page.inner_text("#diagnostic-timer-badge")
+        assert "03:" in timer_text or "02:" in timer_text
+
+        # 3. Wait for questions to render
+        page.wait_for_selector(".diagnostic-option-card", timeout=8000)
+        options = page.query_selector_all(".diagnostic-option-card")
+        assert len(options) >= 4
+
+        # 4. Click first option
+        options[0].click()
+        page.wait_for_timeout(300)
+
+        # 5. Submit Diagnostic
+        page.click("#btn-submit-diagnostic")
+        page.wait_for_selector("#btn-finish-diagnostic", timeout=8000)
+
+        # 6. Verify celebratory results screen
+        results_text = page.inner_text("#diagnostic-content-container")
+        assert "Diagnostic Assessment Complete" in results_text
+        assert "Score:" in results_text
+
+        # 7. Close modal via finish button
+        page.click("#btn-finish-diagnostic")
+        page.wait_for_selector("#diagnostic-modal", state="hidden")
+
+        browser.close()
+
+def test_ui_player_auto_advance_and_shortcuts(ui_test_server):
+    """Verifies player auto-advance toggle state and keyboard accessibility."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        page.goto(ui_test_server)
+        page.wait_for_selector("#btn-toggle-auto-advance")
+
+        # 1. Check auto-advance initial state is ON
+        status_text = page.inner_text("#auto-advance-label")
+        assert status_text == "ON"
+
+        # 2. Toggle to OFF
+        page.click("#btn-toggle-auto-advance")
+        page.wait_for_timeout(300)
+        assert page.inner_text("#auto-advance-label") == "OFF"
+
+        # 3. Toggle back to ON
+        page.click("#btn-toggle-auto-advance")
+        page.wait_for_timeout(300)
+        assert page.inner_text("#auto-advance-label") == "ON"
+
+        # 4. Verify keyboard shortcut Escape closes any open modal
+        page.click("#btn-settings")
+        page.wait_for_selector("#settings-modal:not(.hidden)")
+        page.keyboard.press("Escape")
+        page.wait_for_selector("#settings-modal", state="hidden")
+
+        browser.close()
+
+def test_ui_drag_and_drop_schedule_attributes(ui_test_server):
+    """Verifies draggable cards and day dropzone attributes on schedule timeline."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        page.goto(ui_test_server)
+        page.wait_for_selector(".allocation-card")
+
+        # 1. Verify cards are draggable with data attributes and drag handle
+        first_card = page.locator(".allocation-card").first
+        is_draggable = first_card.get_attribute("draggable")
+        assert is_draggable == "true"
+        alloc_id = first_card.get_attribute("data-alloc-id")
+        assert alloc_id is not None
+        source_date = first_card.get_attribute("data-source-date")
+        assert source_date is not None
+
+        # 2. Verify drag handle icon exists
+        drag_handle = first_card.locator(".drag-handle")
+        assert drag_handle.is_visible()
+
+        # 3. Verify day card dropzone attributes
+        day_cards = page.locator(".day-group-card")
+        assert day_cards.count() >= 1
+        first_day = day_cards.first
+        assert first_day.get_attribute("data-day-date") is not None
+        assert "window.handleDayDrop" in (first_day.get_attribute("ondrop") or "")
+
+        browser.close()

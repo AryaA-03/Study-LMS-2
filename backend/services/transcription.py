@@ -310,13 +310,16 @@ async def fetch_youtube_captions(
 # ---------------------------------------------------------------------------
 
 def is_mlx_whisper_available() -> bool:
-    """Checks if mlx-whisper is installed on Apple Silicon."""
+    """Checks if mlx-whisper is installed and Apple Metal GPU device is usable."""
     if platform.system() != "Darwin" or platform.machine() != "arm64":
         return False
     try:
         import mlx_whisper  # noqa
+        import mlx.core as mx
+        _ = mx.default_device()
         return True
-    except ImportError:
+    except Exception as e:
+        logger.debug(f"mlx-whisper / Metal device not currently usable: {e}")
         return False
 
 
@@ -460,19 +463,19 @@ async def ingest_lesson_transcript(
     chunks = await fetch_youtube_captions(video_id_or_url, start_sec, end_sec)
     transcript_type = "captions"
 
-    # 2. Whisper Fallback if captions are missing and synchronous Whisper is enabled
-    if not chunks and os.environ.get("ENABLE_WHISPER_SYNC", "false").lower() == "true":
-        if is_mlx_whisper_available() or is_faster_whisper_available():
-            logger.info(f"Captions missing for {video_id_or_url}. Attempting lazy Whisper audio slice...")
-            try:
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    temp_wav = os.path.join(tmp_dir, f"slice_{lesson_id}.wav")
-                    extracted = extract_audio_slice(video_id_or_url, start_sec, end_sec, temp_wav)
-                    if extracted and os.path.exists(temp_wav):
-                        chunks = transcribe_audio_slice_with_whisper(temp_wav, base_offset_sec=start_sec)
+    # 2. Whisper Fallback if captions are missing and Whisper is available or explicitly enabled
+    if not chunks and (is_mlx_whisper_available() or is_faster_whisper_available() or os.environ.get("ENABLE_WHISPER_SYNC", "false").lower() == "true"):
+        logger.info(f"Captions missing for {video_id_or_url}. Attempting lazy Whisper audio slice...")
+        try:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                temp_wav = os.path.join(tmp_dir, f"slice_{lesson_id}.wav")
+                extracted = extract_audio_slice(video_id_or_url, start_sec, end_sec, temp_wav)
+                if extracted and os.path.exists(temp_wav):
+                    chunks = transcribe_audio_slice_with_whisper(temp_wav, base_offset_sec=start_sec)
+                    if chunks:
                         transcript_type = "whisper"
-            except Exception as e:
-                logger.warning(f"Whisper slice extraction error for {lesson_id}: {e}")
+        except Exception as e:
+            logger.warning(f"Whisper slice extraction error for {lesson_id}: {e}")
 
     # 3. Structured Lesson Chunk Fallback if offline / captions 429 / audio format unavailable
     if not chunks:

@@ -268,12 +268,29 @@ def create_and_store_quiz(
             title = custom_title or "Course Review Quiz"
 
     if not chunks:
-        # If no chunks exist yet, create a synthetic grounded question from course/lesson info
-        chunks = [{
-            "id": f"chk_synthetic_{uuid.uuid4().hex[:6]}",
-            "lesson_id": lesson_id,
-            "content": "Theory of Computation studies formal languages, finite automata, and computational complexity.",
-        }]
+        # If no transcript chunks exist yet, sample grounded questions directly from course syllabus lessons
+        cur.execute(
+            "SELECT id, title, chapter_title FROM lessons WHERE course_id = ? ORDER BY order_index ASC LIMIT 25;",
+            (course_id,)
+        )
+        l_rows = cur.fetchall()
+        if l_rows:
+            chunks = []
+            for idx, lr in enumerate(l_rows):
+                lid = lr[0]
+                ltitle = lr[1]
+                ch_title = lr[2] or ltitle
+                chunks.append({
+                    "id": f"chk_les_{lid[:8]}_{idx}",
+                    "lesson_id": lid,
+                    "content": f"{ltitle} is a foundational course topic. Understanding {ch_title} is defined as a primary requirement for exam problem solving and analytical correctness.",
+                })
+        else:
+            chunks = [{
+                "id": f"chk_synthetic_{uuid.uuid4().hex[:6]}",
+                "lesson_id": lesson_id,
+                "content": "Core syllabus concepts and principles are defined as the fundamental baseline for this examination.",
+            }]
 
     # Generate questions deterministically (fast, reliable, offline-ready)
     questions = generate_no_key_questions(chunks, question_count=question_count, quiz_type=quiz_type)

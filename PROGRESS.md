@@ -31,8 +31,16 @@
   - [x] Selective video toggling: curriculum drawer with "Skip All Examples", search filter, and individual inclusion checkboxes
   - [x] Full-spectrum logging: color-coded terminal HTTP request logging and rich F12 browser console logger (`[LearnLMS:...]`)
   - [x] Interactive browser inspection: exposed `window.learnLMS` global object for debugging
-  - [x] Live browser test suite: 5 Playwright tests in `tests/test_live_browser_ui.py` validating themes, date alignment, collapsing, filtering, and F12 logs
-  - [x] 53 tests passed (100% pass rate across all 38 unit/integration, 5 live YouTube smoke, and 10 Playwright E2E tests)
+  - [x] Live browser test suite: 8 Playwright tests in `tests/test_live_browser_ui.py` validating themes, date alignment, collapsing, filtering, and F12 logs
+- [x] Milestone 6: Frictionless Flow, 3-Minute Merging, Drag-and-Drop & Diagnostic Engine (`v0.6-buttery-smooth`)
+  - [x] Sub-3-Minute Chapter Merging Rule (180s threshold) in `backend/services/youtube.py` preventing micro-fragment lessons
+  - [x] Interactive 3-Minute Diagnostic Pre-Test with live timer countdown, option card selection, mastery calculation, schedule reflow, and celebratory results screen
+  - [x] Video Player Auto-Advance: automatically completes current allocation and seamlessly cues next lesson slice when reaching `allocated_end_sec`
+  - [x] Two-Way Live Timestamp Highlighting in Grounded Notes: synchronized with active video playback
+  - [x] Native Drag-and-Drop Schedule Reordering: drag lesson cards directly between calendar days with drop highlighting and optimistic API persistence
+  - [x] Resilient Metal-Safe Whisper Device Probing: `mlx_whisper` device checking with seamless CPU/metadata fallback
+  - [x] Global Keyboard Navigation (`Space` play/pause, `[`/`]` 10s jump, `M` complete, `Escape` close modal)
+  - [x] Non-blocking gradient toast notifications replacing browser `alert()` dialogs across all flows
 
 ## Verification Summary (Full 53-Test Suite)
 - `tests/test_scheduler.py`: 10 passed

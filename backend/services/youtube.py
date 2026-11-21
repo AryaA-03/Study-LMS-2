@@ -171,29 +171,91 @@ def format_duration(seconds: Optional[int]) -> str:
         return f"{h:02d}:{m:02d}:{s:02d}"
     return f"{m:02d}:{s:02d}"
 
+def merge_short_chapters(
+    chapters: List[Dict[str, Any]],
+    total_duration: int,
+    min_duration_sec: int = 180,
+) -> List[Dict[str, Any]]:
+    """Merges chapters shorter than min_duration_sec (default 3 min = 180s) into adjacent chapters.
+
+    Prevents micro-fragment lessons (e.g. 10s intro bumpers) while preserving complete video coverage.
+    """
+    if not chapters:
+        return []
+
+    raw_list = []
+    for idx, ch in enumerate(chapters):
+        ch_title = ch.get("title", f"Chapter {idx + 1}")
+        start_sec = int(ch.get("start_time", 0))
+        end_sec = int(ch.get("end_time", total_duration))
+        duration = end_sec - start_sec
+        if duration <= 0:
+            continue
+        raw_list.append({
+            "title": ch_title,
+            "start_time": start_sec,
+            "end_time": end_sec,
+            "duration": duration,
+        })
+
+    if len(raw_list) <= 1:
+        return raw_list
+
+    merged = []
+    i = 0
+    while i < len(raw_list):
+        curr = dict(raw_list[i])
+        # If this chapter is shorter than min_duration_sec, merge with subsequent chapters
+        while curr["duration"] < min_duration_sec and (i + 1) < len(raw_list):
+            nxt = raw_list[i + 1]
+            curr["end_time"] = nxt["end_time"]
+            curr["duration"] = curr["end_time"] - curr["start_time"]
+            # Combine titles if curr title is not a generic intro/outro and nxt is also short
+            c_low = curr["title"].lower()
+            if nxt["duration"] >= min_duration_sec:
+                curr["title"] = nxt["title"]
+            elif not any(kw in c_low for kw in ["intro", "bumper", "teaser", "welcome", "about this video", "break"]):
+                curr["title"] = f"{curr['title']} & {nxt['title']}"
+            else:
+                curr["title"] = nxt["title"]
+            i += 1
+
+        # If it is the trailing chapter and still under min_duration_sec, merge into the previous chapter
+        if curr["duration"] < min_duration_sec and merged:
+            prev = merged[-1]
+            prev["end_time"] = curr["end_time"]
+            prev["duration"] = prev["end_time"] - prev["start_time"]
+        else:
+            merged.append(curr)
+        i += 1
+
+    return merged
+
 def split_video_into_lessons(
     video_meta: Dict[str, Any],
     default_chunk_min: int = 15,
+    min_chapter_sec: int = 180,
 ) -> List[Dict[str, Any]]:
     """Splits a video into lessons:
 
-    - If chapters are present in metadata: 1 chapter = 1 lesson
+    - If chapters are present in metadata: merges any sub-3-minute (180s) chapters, then 1 chapter = 1 lesson
     - If chapter-less: splits deterministically into fixed 15-20 min lessons
     """
     video_id = video_meta.get("id")
     video_url = video_meta.get("webpage_url") or f"https://www.youtube.com/watch?v={video_id}"
     video_title = video_meta.get("title", "Video Lecture")
     total_duration = int(video_meta.get("duration") or 0)
-    chapters = video_meta.get("chapters")
+    raw_chapters = video_meta.get("chapters")
 
     lessons: List[Dict[str, Any]] = []
 
-    if chapters and len(chapters) > 0:
-        # Chapter-based splitting
-        for idx, ch in enumerate(chapters):
+    if raw_chapters and len(raw_chapters) > 0:
+        # Chapter-based splitting with 3-minute merging rule
+        effective_chapters = merge_short_chapters(raw_chapters, total_duration, min_duration_sec=min_chapter_sec)
+        for idx, ch in enumerate(effective_chapters):
             ch_title = ch.get("title", f"Chapter {idx + 1}")
-            start_sec = int(ch.get("start_time", 0))
-            end_sec = int(ch.get("end_time", total_duration))
+            start_sec = ch.get("start_time", 0)
+            end_sec = ch.get("end_time", total_duration)
             duration = end_sec - start_sec
             if duration <= 0:
                 continue
