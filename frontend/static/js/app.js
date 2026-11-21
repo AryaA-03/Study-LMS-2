@@ -1219,11 +1219,11 @@ async function handleSavePersonalNotesManual() {
 // --- Strategy Switching (Paced vs Fixed) ---
 function updateStrategyPills(strategy) {
   if (strategy === 'paced') {
-    pillStrategyPaced.className = 'px-2.5 py-1 rounded-md font-semibold transition strategy-btn bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm';
-    pillStrategyFixed.className = 'px-2.5 py-1 rounded-md font-medium transition strategy-btn text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200';
+    pillStrategyPaced.className = 'px-2 py-0.5 rounded font-medium transition strategy-btn bg-blue-600 text-white shadow-sm';
+    pillStrategyFixed.className = 'px-2 py-0.5 rounded font-medium transition strategy-btn text-alabaster-muted dark:text-charcoal-muted hover:text-alabaster-text dark:hover:text-charcoal-text';
   } else {
-    pillStrategyFixed.className = 'px-2.5 py-1 rounded-md font-semibold transition strategy-btn bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm';
-    pillStrategyPaced.className = 'px-2.5 py-1 rounded-md font-medium transition strategy-btn text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200';
+    pillStrategyFixed.className = 'px-2 py-0.5 rounded font-medium transition strategy-btn bg-blue-600 text-white shadow-sm';
+    pillStrategyPaced.className = 'px-2 py-0.5 rounded font-medium transition strategy-btn text-alabaster-muted dark:text-charcoal-muted hover:text-alabaster-text dark:hover:text-charcoal-text';
   }
 }
 
@@ -1362,11 +1362,11 @@ function renderSchedule(sched) {
   updateStrategyPills(sched.schedule_strategy || 'paced');
   if (pillBufferZero && pillBufferTwo) {
     if (sched.revision_buffer_days === 0) {
-      pillBufferZero.className = 'px-2 py-0.5 rounded-md font-semibold transition bg-indigo-600 text-white shadow-sm';
-      pillBufferTwo.className = 'px-2 py-0.5 rounded-md font-medium transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
+      pillBufferZero.className = 'px-1.5 py-0.5 rounded font-semibold transition bg-blue-600 text-white shadow-sm';
+      pillBufferTwo.className = 'px-1.5 py-0.5 rounded font-medium transition text-alabaster-muted dark:text-charcoal-muted hover:text-alabaster-text dark:hover:text-charcoal-text';
     } else {
-      pillBufferTwo.className = 'px-2 py-0.5 rounded-md font-semibold transition bg-indigo-600 text-white shadow-sm';
-      pillBufferZero.className = 'px-2 py-0.5 rounded-md font-medium transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
+      pillBufferTwo.className = 'px-1.5 py-0.5 rounded font-semibold transition bg-blue-600 text-white shadow-sm';
+      pillBufferZero.className = 'px-1.5 py-0.5 rounded font-medium transition text-alabaster-muted dark:text-charcoal-muted hover:text-alabaster-text dark:hover:text-charcoal-text';
     }
   }
 
@@ -1398,11 +1398,11 @@ function renderSchedule(sched) {
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Render Day Groups (CourseIt style with radiant badges)
+  // Render Day Groups (Clean, Calm Academic Layout)
   sched.days.forEach(day => {
     const isToday = (day.date === todayStr);
     const dayEl = document.createElement('div');
-    dayEl.className = `day-group-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm transition-all duration-150 hover:border-slate-300 dark:hover:border-slate-700 ${isToday ? 'ring-2 ring-indigo-500 dark:ring-indigo-400 shadow-md shadow-indigo-500/15' : ''}`;
+    dayEl.className = `day-group-card bg-alabaster-card dark:bg-charcoal-card border border-alabaster-border dark:border-charcoal-border rounded-xl overflow-hidden shadow-none transition-all duration-150 ${isToday ? 'ring-1 ring-blue-500/50' : ''}`;
     dayEl.setAttribute('data-day-date', day.date);
     dayEl.setAttribute('ondragover', 'window.handleDayDragOver(event, this)');
     dayEl.setAttribute('ondragleave', 'window.handleDayDragLeave(event, this)');
@@ -1410,45 +1410,42 @@ function renderSchedule(sched) {
 
     let badgeHtml = '';
     if (isToday) {
-      badgeHtml += '<span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-mono shadow-sm">✨ Today</span>';
+      badgeHtml += '<span class="text-[9px] font-semibold uppercase px-1.5 py-0.2 rounded bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono">Today</span>';
     }
     if (day.is_revision_day) {
-      badgeHtml += '<span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800/80 font-mono">Revision Buffer</span>';
+      badgeHtml += '<span class="text-[9px] font-medium uppercase px-1.5 py-0.2 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-mono">Buffer</span>';
     } else if (day.is_rest_day) {
-      badgeHtml += '<span class="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800 font-mono">Rest Day</span>';
+      badgeHtml += '<span class="text-[9px] font-medium uppercase px-1.5 py-0.2 rounded bg-alabaster-subcard text-alabaster-muted dark:bg-charcoal-subcard dark:text-charcoal-muted font-mono">Rest</span>';
     }
 
     const isCollapsed = collapsedDays.has(day.date);
 
     const dayHeader = `
-      <div class="px-3.5 py-2.5 bg-slate-50/90 dark:bg-slate-950/90 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs cursor-pointer select-none" onclick="window.toggleDayCollapse('${day.date}')">
-        <div class="flex items-center gap-2">
-          <svg id="day-chevron-${day.date}" class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 transition-transform day-chevron" style="transform: ${isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-          <span class="font-bold text-slate-900 dark:text-slate-100">${day.day_name}, ${formatDateDisplay(day.date)}</span>
+      <div class="px-3 py-1.5 bg-alabaster-subcard/50 dark:bg-charcoal-subcard/50 border-b border-alabaster-border dark:border-charcoal-border flex items-center justify-between text-xs cursor-pointer select-none" onclick="window.toggleDayCollapse('${day.date}')">
+        <div class="flex items-center gap-1.5">
+          <svg id="day-chevron-${day.date}" class="w-3.5 h-3.5 text-alabaster-muted dark:text-charcoal-muted transition-transform day-chevron" style="transform: ${isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          <span class="font-medium text-alabaster-text dark:text-charcoal-text">${day.day_name}, ${formatDateDisplay(day.date)}</span>
           ${badgeHtml}
         </div>
-        <span class="text-indigo-600 dark:text-indigo-400 font-mono font-bold text-xs bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-800/80">${Math.round(day.total_effective_minutes)} min</span>
+        <span class="text-blue-600 dark:text-blue-400 font-mono font-semibold text-[11px]">${Math.round(day.total_effective_minutes)}m</span>
       </div>
     `;
 
     let allocsHtml = '';
     if (day.allocations.length === 0) {
       allocsHtml = `
-        <div class="p-3 text-xs text-slate-400 dark:text-slate-500 italic text-center">
-          ${day.is_revision_day ? 'Dedicated strictly for comprehensive revision & mock exams.' : day.is_rest_day ? 'Rest & recharge day.' : 'No study allocations. Drag lessons here to schedule.'}
+        <div class="p-2.5 text-xs text-alabaster-muted dark:text-charcoal-muted italic text-center">
+          ${day.is_revision_day ? 'Dedicated strictly for comprehensive revision.' : day.is_rest_day ? 'Rest & recharge.' : 'No study allocations.'}
         </div>
       `;
     } else {
-      allocsHtml = `<div class="divide-y divide-slate-100 dark:divide-slate-800/80">`;
+      allocsHtml = `<div class="divide-y divide-alabaster-border/40 dark:divide-charcoal-border/40">`;
       day.allocations.forEach(alloc => {
         const isCompleted = alloc.is_completed;
-        const splitText = alloc.split_count > 1 ? `Part ${alloc.split_index + 1}/${alloc.split_count}` : '';
-        const priorityBadge = alloc.priority === 'deep-dive' 
-          ? `<button type="button" class="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-mono hover:scale-105 active:scale-95 transition" onclick="window.toggleAllocPriority('${alloc.lesson_id}', event)" title="Click to toggle Priority (Core / Deep-Dive)">Deep-Dive</button>`
-          : `<button type="button" class="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-mono hover:scale-105 active:scale-95 transition" onclick="window.toggleAllocPriority('${alloc.lesson_id}', event)" title="Click to toggle Priority (Core / Deep-Dive)">Core</button>`;
+        const splitText = alloc.split_count > 1 ? ` (${alloc.split_index + 1}/${alloc.split_count})` : '';
 
         allocsHtml += `
-          <div class="allocation-card p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition flex items-start gap-2 cursor-pointer alloc-item group ${isCompleted ? 'opacity-50' : ''}" 
+          <div class="allocation-card px-2.5 py-1.5 hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition flex items-center justify-between gap-2 cursor-pointer alloc-item group ${isCompleted ? 'opacity-40' : ''}" 
                data-alloc-id="${alloc.id}" 
                data-source-date="${day.date}"
                draggable="true"
@@ -1456,26 +1453,26 @@ function renderSchedule(sched) {
                ondragend="window.handleCardDragEnd(event, this)"
                onclick="window.selectAllocation('${alloc.id}')">
             
-            <div class="drag-handle text-slate-300 dark:text-slate-600 hover:text-indigo-500 cursor-grab active:cursor-grabbing shrink-0 mt-1 select-none" title="Drag to move to another day">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/></svg>
-            </div>
-            <input type="checkbox" class="btn-complete-allocation mt-1 rounded text-indigo-600 focus:ring-0 alloc-checkbox cursor-pointer" data-alloc-id="${alloc.id}" ${isCompleted ? 'checked' : ''} onclick="event.stopPropagation()">
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-1.5 mb-1 flex-wrap">
-                ${priorityBadge}
-                ${splitText ? `<span class="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-bold">${splitText}</span>` : ''}
-                <span class="text-[10px] text-cyan-600 dark:text-cyan-400 font-mono font-medium">[${formatDurationSec(alloc.allocated_start_sec)} - ${formatDurationSec(alloc.allocated_end_sec)}]</span>
+            <div class="flex items-center gap-1.5 min-w-0 flex-1">
+              <div class="drag-handle text-alabaster-muted/40 hover:text-blue-500 cursor-grab active:cursor-grabbing shrink-0 select-none text-[11px]" title="Drag to move to another day">
+                ⋮⋮
               </div>
-              <h4 class="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition ${isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : ''}">${alloc.lesson_title}</h4>
-              <div class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">${alloc.effective_minutes} min (effective)</div>
+              <input type="checkbox" class="btn-complete-allocation rounded text-blue-600 focus:ring-0 alloc-checkbox cursor-pointer w-3.5 h-3.5 shrink-0" data-alloc-id="${alloc.id}" ${isCompleted ? 'checked' : ''} onclick="event.stopPropagation()">
+              <h4 class="text-xs text-alabaster-text dark:text-charcoal-text truncate font-normal group-hover:text-blue-600 dark:group-hover:text-blue-400 transition ${isCompleted ? 'line-through text-alabaster-muted dark:text-charcoal-muted' : ''}">
+                ${alloc.lesson_title}${splitText}
+              </h4>
             </div>
-            <div class="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100 transition">
-              <button class="p-1 rounded text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Edit lesson title, notes, priority or move to date" onclick="window.editScheduleLesson('${alloc.lesson_id}', '${alloc.id}', event)">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-              </button>
-              <button class="btn-skip-allocation p-1 rounded text-slate-400 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Skip lesson & reflow" onclick="window.skipAllocation('${alloc.id}', event)">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
-              </button>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span class="text-[11px] font-mono text-alabaster-muted dark:text-charcoal-muted">${Math.round(alloc.effective_minutes)}m</span>
+              <div class="flex items-center opacity-0 group-hover:opacity-100 transition">
+                <button class="p-0.5 rounded text-alabaster-muted hover:text-blue-600 dark:hover:text-blue-400" title="Edit lesson" onclick="window.editScheduleLesson('${alloc.lesson_id}', '${alloc.id}', event)">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                </button>
+                <button class="btn-skip-allocation p-0.5 rounded text-alabaster-muted hover:text-amber-500" title="Skip lesson & reflow" onclick="window.skipAllocation('${alloc.id}', event)">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
+                </button>
+              </div>
             </div>
           </div>
         `;
@@ -1613,11 +1610,20 @@ function updateActiveLessonUI(alloc) {
 
   if (alloc.is_completed) {
     activeCompleteLabel.textContent = 'Completed';
-    btnToggleActiveComplete.classList.replace('bg-emerald-600', 'bg-slate-700');
+    btnToggleActiveComplete.className = 'bg-alabaster-hover dark:bg-charcoal-hover text-alabaster-muted dark:text-charcoal-muted text-[11px] font-medium px-2.5 py-1 rounded transition flex items-center gap-1';
   } else {
     activeCompleteLabel.textContent = 'Mark Complete';
-    btnToggleActiveComplete.classList.replace('bg-slate-700', 'bg-emerald-600');
+    btnToggleActiveComplete.className = 'bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-medium px-2.5 py-1 rounded transition flex items-center gap-1 shadow-sm active:scale-95';
   }
+
+  // Highlight active allocation card in left syllabus rail
+  document.querySelectorAll('.allocation-card').forEach(card => {
+    if (card.getAttribute('data-alloc-id') === alloc.id) {
+      card.classList.add('bg-blue-50/80', 'dark:bg-blue-950/40', 'border-l-2', 'border-blue-600', 'dark:border-blue-400');
+    } else {
+      card.classList.remove('bg-blue-50/80', 'dark:bg-blue-950/40', 'border-l-2', 'border-blue-600', 'dark:border-blue-400');
+    }
+  });
 }
 
 async function toggleAllocation(allocId) {
@@ -2265,58 +2271,67 @@ function formatBytes(bytes) {
 
 // --- Notes, Transcription & Keyframe Functions ---
 function switchNotesTab(tab) {
-  const inactiveClass = ['font-medium', 'text-slate-500', 'hover:text-slate-900', 'dark:text-slate-400', 'dark:hover:text-white', 'border-transparent'];
+  const inactiveClass = ['font-medium', 'text-alabaster-muted', 'dark:text-charcoal-muted', 'hover:text-alabaster-text', 'dark:hover:text-charcoal-text', 'border-transparent'];
+  const activeClass = ['font-semibold', 'text-blue-600', 'dark:text-blue-400', 'border-blue-600', 'dark:border-blue-400'];
 
-  const allTabs = [
-    { 
-      id: 'grounded', 
-      btn: tabGroundedNotes, 
-      pane: paneGroundedNotes,
-      active: ['font-bold', 'text-indigo-600', 'dark:text-indigo-300', 'bg-white', 'dark:bg-slate-800', 'shadow-sm', 'border', 'border-indigo-200', 'dark:border-indigo-800/80'],
-    },
+  const studioTabs = [
     { 
       id: 'personal', 
       btn: tabPersonalNotes, 
       pane: panePersonalNotes,
-      active: ['font-bold', 'text-emerald-600', 'dark:text-emerald-300', 'bg-white', 'dark:bg-slate-800', 'shadow-sm', 'border', 'border-emerald-200', 'dark:border-emerald-800/80'],
-    },
-    { 
-      id: 'qa', 
-      btn: tabQaNotebook, 
-      pane: paneQaNotebook,
-      active: ['font-bold', 'text-purple-600', 'dark:text-purple-300', 'bg-white', 'dark:bg-slate-800', 'shadow-sm', 'border', 'border-purple-200', 'dark:border-purple-800/80'],
     },
     { 
       id: 'quiz', 
       btn: tabQuizMastery, 
       pane: paneQuizMastery,
-      active: ['font-bold', 'text-amber-600', 'dark:text-amber-300', 'bg-white', 'dark:bg-slate-800', 'shadow-sm', 'border', 'border-amber-200', 'dark:border-amber-800/80'],
     },
     { 
       id: 'flashcards', 
       btn: tabFlashcardsFsrs, 
       pane: paneFlashcardsFsrs,
-      active: ['font-bold', 'text-rose-600', 'dark:text-rose-300', 'bg-white', 'dark:bg-slate-800', 'shadow-sm', 'border', 'border-rose-200', 'dark:border-rose-800/80'],
+    },
+    { 
+      id: 'qa', 
+      btn: tabQaNotebook, 
+      pane: paneQaNotebook,
     },
     { 
       id: 'pyodide', 
       btn: tabPyodideScratchpad, 
       pane: panePyodideScratchpad,
-      active: ['font-bold', 'text-cyan-600', 'dark:text-cyan-300', 'bg-white', 'dark:bg-slate-800', 'shadow-sm', 'border', 'border-cyan-200', 'dark:border-cyan-800/80'],
     },
   ];
 
-  allTabs.forEach(t => {
-    t.active.forEach(cls => t.btn.classList.remove(cls));
-    t.btn.classList.add(...inactiveClass);
-    t.pane.classList.add('hidden');
+  // If user requested 'grounded' (e.g. from legacy script), ensure center reading pane is visible and show personal notes or quiz on right
+  if (tab === 'grounded') {
+    if (paneGroundedNotes) paneGroundedNotes.classList.remove('hidden');
+    tab = 'quiz';
+  }
+
+  studioTabs.forEach(t => {
+    if (t.btn) {
+      t.btn.classList.remove(...activeClass);
+      t.btn.classList.add(...inactiveClass);
+    }
+    if (t.pane) {
+      t.pane.classList.add('hidden');
+    }
   });
 
-  const active = allTabs.find(t => t.id === tab);
+  const active = studioTabs.find(t => t.id === tab);
   if (active) {
-    active.btn.classList.remove(...inactiveClass);
-    active.btn.classList.add(...active.active);
-    active.pane.classList.remove('hidden');
+    if (active.btn) {
+      active.btn.classList.remove(...inactiveClass);
+      active.btn.classList.add(...activeClass);
+    }
+    if (active.pane) {
+      active.pane.classList.remove('hidden');
+    }
+  }
+
+  // Ensure center grounded notes canvas is visible
+  if (paneGroundedNotes) {
+    paneGroundedNotes.classList.remove('hidden');
   }
 
   if (tab === 'qa' && currentCourseId) {
@@ -2394,7 +2409,7 @@ function renderKeyframesStrip(shots) {
 
 function renderMarkdownNotes(markdownText) {
   if (!markdownText) {
-    notesContent.innerHTML = '<p class="text-slate-500 italic text-xs">No notes generated for this lesson yet. Click "Transcribe" above.</p>';
+    notesContent.innerHTML = '<p class="text-alabaster-muted dark:text-charcoal-muted italic text-xs">No notes generated for this lesson yet. Click "Transcribe" above.</p>';
     return;
   }
 
@@ -2408,10 +2423,10 @@ function renderMarkdownNotes(markdownText) {
   html = html.replace(/&gt; \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n((?:&gt; .*\n?)+)/gi, (match, p1, p2) => {
     const alertType = p1.toUpperCase();
     const alertBody = p2.replace(/&gt; ?/g, '');
-    let colorClass = 'border-blue-500/60 bg-blue-950/40 text-blue-200';
-    if (alertType === 'IMPORTANT') colorClass = 'border-amber-500/60 bg-amber-950/40 text-amber-200';
-    if (alertType === 'WARNING') colorClass = 'border-red-500/60 bg-red-950/40 text-red-200';
-    if (alertType === 'TIP') colorClass = 'border-emerald-500/60 bg-emerald-950/40 text-emerald-200';
+    let colorClass = 'border-blue-500/60 bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200';
+    if (alertType === 'IMPORTANT') colorClass = 'border-amber-500/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200';
+    if (alertType === 'WARNING') colorClass = 'border-red-500/60 bg-red-50 dark:bg-red-950/40 text-red-900 dark:text-red-200';
+    if (alertType === 'TIP') colorClass = 'border-emerald-500/60 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200';
     return `<div class="p-3 my-2 border-l-4 rounded-r-lg ${colorClass} text-xs leading-relaxed">
       <div class="font-bold uppercase tracking-wider mb-1">${alertType}</div>
       <div>${alertBody}</div>
@@ -2419,22 +2434,31 @@ function renderMarkdownNotes(markdownText) {
   });
 
   // Images ![caption](url)
-  html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<div class="my-3"><img src="$2" alt="$1" class="rounded-lg border border-slate-700 max-h-56 object-cover shadow-lg mx-auto"><div class="text-[11px] text-center text-slate-400 mt-1 italic">$1</div></div>');
+  html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<div class="my-3"><img src="$2" alt="$1" class="rounded-xl border border-alabaster-border dark:border-charcoal-border max-h-60 object-cover shadow-sm mx-auto"><div class="text-[11px] text-center text-alabaster-muted dark:text-charcoal-muted mt-1 italic">$1</div></div>');
 
   // Headings
-  html = html.replace(/^### (.*$)/gim, '<h3 class="text-sm font-bold text-violet-300 mt-3 mb-1">$1</h3>');
-  html = html.replace(/^## (.*$)/gim, '<h2 class="text-base font-bold text-white mt-4 mb-2 pb-1 border-b border-slate-800">$1</h2>');
-  html = html.replace(/^# (.*$)/gim, '<h1 class="text-lg font-extrabold text-white mt-4 mb-2 pb-1 border-b border-slate-700">$1</h1>');
+  html = html.replace(/^### (.*$)/gim, '<h3 class="text-xs sm:text-sm font-semibold text-alabaster-text dark:text-charcoal-text mt-3 mb-1">$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2 class="text-sm sm:text-base font-semibold text-alabaster-text dark:text-charcoal-text mt-4 mb-1.5 pb-1 border-b border-alabaster-border dark:border-charcoal-border">$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1 class="text-base sm:text-lg font-bold text-alabaster-text dark:text-charcoal-text mt-4 mb-2 pb-1 border-b border-alabaster-border dark:border-charcoal-border">$1</h1>');
 
   // Bold & Italic
-  html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
-  html = html.replace(/\*(.*?)\*/g, '<em class="text-slate-300">$1</em>');
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-alabaster-text dark:text-charcoal-text font-semibold">$1</strong>');
+  html = html.replace(/\*(.*?)\*/g, '<em class="text-alabaster-muted dark:text-charcoal-muted italic">$1</em>');
 
   // Code spans
-  html = html.replace(/`([^`]+)`/g, '<code class="bg-surface-950 text-violet-300 px-1.5 py-0.5 rounded text-[11px] font-mono border border-slate-800">$1</code>');
+  html = html.replace(/`([^`]+)`/g, '<code class="bg-alabaster-subcard dark:bg-charcoal-subcard text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded text-[11px] font-mono border border-alabaster-border dark:border-charcoal-border">$1</code>');
 
   // Bullets
-  html = html.replace(/^- (.*$)/gim, '<div class="flex items-start gap-2 my-1 text-xs text-slate-300 leading-normal"><span class="text-violet-400 mt-0.5">•</span><span>$1</span></div>');
+  html = html.replace(/^- (.*$)/gim, '<div class="flex items-start gap-2 my-1 text-xs text-alabaster-text dark:text-charcoal-text leading-relaxed"><span class="text-blue-600 dark:text-blue-400 mt-0.5">•</span><span>$1</span></div>');
+
+  // Markdown seek links [text](seek://seconds) or [[04:12]](seek://252)
+  html = html.replace(/\[(?:\[)?([^\]]+?)(?:\])?\]\(seek:\/\/(\d+)\)/g, (match, label, sec) => {
+    const totalSec = parseInt(sec, 10);
+    return `<button type="button" data-timestamp-sec="${totalSec}" onclick="window.seekToSeconds(${totalSec})" class="timestamp-link inline-flex items-center gap-1 font-mono text-[11px] font-medium bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/80 rounded px-1.5 py-0.2 cursor-pointer transition shadow-sm active:scale-95" title="Jump to ${label}"><span>▶</span> ${label}</button>`;
+  });
+
+  // Standard markdown links [label](url)
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">$1</a>');
 
   // Clickable Timestamps [MM:SS] or [HH:MM:SS]
   html = html.replace(/\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]/g, (match, p1, p2, p3) => {
@@ -2444,7 +2468,7 @@ function renderMarkdownNotes(markdownText) {
     } else {
       totalSec = parseInt(p1, 10) * 60 + parseInt(p2, 10);
     }
-    return `<button type="button" data-timestamp-sec="${totalSec}" onclick="window.seekToSeconds(${totalSec})" class="timestamp-link inline-flex items-center gap-1 font-mono text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/90 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80 rounded-md px-2 py-0.5 cursor-pointer transition shadow-sm active:scale-95" title="Jump video to ${match}"><span>▶</span> ${match}</button>`;
+    return `<button type="button" data-timestamp-sec="${totalSec}" onclick="window.seekToSeconds(${totalSec})" class="timestamp-link inline-flex items-center gap-1 font-mono text-[11px] font-medium bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/80 rounded px-1.5 py-0.2 cursor-pointer transition shadow-sm active:scale-95" title="Jump video to ${match}"><span>▶</span> ${match}</button>`;
   });
 
   notesContent.innerHTML = html;

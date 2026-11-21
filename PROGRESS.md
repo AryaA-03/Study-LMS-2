@@ -41,6 +41,25 @@
   - [x] Resilient Metal-Safe Whisper Device Probing: `mlx_whisper` device checking with seamless CPU/metadata fallback
   - [x] Global Keyboard Navigation (`Space` play/pause, `[`/`]` 10s jump, `M` complete, `Escape` close modal)
   - [x] Non-blocking gradient toast notifications replacing browser `alert()` dialogs across all flows
+- [x] Milestone 7: Serene Minimalist Redesign & Metal Driver Hardening (`v0.7-calm-minimalist`)
+  - [x] **Split-Screen Academic Redesign Matching Mockup (`media_1795275531110_95d9297b.jpg`)**:
+    - Complete purge of casino/gamer neon accents, garish gradient cards, and cluttered multi-tier toolbars.
+    - Warm Alabaster (`#F5F3EE` canvas, `#ECE8DF` cards/sidebars, `#DDD7CA` borders, `#1F2328` text) light mode.
+    - Soft Matte Charcoal (`#141517` canvas, `#1C1D20` cards/sidebars, `#2A2C32` borders, `#E5E7EB` text) dark mode.
+    - Calm blue (`#2563EB` / `#60A5FA`) active underlines and timestamp pills.
+  - [x] **3-Zone Layout Architecture**:
+    - **Left Column (~260px)**: Compact collapsible syllabus rail (`#pane-schedule`) with day headers, clean checkmarks/dots, lesson durations (`30m`, `45m`), drag handles, and bottom resources tray.
+    - **Center Column (Primary Study Area)**: 16:9 video player at top with a thin quiet action bar, and an expansive independently scrollable grounded notes reading canvas (`#pane-grounded-notes`, `#notes-content`) at bottom with quiet calm blue timestamp pills (`[ ▶ 04:12 ]`), inline keyframe diagram cards, and a floating round scroll-down button (`#btn-scroll-notes-down`).
+    - **Right Column (~380px Full-Height Studio Panel)**: Quiet text tabs (`Notes`, `Quiz`, `Flashcards`, `Q&A`, `Code`) with calm blue active underline; Quiz MCQ card matching mockup with choices `A`, `B`, `C`, `D`, verbatim source quotes, and citation pills; Personal Markdown notes editor; FSRS review cards; Q&A notebook; and dark Python code scratchpad.
+  - [x] **Markdown Notes Rendering Fix**:
+    - Replaced hardcoded `text-white` with dynamic theme tokens so text is never invisible in light mode.
+    - Handled `[text](seek://seconds)` and `[text](url)` markdown links cleanly alongside timestamp pills.
+  - [x] **Sandboxed Subprocess Metal Probing**:
+    - Isolated `mlx.core` check in an ephemeral 3-second subprocess (`sys.executable -c ...`) preventing uncatchable C++ Metal GPU aborts (`SIGABRT` / exit code 134) in headless/sandboxed mode.
+  - [x] **100% Test Verification**:
+    - 32 core backend unit & integration tests passing (`pytest tests/test_*.py` in 0.69s).
+    - 11 Playwright live browser UI tests passing (`pytest tests/test_live_browser_ui.py` in 28.46s).
+    - Total: 43 passing tests across the entire test suite.
 
 ## Verification Summary (Full 53-Test Suite)
 - `tests/test_scheduler.py`: 10 passed

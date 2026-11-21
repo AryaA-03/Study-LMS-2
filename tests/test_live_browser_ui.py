@@ -202,7 +202,7 @@ def test_ui_course_pacing_and_date_alignment(ui_test_server):
     """Verifies user choice between 'Finish on Exam Date' vs 'By Daily Spend' and 0-day vs 2-day buffer."""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
 
         page.goto(ui_test_server)
         page.wait_for_selector("#pane-schedule")
@@ -254,7 +254,7 @@ def test_ui_collapsible_studio_and_days(ui_test_server):
     """Verifies that the Studio video player, Schedule sidebar, and Day cards collapse and expand cleanly."""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
 
         page.goto(ui_test_server)
         page.wait_for_selector("#pane-studio")
@@ -306,7 +306,7 @@ def test_ui_selective_video_filtering_and_curriculum_drawer(ui_test_server):
     """Verifies that the user can open Curriculum Drawer, toggle individual lessons, or filter out example videos."""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
 
         page.goto(ui_test_server)
         page.wait_for_selector("#btn-toggle-curriculum")
@@ -349,7 +349,7 @@ def test_ui_window_inspection_and_console_logger(ui_test_server):
     """Verifies that window.learnLMS is exposed in F12 console and provides programmatic inspection."""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
 
         page.goto(ui_test_server)
         page.wait_for_selector("#pane-studio")
@@ -375,7 +375,7 @@ def test_ui_edit_course_modal_and_replan(ui_test_server):
     """Verifies that user can open Edit Course modal, update course settings, and trigger instant replan."""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
 
         page.goto(ui_test_server)
         page.wait_for_selector("#btn-edit-course")
@@ -407,7 +407,7 @@ def test_ui_edit_lesson_and_priority_toggle(ui_test_server):
     """Verifies inline priority toggle and full lesson editor modal."""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
 
         page.goto(ui_test_server)
         page.wait_for_selector(".allocation-card")
@@ -440,7 +440,7 @@ def test_ui_personal_notes_toolbar_and_save(ui_test_server):
     """Verifies Markdown editor toolbar, character counting, and manual save in Personal Notes."""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
 
         page.goto(ui_test_server)
         page.wait_for_selector("#tab-personal-notes")
@@ -516,7 +516,7 @@ def test_ui_player_auto_advance_and_shortcuts(ui_test_server):
     """Verifies player auto-advance toggle state and keyboard accessibility."""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
 
         page.goto(ui_test_server)
         page.wait_for_selector("#btn-toggle-auto-advance")
@@ -547,7 +547,7 @@ def test_ui_drag_and_drop_schedule_attributes(ui_test_server):
     """Verifies draggable cards and day dropzone attributes on schedule timeline."""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
 
         page.goto(ui_test_server)
         page.wait_for_selector(".allocation-card")

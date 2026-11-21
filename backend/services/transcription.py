@@ -309,18 +309,35 @@ async def fetch_youtube_captions(
 # Lazy Whisper Fallback (Per-Lesson, Audio Slice Only, Apple Silicon Opt)
 # ---------------------------------------------------------------------------
 
+_MLX_VERIFIED: Optional[bool] = None
+
+
 def is_mlx_whisper_available() -> bool:
-    """Checks if mlx-whisper is installed and Apple Metal GPU device is usable."""
+    """Checks if mlx-whisper is installed and Apple Metal GPU device is usable.
+    
+    Uses an isolated subprocess check so any C++ Metal initialization abort in
+    sandboxed/headless environments falls back cleanly to CPU/faster-whisper
+    without crashing the main process.
+    """
+    global _MLX_VERIFIED
+    if _MLX_VERIFIED is not None:
+        return _MLX_VERIFIED
+
     if platform.system() != "Darwin" or platform.machine() != "arm64":
+        _MLX_VERIFIED = False
         return False
+
     try:
-        import mlx_whisper  # noqa
-        import mlx.core as mx
-        _ = mx.default_device()
-        return True
-    except Exception as e:
-        logger.debug(f"mlx-whisper / Metal device not currently usable: {e}")
-        return False
+        res = subprocess.run(
+            [sys.executable, "-c", "import mlx.core as mx; import mlx_whisper; _ = mx.default_device()"],
+            capture_output=True,
+            timeout=3
+        )
+        _MLX_VERIFIED = (res.returncode == 0)
+    except Exception:
+        _MLX_VERIFIED = False
+
+    return _MLX_VERIFIED
 
 
 def is_faster_whisper_available() -> bool:

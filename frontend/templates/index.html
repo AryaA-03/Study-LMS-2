@@ -13,25 +13,29 @@
       theme: {
         extend: {
           colors: {
-            surface: {
-              50: '#f8fafc',
-              100: '#f1f5f9',
-              200: '#e2e8f0',
-              300: '#cbd5e1',
-              400: '#94a3b8',
-              500: '#64748b',
-              600: '#475569',
-              700: '#334155',
-              800: '#1e293b',
-              850: '#161e2e',
-              900: '#0f172a',
-              950: '#09090b',
+            alabaster: {
+              canvas: '#F5F3EE',
+              card: '#ECE8DF',
+              subcard: '#E4DFD5',
+              border: '#DDD7CA',
+              hover: '#E2DDD2',
+              text: '#1F2328',
+              muted: '#6B7280',
             },
-            accent: {
-              amber: '#f59e0b',
-              blue: '#2563eb',
-              emerald: '#10b981',
-              rose: '#f43f5e',
+            charcoal: {
+              canvas: '#141517',
+              card: '#1C1D20',
+              subcard: '#23252A',
+              border: '#2A2C32',
+              hover: '#25272D',
+              text: '#E5E7EB',
+              muted: '#9CA3AF',
+            },
+            calm: {
+              blue: '#2563EB',
+              blueDark: '#60A5FA',
+              blueSubtle: 'rgba(37, 99, 235, 0.08)',
+              blueDarkSubtle: 'rgba(96, 165, 250, 0.12)',
             }
           },
           fontFamily: {
@@ -45,92 +49,98 @@
   <!-- YouTube IFrame API -->
   <script src="https://www.youtube.com/iframe_api"></script>
   <style>
-    /* Modern Root Theme & Font Rendering */
     :root {
       color-scheme: light dark;
       font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     }
     * { box-sizing: border-box; }
     
-    /* Scrollbars */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    html.dark ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 9999px; }
-    html.dark ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
-    html:not(.dark) ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 9999px; }
-    html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
+    html.dark {
+      background-color: #141517;
+      color: #E5E7EB;
+    }
+    html:not(.dark) {
+      background-color: #F5F3EE;
+      color: #1F2328;
+    }
 
-    /* Glass Effect */
-    .glass-nav-dark {
-      background: rgba(9, 9, 11, 0.92);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-    }
-    .glass-nav-light {
-      background: rgba(255, 255, 255, 0.94);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-    }
+    /* Subtle custom scrollbars */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    html.dark ::-webkit-scrollbar-thumb { background: #2A2C32; border-radius: 9999px; }
+    html.dark ::-webkit-scrollbar-thumb:hover { background: #3A3D45; }
+    html:not(.dark) ::-webkit-scrollbar-thumb { background: #DDD7CA; border-radius: 9999px; }
+    html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: #C5BFB0; }
 
     /* 3D Flashcard Transitions */
     .perspective-1000 { perspective: 1000px; }
-    .transform-style-3d { transform-style: preserve-3d; transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+    .transform-style-3d { transform-style: preserve-3d; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
     .backface-hidden { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
     .rotate-y-180 { transform: rotateY(180deg); }
+
+    /* Drag and drop active indicator */
+    .drop-target-active {
+      outline: 2px dashed #2563EB !important;
+      outline-offset: -2px;
+      background-color: rgba(37, 99, 235, 0.06) !important;
+    }
   </style>
 </head>
-<body class="bg-slate-50 dark:bg-[#090d16] text-slate-900 dark:text-slate-100 h-full flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white dark:selection:bg-indigo-400 dark:selection:text-slate-950 overflow-hidden transition-colors duration-200">
+<body class="bg-alabaster-canvas dark:bg-charcoal-canvas text-alabaster-text dark:text-charcoal-text h-full flex flex-col font-sans antialiased selection:bg-blue-600 selection:text-white dark:selection:bg-blue-500 dark:selection:text-black overflow-hidden transition-colors duration-150">
 
-  <!-- Top Navigation Header -->
-  <header class="border-b border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-[#0b101e]/95 backdrop-blur-md z-40 px-4 py-2.5 flex items-center justify-between shrink-0 shadow-sm transition-colors">
-    <!-- Left: App Brand & Badge -->
+  <!-- Top Navigation Header (Minimalist & Calm) -->
+  <header class="border-b border-alabaster-border dark:border-charcoal-border bg-alabaster-card/90 dark:bg-charcoal-card/90 backdrop-blur-md z-40 px-4 py-2 flex items-center justify-between shrink-0 transition-colors">
+    <!-- Left: Window Dots & Course Title + Progress Underline -->
     <div class="flex items-center space-x-3 shrink-0">
-      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 text-white flex items-center justify-center font-black text-sm tracking-tighter shadow-md shadow-indigo-500/25 border border-white/20">
-        ⚡
+      <div class="flex items-center gap-1.5 mr-1">
+        <span class="w-2.5 h-2.5 rounded-full bg-red-400/80 inline-block"></span>
+        <span class="w-2.5 h-2.5 rounded-full bg-amber-400/80 inline-block"></span>
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400/80 inline-block"></span>
       </div>
-      <div>
+      <div class="flex flex-col">
         <div class="flex items-center gap-2">
-          <span class="text-sm font-extrabold tracking-tight bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 dark:from-indigo-400 dark:via-purple-400 dark:to-pink-400 bg-clip-text text-transparent">Learn LMS</span>
-          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-indigo-500/10 to-purple-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20 font-mono">Exam Studio Pro</span>
+          <span id="header-course-title" class="text-xs sm:text-sm font-semibold tracking-tight text-alabaster-text dark:text-charcoal-text truncate max-w-[160px] sm:max-w-xs">DBMS Exam Prep</span>
+          <span id="progress-pct" class="text-[11px] font-mono font-medium text-blue-600 dark:text-blue-400">0%</span>
+        </div>
+        <div class="w-24 sm:w-32 h-0.5 rounded-full bg-alabaster-border dark:bg-charcoal-border overflow-hidden mt-0.5">
+          <div id="progress-bar-fill" class="h-full bg-blue-600 dark:bg-blue-400 rounded-full transition-all duration-300" style="width: 0%"></div>
         </div>
       </div>
     </div>
 
-    <!-- Center: Course Selector, Edit Button, Pacing Modes & Quick Actions -->
+    <!-- Center: Course Selector, Edit, New Goal & Diagnostics -->
     <div class="flex items-center space-x-2 min-w-0">
-      <select id="course-selector" class="bg-slate-100 dark:bg-slate-900 text-xs font-medium border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 max-w-xs truncate shadow-sm">
+      <select id="course-selector" class="bg-alabaster-canvas dark:bg-charcoal-canvas text-xs font-medium border border-alabaster-border dark:border-charcoal-border text-alabaster-text dark:text-charcoal-text rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-xs truncate shadow-sm">
         <option value="">Loading courses...</option>
       </select>
 
-      <!-- Edit Course Button -->
-      <button id="btn-edit-course" class="bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800/80 transition flex items-center gap-1.5 shadow-sm active:scale-95 shrink-0" title="Edit course settings, title, exam date, pace, speed & rest days">
-        <svg class="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+      <button id="btn-edit-course" class="bg-alabaster-hover hover:bg-alabaster-subcard dark:bg-charcoal-hover dark:hover:bg-charcoal-subcard text-alabaster-text dark:text-charcoal-text text-xs font-medium px-2.5 py-1 rounded-lg border border-alabaster-border dark:border-charcoal-border transition flex items-center gap-1 shadow-sm active:scale-95 shrink-0" title="Edit course settings, title, exam date, pace & speed">
+        <svg class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
         <span>Edit Course</span>
       </button>
-      
-      <button id="btn-new-course" class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-md shadow-indigo-500/20 active:scale-95 shrink-0">
+
+      <button id="btn-new-course" class="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition flex items-center gap-1 shadow-sm active:scale-95 shrink-0">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         <span>New Goal</span>
       </button>
 
-      <!-- Pacing Mode Choice Pill (Finish on Exam Date vs Fixed Daily Spend) -->
-      <div class="hidden lg:flex items-center bg-slate-100 dark:bg-slate-900 border border-slate-300/80 dark:border-slate-800 rounded-lg p-0.5 text-[11px] ml-1 shrink-0">
-        <button id="pill-strategy-paced" class="px-2.5 py-1 rounded-md font-semibold transition strategy-btn bg-indigo-600 text-white shadow-sm" title="Spread lessons evenly across all days until exam">
-          🎯 Finish on Exam Date
+      <!-- Pacing Strategy Choice Pills -->
+      <div class="hidden lg:flex items-center bg-alabaster-canvas dark:bg-charcoal-canvas border border-alabaster-border dark:border-charcoal-border rounded-lg p-0.5 text-[11px] ml-1 shrink-0">
+        <button id="pill-strategy-paced" class="px-2 py-0.5 rounded font-medium transition strategy-btn bg-blue-600 text-white shadow-sm" title="Spread lessons evenly across all days until exam">
+          Finish on Exam Date
         </button>
-        <button id="pill-strategy-fixed" class="px-2.5 py-1 rounded-md font-medium transition strategy-btn text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200" title="Fixed daily minutes (Sprint mode)">
-          ⚡ By Daily Spend
+        <button id="pill-strategy-fixed" class="px-2 py-0.5 rounded font-medium transition strategy-btn text-alabaster-muted dark:text-charcoal-muted hover:text-alabaster-text dark:hover:text-charcoal-text" title="Fixed daily minutes (Sprint mode)">
+          By Daily Spend
         </button>
       </div>
 
       <!-- Diagnostic & Mock Exam Quick Buttons -->
       <div class="flex items-center space-x-1.5 ml-1 shrink-0">
-        <button id="btn-diagnostic-test" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/50 dark:hover:bg-amber-900/70 text-[11px] font-bold text-amber-700 dark:text-amber-300 border border-amber-300/80 dark:border-amber-700/60 shadow-sm transition active:scale-95" title="Take a 3-min diagnostic pre-test to test out of known topics">
-          <svg class="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <button id="btn-diagnostic-test" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-[11px] font-medium text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/80 transition active:scale-95" title="Take a 3-min diagnostic pre-test to test out of known topics">
+          <svg class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           <span>Diagnostic (3m)</span>
         </button>
-        <button id="btn-mock-exam" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/70 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-700/60 shadow-sm transition active:scale-95" title="Start a timed full mock exam">
-          <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <button id="btn-mock-exam" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-alabaster-hover hover:bg-alabaster-subcard dark:bg-charcoal-hover dark:hover:bg-charcoal-subcard text-[11px] font-medium text-alabaster-text dark:text-charcoal-text border border-alabaster-border dark:border-charcoal-border transition active:scale-95" title="Start a timed full mock exam">
           <span>Mock Exam</span>
         </button>
       </div>
@@ -138,36 +148,62 @@
 
     <!-- Right Controls: Curriculum Drawer, Layout Toggles, Theme Switcher & Settings -->
     <div class="flex items-center space-x-2 shrink-0">
-      <!-- Curriculum Drawer Toggle -->
-      <button id="btn-toggle-curriculum" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/50 dark:hover:bg-purple-900/70 text-xs font-semibold text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/80 shadow-sm transition" title="Inspect & Filter Playlist Videos (Skip Examples)">
-        <svg class="w-3.5 h-3.5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/></svg>
+      <button id="btn-toggle-curriculum" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-alabaster-hover hover:bg-alabaster-subcard dark:bg-charcoal-hover dark:hover:bg-charcoal-subcard text-xs font-medium text-alabaster-text dark:text-charcoal-text border border-alabaster-border dark:border-charcoal-border transition" title="Inspect & Filter Playlist Videos (Skip Examples)">
         <span>Curriculum (<span id="header-lesson-count">0</span>)</span>
       </button>
 
       <!-- Layout Collapse Toggles -->
-      <div class="hidden md:flex items-center bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-0.5">
-        <button id="btn-collapse-player" class="p-1.5 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition" title="Toggle Player Focus / Theater Mode">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+      <div class="hidden md:flex items-center bg-alabaster-canvas dark:bg-charcoal-canvas border border-alabaster-border dark:border-charcoal-border rounded-lg p-0.5">
+        <button id="btn-collapse-player" class="p-1 text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text rounded hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition" title="Toggle Player Focus / Theater Mode">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
         </button>
-        <button id="btn-collapse-schedule" class="p-1.5 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition" title="Toggle Schedule Sidebar (Full-Width Studio)">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <button id="btn-collapse-schedule" class="p-1 text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text rounded hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition" title="Toggle Schedule Sidebar">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         </button>
       </div>
 
-      <!-- Theme Switcher Button (☀️ Light / 🌙 Dark) -->
-      <button id="btn-theme-toggle" class="p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition" title="Toggle Theme (Light / Dark)">
-        <!-- Sun Icon (shown in dark mode) -->
-        <svg id="theme-icon-sun" class="w-4 h-4 text-amber-400 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-        <!-- Moon Icon (shown in light mode) -->
-        <svg id="theme-icon-moon" class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+      <!-- Theme Switcher Button (☀️ / 🌙) -->
+      <button id="btn-theme-toggle" class="p-1.5 rounded-lg border border-alabaster-border dark:border-charcoal-border bg-alabaster-canvas hover:bg-alabaster-hover dark:bg-charcoal-canvas dark:hover:bg-charcoal-hover text-alabaster-text dark:text-charcoal-text transition" title="Toggle Theme (Light / Dark)">
+        <svg id="theme-icon-sun" class="w-3.5 h-3.5 text-amber-500 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+        <svg id="theme-icon-moon" class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
       </button>
 
       <!-- Settings Modal Button -->
-      <button id="btn-settings" class="p-1.5 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition" title="Settings, Storage Guard & Maintenance">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      <button id="btn-settings" class="p-1.5 text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text hover:bg-alabaster-hover dark:hover:bg-charcoal-hover rounded-lg transition" title="Settings, Storage Guard & Maintenance">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
       </button>
     </div>
   </header>
+
+  <!-- Slim Minimalist Status Strip -->
+  <section id="pacing-status-card" class="border-b border-alabaster-border dark:border-charcoal-border bg-alabaster-card dark:bg-charcoal-card px-4 py-1.5 shrink-0 text-xs text-alabaster-muted dark:text-charcoal-muted flex items-center justify-between transition-colors">
+    <div class="flex items-center gap-4 flex-wrap">
+      <div class="flex items-center gap-1.5">
+        <span>Study Left:</span>
+        <strong id="stat-effective-left" class="font-mono text-alabaster-text dark:text-charcoal-text font-semibold">0h 00m</strong>
+        <span class="text-[11px]">(<span id="stat-daily-target">~0 min</span>/day)</span>
+      </div>
+      <div class="hidden sm:flex items-center gap-1.5">
+        <span>Projected Finish:</span>
+        <strong id="stat-projected-finish" class="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">--</strong>
+        <span id="pacing-note-detail" class="text-[11px] text-alabaster-muted dark:text-charcoal-muted"></span>
+      </div>
+      <div id="kpi-card-exam-date" class="flex items-center gap-1.5 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition" title="Click to edit exam date">
+        <span>Exam Date:</span>
+        <strong id="stat-target-date" class="font-mono text-blue-600 dark:text-blue-400 font-semibold">--</strong>
+      </div>
+      <div id="kpi-card-pace-speed" class="hidden md:flex items-center gap-1.5 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition" title="Click to edit pace and speed">
+        <span>Pace:</span>
+        <strong id="kpi-minutes-display" class="font-mono text-alabaster-text dark:text-charcoal-text">90m</strong>
+        <span>@</span>
+        <strong id="kpi-speed-display" class="font-mono text-blue-600 dark:text-blue-400">1.25x</strong>
+        <span id="pacing-mode-label" class="text-[10px] text-alabaster-muted dark:text-charcoal-muted"></span>
+      </div>
+    </div>
+    <div class="text-[11px] font-mono text-alabaster-muted dark:text-charcoal-muted">
+      Completed: <strong id="stat-effective-done" class="text-emerald-600 dark:text-emerald-400 font-semibold">0h 00m</strong>
+    </div>
+  </section>
 
   <!-- Diff & Undo Notification Banner -->
   <div id="diff-banner" class="hidden bg-blue-50 dark:bg-blue-950/80 border-b border-blue-200 dark:border-blue-800/80 px-4 py-2 text-xs text-blue-900 dark:text-blue-200 flex items-center justify-between shrink-0 shadow-sm">
@@ -183,7 +219,7 @@
   </div>
 
   <!-- Behind Schedule Alert Banner -->
-  <div id="behind-schedule-banner" class="hidden bg-amber-50 dark:bg-amber-950/80 border-b border-amber-300 dark:border-amber-800/80 px-4 py-2.5 text-xs text-amber-900 dark:text-amber-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+  <div id="behind-schedule-banner" class="hidden bg-amber-50 dark:bg-amber-950/80 border-b border-amber-300 dark:border-amber-800/80 px-4 py-2 text-xs text-amber-900 dark:text-amber-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
     <div class="flex items-center gap-2">
       <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
       <div>
@@ -193,563 +229,436 @@
     </div>
     <div class="flex items-center gap-2">
       <button id="btn-action-compress" class="bg-amber-600 hover:bg-amber-500 text-white font-semibold px-2.5 py-1 rounded transition shadow-sm">Compress (Drop Deep-Dives)</button>
-      <button id="btn-action-extend" class="bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-100 font-medium px-2.5 py-1 rounded transition">Extend Deadline</button>
+      <button id="btn-action-extend" class="bg-alabaster-hover dark:bg-charcoal-hover text-alabaster-text dark:text-charcoal-text font-medium px-2.5 py-1 rounded transition">Extend Deadline</button>
     </div>
   </div>
 
   <!-- Main Split-Screen Workspace -->
   <main class="flex-1 flex overflow-hidden relative">
 
-    <!-- View A: Split Workspace (Command Center Bar + Studio Pane + Schedule Pane) -->
-    <div id="workspace-view" class="flex-1 flex flex-col overflow-hidden w-full">
-      
-      <!-- Vibrant Hero Exam & Pacing Command Center Bar -->
-      <section id="pacing-status-card" class="border-b border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-[#0c1222]/70 backdrop-blur-md px-4 py-2.5 shrink-0 shadow-sm transition-colors">
-        <div class="max-w-7xl mx-auto flex flex-col gap-2">
-          <!-- Top Row: 4 Vibrant Interactive KPI Cards -->
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-            
-            <!-- Card 1: Study Remaining -->
-            <div class="bg-gradient-to-br from-sky-500/10 via-blue-500/5 to-transparent border border-sky-400/30 dark:border-sky-500/20 rounded-2xl p-2.5 flex items-center gap-3 shadow-sm hover:border-sky-400/50 transition">
-              <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-500 to-blue-600 text-white flex items-center justify-center font-bold text-base shadow-sm shadow-sky-500/20 shrink-0">
-                ⏱️
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="text-[10px] uppercase font-bold tracking-wider text-sky-600 dark:text-sky-400 font-mono">Study Left</div>
-                <div id="stat-effective-left" class="text-base font-black text-slate-900 dark:text-white truncate">0h 00m</div>
-                <div class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Daily Pace: <strong id="stat-daily-target" class="text-slate-700 dark:text-slate-200 font-mono">~35 min</strong></div>
-              </div>
-            </div>
+    <!-- View A: Split Workspace (3-Column Layout: Left Syllabus, Center Study Canvas, Right Studio) -->
+    <div id="workspace-view" class="flex-1 flex flex-col md:flex-row overflow-hidden w-full">
 
-            <!-- Card 2: Projected Finish -->
-            <div class="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-400/30 dark:border-emerald-500/20 rounded-2xl p-2.5 flex items-center gap-3 shadow-sm hover:border-emerald-400/50 transition">
-              <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-600 text-white flex items-center justify-center font-bold text-base shadow-sm shadow-emerald-500/20 shrink-0">
-                📅
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="text-[10px] uppercase font-bold tracking-wider text-emerald-600 dark:text-emerald-400 font-mono">Projected Finish</div>
-                <div id="stat-projected-finish" class="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono truncate">--</div>
-                <div id="pacing-note-detail" class="text-[10px] text-slate-500 dark:text-slate-400 truncate">✓ Finishes on exam day</div>
-              </div>
-            </div>
+      <!-- LEFT COLUMN: Lesson Syllabus List (~260px) -->
+      <section id="pane-schedule" class="w-full md:w-64 xl:w-72 shrink-0 border-b md:border-b-0 md:border-r border-alabaster-border dark:border-charcoal-border bg-alabaster-card dark:bg-charcoal-card flex flex-col overflow-hidden transition-all duration-200">
+        
+        <!-- Syllabus Header -->
+        <div class="px-3.5 py-2.5 border-b border-alabaster-border dark:border-charcoal-border flex items-center justify-between text-xs shrink-0 bg-alabaster-subcard/50 dark:bg-charcoal-subcard/50">
+          <span class="font-semibold text-alabaster-text dark:text-charcoal-text tracking-tight">Lesson Syllabus List</span>
+          <button id="btn-toggle-collapse-all" class="text-[11px] text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text p-1 transition" title="Toggle collapse all days">
+            ^
+          </button>
+        </div>
 
-            <!-- Card 3: Exam Deadline (Clickable To Edit Date!) -->
-            <div class="group relative bg-gradient-to-br from-purple-500/10 via-indigo-500/5 to-transparent border border-purple-400/30 dark:border-purple-500/20 rounded-2xl p-2.5 flex items-center gap-3 shadow-sm hover:border-purple-400/60 transition cursor-pointer" id="kpi-card-exam-date" title="Click to change exam date & instant replan">
-              <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-500 to-indigo-600 text-white flex items-center justify-center font-bold text-base shadow-sm shadow-purple-500/20 shrink-0">
-                🎯
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center justify-between">
-                  <span class="text-[10px] uppercase font-bold tracking-wider text-purple-600 dark:text-purple-400 font-mono">Exam Deadline</span>
-                  <span class="text-[9px] font-bold text-purple-600 dark:text-purple-400 opacity-75 group-hover:opacity-100 transition">✏️ Edit</span>
-                </div>
-                <div id="stat-target-date" class="text-base font-black text-purple-600 dark:text-purple-300 font-mono truncate">--</div>
-                <div class="text-[10px] text-slate-500 dark:text-slate-400">Target milestone</div>
-              </div>
-            </div>
-
-            <!-- Card 4: Daily Budget & Speed (Clickable to Edit!) -->
-            <div class="group relative bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-transparent border border-amber-400/30 dark:border-amber-500/20 rounded-2xl p-2.5 flex items-center gap-3 shadow-sm hover:border-amber-400/60 transition cursor-pointer" id="kpi-card-pace-speed" title="Click to edit study pace & speed">
-              <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-600 text-white flex items-center justify-center font-bold text-base shadow-sm shadow-amber-500/20 shrink-0">
-                ⚡
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center justify-between">
-                  <span class="text-[10px] uppercase font-bold tracking-wider text-amber-600 dark:text-amber-400 font-mono">Pace & Speed</span>
-                  <span class="text-[9px] font-bold text-amber-600 dark:text-amber-400 opacity-75 group-hover:opacity-100 transition">✏️ Edit</span>
-                </div>
-                <div class="flex items-baseline gap-1.5">
-                  <span id="kpi-minutes-display" class="text-base font-black text-slate-900 dark:text-white font-mono">90m</span>
-                  <span class="text-xs text-slate-500">@</span>
-                  <span id="kpi-speed-display" class="text-xs font-bold text-amber-600 dark:text-amber-400 font-mono">1.25x</span>
-                </div>
-                <div id="pacing-mode-label" class="text-[10px] text-slate-500 dark:text-slate-400 truncate">Finish on Exam Date</div>
-              </div>
-            </div>
-
+        <!-- Filter Bar & Buffer Choices -->
+        <div class="px-3 py-1.5 border-b border-alabaster-border dark:border-charcoal-border flex items-center justify-between text-[11px] shrink-0 bg-alabaster-card dark:bg-charcoal-card gap-1">
+          <div class="flex items-center gap-1">
+            <button id="btn-filter-all" class="px-2 py-0.5 rounded text-[11px] font-medium bg-blue-600 text-white shadow-sm">All</button>
+            <button id="btn-filter-concepts" class="px-2 py-0.5 rounded text-[11px] font-medium text-alabaster-muted dark:text-charcoal-muted hover:text-alabaster-text dark:hover:text-charcoal-text" title="Skip question & example videos">Concepts</button>
+            <button id="btn-filter-examples" class="px-2 py-0.5 rounded text-[11px] font-medium text-alabaster-muted dark:text-charcoal-muted hover:text-alabaster-text dark:hover:text-charcoal-text">Examples</button>
           </div>
+          <!-- Buffer selector -->
+          <div class="flex items-center gap-0.5 text-[10px]">
+            <span class="text-alabaster-muted dark:text-charcoal-muted">Buf:</span>
+            <button id="pill-buffer-zero" class="px-1.5 py-0.5 rounded font-medium text-alabaster-muted dark:text-charcoal-muted" title="Finish on Exam Date (0 days buffer)">0d</button>
+            <button id="pill-buffer-two" class="px-1.5 py-0.5 rounded font-semibold bg-blue-600 text-white shadow-sm" title="Finish 2 days early for revision">2d</button>
+          </div>
+        </div>
 
-          <!-- Bottom Row: Rainbow Gradient Progress Bar & Stats -->
-          <div class="flex flex-col gap-1 pt-0.5">
-            <div class="flex items-center justify-between text-xs">
-              <span class="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <span>Progress:</span>
-                <span id="progress-pct" class="font-mono text-indigo-600 dark:text-indigo-400 font-extrabold">0%</span>
-              </span>
-              <span class="text-slate-500 dark:text-slate-400 font-mono text-[11px]">
-                Completed: <strong id="stat-effective-done" class="text-emerald-600 dark:text-emerald-400">0h 00m</strong>
-              </span>
+        <!-- Day-Wise Schedule Scrollable Timeline -->
+        <div id="schedule-days-container" class="flex-1 overflow-y-auto px-2 py-2 space-y-2">
+          <!-- Injected dynamically via app.js -->
+        </div>
+
+        <!-- Bottom Resources Tray -->
+        <div class="border-t border-alabaster-border dark:border-charcoal-border p-3 shrink-0 bg-alabaster-subcard/40 dark:bg-charcoal-subcard/40 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-semibold text-alabaster-text dark:text-charcoal-text">Resources</span>
+            <button id="btn-open-add-source" class="text-blue-600 dark:text-blue-400 hover:underline text-[11px] font-medium" title="Add PDF or Web source">
+              + Add
+            </button>
+          </div>
+          <div id="sources-pills-list" class="flex flex-col gap-1 text-[11px]">
+            <!-- Dynamically populated resource pills -->
+          </div>
+          
+          <!-- Compact Replan Bar -->
+          <div class="pt-2 border-t border-alabaster-border/60 dark:border-charcoal-border/60 flex items-center justify-between text-[11px]">
+            <div class="flex items-center gap-1.5 text-alabaster-muted dark:text-charcoal-muted">
+              <select id="inline-playback-speed" class="bg-alabaster-canvas dark:bg-charcoal-canvas text-alabaster-text dark:text-charcoal-text border border-alabaster-border dark:border-charcoal-border rounded px-1.5 py-0.5 font-mono text-[10px]">
+                <option value="1.0">1.0x</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2.0">2.0x</option>
+              </select>
+              <input type="number" id="inline-minutes-day" class="w-10 bg-alabaster-canvas dark:bg-charcoal-canvas text-alabaster-text dark:text-charcoal-text border border-alabaster-border dark:border-charcoal-border rounded px-1 py-0.5 text-center font-mono text-[10px]" min="15" max="480" step="15" value="90">
+              <span>m/d</span>
             </div>
-            <div class="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden shadow-inner">
-              <div id="progress-bar-fill" class="h-full bg-gradient-to-r from-indigo-500 via-cyan-400 to-emerald-400 rounded-full transition-all duration-500 shadow-sm" style="width: 0%"></div>
-            </div>
+            <button id="btn-replan-now" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-2 py-0.5 rounded text-[11px] shadow-sm transition active:scale-95">
+              Replan
+            </button>
           </div>
         </div>
       </section>
 
-      <!-- Main Split Studio & Schedule Workspaces -->
-      <div class="flex-1 flex flex-col md:flex-row overflow-hidden w-full">
+      <!-- CENTER COLUMN: Primary Study Area (Lecture Video + Full Scrollable Notes Canvas) -->
+      <section id="pane-studio" class="flex-1 md:w-7/12 flex flex-col bg-alabaster-canvas dark:bg-charcoal-canvas overflow-hidden min-w-0 transition-all duration-200 relative">
         
-        <!-- Left Pane: Studio (YouTube Player & Grounded Notes) -->
-        <section id="pane-studio" class="w-full md:w-7/12 flex flex-col border-b md:border-b-0 md:border-r border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#0c1222] overflow-y-auto transition-all duration-300">
+        <!-- Video Player Frame -->
+        <div id="player-wrapper" class="relative w-full bg-black aspect-video max-h-[45vh] flex items-center justify-center border-b border-alabaster-border dark:border-charcoal-border shadow-sm shrink-0 transition-all duration-200">
+          <div id="player-container" class="w-full h-full flex items-center justify-center">
+            <div id="yt-player-placeholder" class="text-slate-400 text-xs flex flex-col items-center">
+              <svg class="w-10 h-10 mb-2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Select a lesson from the syllabus to begin playback
+            </div>
+            <div id="yt-player" class="w-full h-full"></div>
+          </div>
+        </div>
+
+        <!-- Active Lesson Action Strip -->
+        <div class="px-4 py-2 border-b border-alabaster-border dark:border-charcoal-border bg-alabaster-card/70 dark:bg-charcoal-card/70 flex items-center justify-between gap-3 shrink-0 text-xs">
+          <div class="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden">
+            <button id="btn-toggle-active-priority" class="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-mono cursor-pointer shrink-0" title="Click to toggle Priority (Core / Deep-Dive)">
+              <span id="active-lesson-priority">Core</span>
+            </button>
+            <span id="active-lesson-split" class="hidden text-[10px] text-amber-600 dark:text-amber-400 font-mono"></span>
+            <h2 id="active-lesson-title" class="text-xs sm:text-sm font-semibold text-alabaster-text dark:text-charcoal-text truncate cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition" title="Click to edit lesson title">Select a lesson to begin study</h2>
+            <button id="btn-edit-active-title" class="text-alabaster-muted hover:text-blue-600 dark:text-charcoal-muted dark:hover:text-blue-400 p-1 shrink-0 relative z-10" title="Edit lesson title and details">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            </button>
+            <span class="text-[11px] text-alabaster-muted dark:text-charcoal-muted font-mono shrink-0 hidden lg:inline">
+              <span id="active-lesson-time">00:00 - 00:00</span>
+              <span class="mx-1">•</span>
+              <span id="active-lesson-eff-min">0 min</span>
+            </span>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button id="btn-toggle-auto-advance" class="px-2 py-1 rounded bg-alabaster-canvas dark:bg-charcoal-canvas border border-alabaster-border dark:border-charcoal-border text-alabaster-text dark:text-charcoal-text text-[11px] transition flex items-center gap-1" title="Auto-advance to next scheduled lesson slice">
+              <span>Auto-Advance: <strong id="auto-advance-label">ON</strong></span>
+            </button>
+            <button id="btn-toggle-active-complete" class="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-medium px-2.5 py-1 rounded transition flex items-center gap-1 shadow-sm active:scale-95">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <span id="active-complete-label">Mark Complete</span>
+            </button>
+            <button id="btn-skip-active" class="bg-alabaster-canvas dark:bg-charcoal-canvas hover:bg-alabaster-hover dark:hover:bg-charcoal-hover text-alabaster-text dark:text-charcoal-text text-[11px] px-2 py-1 rounded border border-alabaster-border dark:border-charcoal-border transition" title="Skip this lesson & reflow">
+              Skip
+            </button>
+            <button id="btn-edit-active-lesson" class="text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text text-[11px] px-1.5 py-1 rounded hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition" title="Edit lesson details">
+              Edit
+            </button>
+            <button id="btn-transcribe-lesson" class="text-[11px] text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text px-1.5 py-1 rounded hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition flex items-center gap-1" title="Transcribe">
+              <span id="transcribe-btn-label">Transcribe</span>
+              <span id="transcribe-status-pill" class="hidden text-[9px] px-1 rounded bg-blue-100 dark:bg-blue-950 font-mono"></span>
+            </button>
+            <button id="btn-capture-keyframes" class="text-[11px] text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text px-1.5 py-1 rounded hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition" title="Screenshots">
+              📸
+            </button>
+            <button id="btn-regenerate-notes" class="text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text p-1 rounded hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition" title="Regenerate notes">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Keyframes Visual Strip -->
+        <div id="keyframes-strip" class="hidden px-4 py-2 bg-alabaster-subcard dark:bg-charcoal-subcard border-b border-alabaster-border dark:border-charcoal-border overflow-x-auto flex items-center gap-3 shrink-0">
+          <!-- Populated dynamically with keyframe cards -->
+        </div>
+
+        <!-- Grounded Structured Notes Canvas (Generous Width & Independently Scrollable) -->
+        <div id="pane-grounded-notes" class="flex-1 overflow-y-auto px-6 py-6 md:px-10 md:py-8 transition-all">
+          <div class="max-w-2xl mx-auto space-y-4">
+            <div id="notes-content" class="text-sm text-alabaster-text dark:text-charcoal-text leading-relaxed space-y-3 font-normal">
+              <p class="text-alabaster-muted dark:text-charcoal-muted italic text-xs">Select a lesson to load or generate grounded study notes and timestamped bookmarks.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Floating Scroll Down Button (↓) -->
+        <button id="btn-scroll-notes-down" type="button" class="absolute bottom-5 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-alabaster-card hover:bg-alabaster-hover dark:bg-charcoal-card dark:hover:bg-charcoal-hover border border-alabaster-border dark:border-charcoal-border shadow-md text-alabaster-text dark:text-charcoal-text flex items-center justify-center transition-all hover:scale-105 active:scale-95 z-20" title="Scroll down notes" onclick="document.getElementById('pane-grounded-notes')?.scrollBy({ top: 300, behavior: 'smooth' })">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+        </button>
+      </section>
+
+      <!-- RIGHT COLUMN: Studio Panel (~380px Full-Height) -->
+      <section id="pane-right-studio" class="w-full md:w-[380px] xl:w-[420px] shrink-0 border-t md:border-t-0 md:border-l border-alabaster-border dark:border-charcoal-border bg-alabaster-card dark:bg-charcoal-card flex flex-col overflow-hidden transition-all duration-200">
+        
+        <!-- Studio Tabs Header (Clean Text, Zero Emojis, Calm Blue Underline) -->
+        <div class="px-4 border-b border-alabaster-border dark:border-charcoal-border flex items-center space-x-4 text-xs font-medium shrink-0 bg-alabaster-card dark:bg-charcoal-card overflow-x-auto">
+          <!-- Hidden grounded-notes tab for backward compatibility -->
+          <button id="tab-grounded-notes" class="hidden">Notes</button>
           
-          <!-- Video Player Frame -->
-          <div id="player-wrapper" class="relative w-full bg-black aspect-video flex items-center justify-center border-b border-slate-200 dark:border-slate-800 shadow-sm shrink-0 transition-all duration-300">
-            <div id="player-container" class="w-full h-full flex items-center justify-center">
-              <div id="yt-player-placeholder" class="text-slate-400 text-xs flex flex-col items-center">
-                <svg class="w-12 h-12 mb-2 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                Select a lesson from the schedule to begin playback
-              </div>
-              <div id="yt-player" class="w-full h-full"></div>
-            </div>
-          </div>
-
-          <!-- Active Lesson Action Card (Interactive & Editable) -->
-          <div class="p-4 border-b border-slate-200/80 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-900/60 shrink-0">
-            <div class="flex items-start justify-between gap-4">
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2 mb-1">
-                  <button id="btn-toggle-active-priority" class="text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-mono cursor-pointer hover:bg-indigo-200 dark:hover:bg-indigo-900 transition" title="Click to toggle between Core and Deep-Dive">
-                    <span id="active-lesson-priority">Core</span>
-                  </button>
-                  <span id="active-lesson-split" class="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-medium">Whole Lesson</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <h2 id="active-lesson-title" class="text-base font-bold text-slate-900 dark:text-white tracking-tight truncate cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition" title="Click to edit lesson title">Select a lesson to begin study</h2>
-                  <button id="btn-edit-active-title" class="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1 shrink-0" title="Edit lesson title and details">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-                  </button>
-                </div>
-                <div class="flex items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400 font-mono">
-                  <span id="active-lesson-time">00:00 - 00:00</span>
-                  <span>•</span>
-                  <span id="active-lesson-eff-min">0 min</span>
-                </div>
-              </div>
-              <div class="flex items-center gap-2 shrink-0">
-                <button id="btn-toggle-auto-advance" class="bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs px-2.5 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800 transition flex items-center gap-1.5 active:scale-95" title="Auto-advance to next scheduled lesson slice when video slice finishes">
-                  <span>⚡</span>
-                  <span class="font-medium">Auto-Advance: <strong id="auto-advance-label">ON</strong></span>
-                </button>
-                <button id="btn-toggle-active-complete" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                  <span id="active-complete-label">Mark Complete</span>
-                </button>
-                <button id="btn-skip-active" class="bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 transition" title="Skip this lesson & reflow">
-                  Skip
-                </button>
-                <button id="btn-edit-active-lesson" class="bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs px-2 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800 transition" title="Edit lesson title, notes, and move to day">
-                  ✏️ Edit
-                </button>
-              </div>
-            </div>
-          </div>
-
-        <!-- NotebookLM-style Sources Tray -->
-        <div id="sources-tray" class="px-4 py-2 border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-100/50 dark:bg-zinc-950/50 flex items-center justify-between gap-2 overflow-x-auto shrink-0 text-xs">
-          <div class="flex items-center gap-2 min-w-0" id="sources-pills-list">
-            <span class="text-[11px] text-zinc-500 font-medium shrink-0">SOURCES:</span>
-            <!-- Dynamically populated source pills (YouTube, PDF, Web) -->
-          </div>
-          <button id="btn-open-add-source" class="shrink-0 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 transition flex items-center gap-1 font-medium text-xs">
-            <svg class="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-            <span>Add Source (PDF/Web)</span>
+          <button id="tab-personal-notes" class="py-2.5 border-b-2 border-transparent text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text transition whitespace-nowrap">
+            Notes
+          </button>
+          <button id="tab-quiz-mastery" class="py-2.5 border-b-2 border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400 font-semibold transition whitespace-nowrap">
+            Quiz
+          </button>
+          <button id="tab-flashcards-fsrs" class="py-2.5 border-b-2 border-transparent text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text transition flex items-center gap-1 whitespace-nowrap">
+            <span>Flashcards</span>
+            <span id="badge-due-flashcards" class="hidden text-[10px] px-1.5 py-0.2 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded-full font-mono">0</span>
+          </button>
+          <button id="tab-qa-notebook" class="py-2.5 border-b-2 border-transparent text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text transition whitespace-nowrap">
+            Q&A
+          </button>
+          <button id="tab-pyodide-scratchpad" class="py-2.5 border-b-2 border-transparent text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text transition whitespace-nowrap">
+            Code
           </button>
         </div>
 
-        <!-- Studio Sections & Segmented Tabs -->
-        <div class="p-4 flex-1 flex flex-col min-h-0 overflow-hidden">
-          <!-- Section Toolbar -->
-          <div class="flex flex-wrap items-center justify-between gap-2 mb-3 shrink-0">
-            <!-- Modern Segmented Control Tabs (Vibrant & Distinct) -->
-            <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs overflow-x-auto shadow-inner">
-              <button id="tab-grounded-notes" class="px-3 py-1.5 rounded-lg font-semibold text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-800 shadow-sm border border-indigo-200 dark:border-indigo-800/80 transition shrink-0">
-                📝 Notes
-              </button>
-              <button id="tab-personal-notes" class="px-3 py-1.5 rounded-lg font-medium text-slate-600 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400 transition shrink-0">
-                ✍️ Personal
-              </button>
-              <button id="tab-qa-notebook" class="px-3 py-1.5 rounded-lg font-medium text-slate-600 hover:text-purple-600 dark:text-slate-400 dark:hover:text-purple-400 transition flex items-center gap-1.5 shrink-0">
-                <span>🔍 NotebookLM</span>
-              </button>
-              <button id="tab-quiz-mastery" class="px-3 py-1.5 rounded-lg font-medium text-slate-600 hover:text-amber-600 dark:text-slate-400 dark:hover:text-amber-400 transition flex items-center gap-1.5 shrink-0">
-                <span>🎯 Quiz</span>
-              </button>
-              <button id="tab-flashcards-fsrs" class="px-3 py-1.5 rounded-lg font-medium text-slate-600 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition flex items-center gap-1.5 shrink-0">
-                <span>🗂️ Flashcards</span>
-                <span id="badge-due-flashcards" class="hidden text-[10px] px-1.5 py-0.2 bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 rounded-full font-mono border border-rose-300 dark:border-rose-800">0</span>
-              </button>
-              <button id="tab-pyodide-scratchpad" class="px-3 py-1.5 rounded-lg font-medium text-slate-600 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-400 transition flex items-center gap-1.5 shrink-0" title="Run Python code in-browser via Pyodide Web Worker (Zero server execution)">
-                <span>🐍 Python</span>
-              </button>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="flex items-center gap-2">
-              <button id="btn-transcribe-lesson" class="text-xs bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 transition font-medium shadow-sm" title="Fetch Captions or run Whisper">
-                <svg class="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/></svg>
-                <span id="transcribe-btn-label">Transcribe</span>
-                <span id="transcribe-status-pill" class="hidden text-[10px] px-1 py-0.2 rounded bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono"></span>
-              </button>
-              <button id="btn-capture-keyframes" class="text-xs bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 transition font-medium shadow-sm" title="Capture visual keyframe screenshots and embed into lesson notes">
-                <svg class="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                <span>📸 Screenshots</span>
-              </button>
-              <button id="btn-regenerate-notes" class="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white p-1.5 rounded-lg border border-transparent hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Regenerate structured notes">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-              </button>
-            </div>
-          </div>
-
-          <!-- Keyframes Visual Strip (Gallery) -->
-          <div id="keyframes-strip" class="hidden mb-3 p-2 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-x-auto flex items-center gap-3 shrink-0">
-            <!-- Populated dynamically with keyframe cards -->
-          </div>
-
-          <!-- Tab Content A: Grounded Structured Notes -->
-          <div id="pane-grounded-notes" class="flex-1 flex flex-col min-h-0 overflow-y-auto bg-white dark:bg-slate-900/60 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div id="notes-content" class="text-sm text-slate-700 dark:text-slate-300 leading-relaxed space-y-3">
-              <p class="text-slate-400 dark:text-slate-500 italic text-xs">Select a lesson to load or generate grounded study notes and timestamped bookmarks.</p>
-            </div>
-          </div>
-
-          <!-- Tab Content B: Personal Editable Notes (With Markdown Toolbar & Save) -->
-          <div id="pane-personal-notes" class="hidden flex-1 flex flex-col min-h-0 bg-white dark:bg-slate-900/60 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+        <!-- Studio Panes Container -->
+        <div class="flex-1 flex flex-col min-h-0 overflow-hidden p-4">
+          
+          <!-- Tab Content A: Personal Notes -->
+          <div id="pane-personal-notes" class="hidden flex-1 flex flex-col min-h-0 space-y-2">
+            <div class="flex items-center justify-between pb-2 border-b border-alabaster-border dark:border-charcoal-border shrink-0 text-xs">
+              <span class="font-semibold text-alabaster-text dark:text-charcoal-text">Personal Study Notes</span>
               <div class="flex items-center gap-2">
-                <span class="text-xs font-bold text-slate-900 dark:text-white">✍️ Personal Study Notes</span>
                 <span id="personal-note-save-status" class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono"></span>
-              </div>
-              <div class="flex items-center gap-2">
-                <span id="personal-notes-word-count" class="text-[10px] text-slate-400 font-mono">0 words</span>
-                <button id="btn-save-personal-notes" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-semibold px-3 py-1 rounded-lg transition shadow-sm active:scale-95 flex items-center gap-1">
-                  <span>💾 Save Notes</span>
+                <span id="personal-notes-word-count" class="text-[10px] text-alabaster-muted dark:text-charcoal-muted font-mono">0 words</span>
+                <button id="btn-save-personal-notes" class="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-medium px-2.5 py-1 rounded transition shadow-sm active:scale-95">
+                  Save
                 </button>
               </div>
             </div>
 
             <!-- Markdown Toolbar -->
-            <div class="flex items-center gap-1 mb-2 bg-slate-100 dark:bg-slate-950 p-1 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
-              <button type="button" class="md-tool-btn px-2 py-0.5 rounded font-bold hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300" data-format="bold" title="Bold (**text**)">B</button>
-              <button type="button" class="md-tool-btn px-2 py-0.5 rounded italic hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300" data-format="italic" title="Italic (*text*)">I</button>
-              <button type="button" class="md-tool-btn px-2 py-0.5 rounded font-mono hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300" data-format="heading" title="Heading (## Title)">H2</button>
-              <button type="button" class="md-tool-btn px-2 py-0.5 rounded font-mono hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300" data-format="code" title="Code snippet (`code`)">&lt;/&gt;</button>
-              <button type="button" class="md-tool-btn px-2 py-0.5 rounded hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300" data-format="bullet" title="Bullet list (- item)">• List</button>
-              <button type="button" class="md-tool-btn px-2 py-0.5 rounded hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300" data-format="quote" title="Blockquote (&gt; quote)">&gt; Quote</button>
+            <div class="flex items-center gap-1 bg-alabaster-subcard dark:bg-charcoal-subcard p-1 rounded-lg border border-alabaster-border dark:border-charcoal-border text-xs shrink-0">
+              <button type="button" class="md-tool-btn px-2 py-0.5 rounded font-bold hover:bg-alabaster-card dark:hover:bg-charcoal-card text-alabaster-text dark:text-charcoal-text" data-format="bold" title="Bold (**text**)">B</button>
+              <button type="button" class="md-tool-btn px-2 py-0.5 rounded italic hover:bg-alabaster-card dark:hover:bg-charcoal-card text-alabaster-text dark:text-charcoal-text" data-format="italic" title="Italic (*text*)">I</button>
+              <button type="button" class="md-tool-btn px-2 py-0.5 rounded font-mono hover:bg-alabaster-card dark:hover:bg-charcoal-card text-alabaster-text dark:text-charcoal-text" data-format="heading" title="Heading (## Title)">H2</button>
+              <button type="button" class="md-tool-btn px-2 py-0.5 rounded font-mono hover:bg-alabaster-card dark:hover:bg-charcoal-card text-alabaster-text dark:text-charcoal-text" data-format="code" title="Code snippet (`code`)">&lt;/&gt;</button>
+              <button type="button" class="md-tool-btn px-2 py-0.5 rounded hover:bg-alabaster-card dark:hover:bg-charcoal-card text-alabaster-text dark:text-charcoal-text" data-format="bullet" title="Bullet list (- item)">• List</button>
+              <button type="button" class="md-tool-btn px-2 py-0.5 rounded hover:bg-alabaster-card dark:hover:bg-charcoal-card text-alabaster-text dark:text-charcoal-text" data-format="quote" title="Blockquote (&gt; quote)">&gt; Quote</button>
             </div>
 
-            <textarea id="input-personal-notes" placeholder="Type personal formulas, exam notes, memory tricks, or questions here..." class="w-full flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono leading-relaxed resize-none"></textarea>
+            <textarea id="input-personal-notes" placeholder="Write exam notes, formulas, memory shortcuts, or question checklists..." class="w-full flex-1 bg-alabaster-canvas dark:bg-charcoal-canvas border border-alabaster-border dark:border-charcoal-border rounded-xl p-3 text-xs text-alabaster-text dark:text-charcoal-text placeholder-alabaster-muted dark:placeholder-charcoal-muted focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono leading-relaxed resize-none"></textarea>
           </div>
 
-          <!-- Tab Content C: NotebookLM Grounded Q&A -->
-          <div id="pane-qa-notebook" class="hidden flex-1 flex flex-col min-h-0 bg-white dark:bg-slate-900/60 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
-            <!-- QA Messages History -->
-            <div id="qa-messages-list" class="flex-1 overflow-y-auto space-y-3 pr-1">
-              <div class="p-3 bg-purple-50/50 dark:bg-purple-950/30 rounded-xl border border-purple-200/80 dark:border-purple-800/60 text-xs text-slate-700 dark:text-slate-300">
-                <p class="font-bold text-purple-900 dark:text-purple-200 mb-1 flex items-center gap-1.5">
-                  <span>🧠 Grounded Q&A Workspace</span>
-                  <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300">NotebookLM</span>
-                </p>
-                <p class="text-slate-600 dark:text-slate-400 leading-relaxed">Ask any conceptual question, request an exam summary, or verify formulas. All answers cite exact verbatim source passages from YouTube transcripts, uploaded PDFs, and web articles.</p>
+          <!-- Tab Content B: Quiz & Mastery (Default View in Mockup) -->
+          <div id="pane-quiz-mastery" class="flex-1 flex flex-col min-h-0 space-y-3 overflow-y-auto">
+            <div class="flex items-center justify-between pb-2 border-b border-alabaster-border dark:border-charcoal-border shrink-0 text-xs">
+              <div>
+                <h3 id="quiz-title-heading" class="font-semibold text-alabaster-text dark:text-charcoal-text">Lesson Quiz</h3>
+                <span id="quiz-mastery-badge" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full font-mono"></span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <select id="quiz-question-count" class="bg-alabaster-canvas dark:bg-charcoal-canvas text-alabaster-text dark:text-charcoal-text border border-alabaster-border dark:border-charcoal-border rounded px-1.5 py-0.5 text-xs">
+                  <option value="3">3 Qs</option>
+                  <option value="5" selected>5 Qs</option>
+                  <option value="10">10 Qs</option>
+                </select>
+                <button id="btn-generate-lesson-quiz" class="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-medium px-2.5 py-1 rounded transition shadow-sm active:scale-95">
+                  Generate
+                </button>
               </div>
             </div>
 
-            <!-- Question Input Box -->
-            <form id="qa-input-form" class="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center gap-2 shrink-0">
-              <input type="text" id="input-qa-query" required placeholder="Ask a grounded question across all course sources..." class="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500">
-              <button type="submit" id="btn-submit-qa" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-purple-500/20 active:scale-95 shrink-0">
-                <span id="qa-btn-text">Ask AI</span>
-                <div id="qa-spinner" class="hidden w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+            <div id="quiz-results-banner" class="hidden p-2.5 rounded-lg border text-xs"></div>
+
+            <form id="quiz-form" class="space-y-3 flex-1 flex flex-col justify-between">
+              <div id="quiz-questions-list" class="space-y-3">
+                <!-- Static placeholder matching mockup image -->
+                <div class="space-y-2">
+                  <div class="text-xs font-semibold text-alabaster-text dark:text-charcoal-text leading-snug">
+                    Based on <span class="text-blue-600 dark:text-blue-400 font-mono">[04:12]</span>, what is a weak entity?
+                  </div>
+                  <div class="space-y-1.5">
+                    <button type="button" class="w-full text-left px-3 py-2 rounded-lg border border-alabaster-border dark:border-charcoal-border bg-alabaster-canvas dark:bg-charcoal-canvas hover:border-blue-500 text-xs text-alabaster-text dark:text-charcoal-text transition flex items-center gap-2.5">
+                      <span class="w-5 h-5 rounded border border-alabaster-border dark:border-charcoal-border flex items-center justify-center font-bold text-[10px] text-alabaster-muted dark:text-charcoal-muted">A</span>
+                      <span>An entity that cannot be uniquely identified by its own attributes alone</span>
+                    </button>
+                    <button type="button" class="w-full text-left px-3 py-2 rounded-lg border border-alabaster-border dark:border-charcoal-border bg-alabaster-canvas dark:bg-charcoal-canvas hover:border-blue-500 text-xs text-alabaster-text dark:text-charcoal-text transition flex items-center gap-2.5">
+                      <span class="w-5 h-5 rounded border border-alabaster-border dark:border-charcoal-border flex items-center justify-center font-bold text-[10px] text-alabaster-muted dark:text-charcoal-muted">B</span>
+                      <span>An entity with no primary key and no foreign keys</span>
+                    </button>
+                    <button type="button" class="w-full text-left px-3 py-2 rounded-lg border border-alabaster-border dark:border-charcoal-border bg-alabaster-canvas dark:bg-charcoal-canvas hover:border-blue-500 text-xs text-alabaster-text dark:text-charcoal-text transition flex items-center gap-2.5">
+                      <span class="w-5 h-5 rounded border border-alabaster-border dark:border-charcoal-border flex items-center justify-center font-bold text-[10px] text-alabaster-muted dark:text-charcoal-muted">C</span>
+                      <span>A temporary table created during query execution</span>
+                    </button>
+                    <button type="button" class="w-full text-left px-3 py-2 rounded-lg border border-alabaster-border dark:border-charcoal-border bg-alabaster-canvas dark:bg-charcoal-canvas hover:border-blue-500 text-xs text-alabaster-text dark:text-charcoal-text transition flex items-center gap-2.5">
+                      <span class="w-5 h-5 rounded border border-alabaster-border dark:border-charcoal-border flex items-center justify-center font-bold text-[10px] text-alabaster-muted dark:text-charcoal-muted">D</span>
+                      <span>An entity that exists only in non-relational database schemas</span>
+                    </button>
+                  </div>
+                  <div class="pt-1 text-[11px] text-alabaster-muted dark:text-charcoal-muted flex items-center gap-1 font-mono">
+                    <span>Citation:</span>
+                    <span class="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">[04:12]</span>
+                  </div>
+                </div>
+              </div>
+
+              <div id="quiz-submit-bar" class="hidden pt-2 border-t border-alabaster-border dark:border-charcoal-border flex justify-end">
+                <button type="submit" id="btn-submit-lesson-quiz" class="bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs px-4 py-1.5 rounded-lg transition shadow-sm active:scale-95">
+                  Submit Quiz
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Tab Content C: Flashcards FSRS -->
+          <div id="pane-flashcards-fsrs" class="hidden flex-1 flex flex-col min-h-0 space-y-3 overflow-y-auto">
+            <div class="flex items-center justify-between pb-2 border-b border-alabaster-border dark:border-charcoal-border shrink-0 text-xs">
+              <span class="font-semibold text-alabaster-text dark:text-charcoal-text">FSRS Spaced Repetition</span>
+              <button id="btn-add-card-manual" class="text-blue-600 dark:text-blue-400 hover:underline text-[11px] font-medium">
+                + New Card
+              </button>
+            </div>
+            <div class="flex items-center gap-3 text-[11px] font-mono text-alabaster-muted dark:text-charcoal-muted">
+              <span>Total: <strong id="stat-fc-total" class="text-alabaster-text dark:text-charcoal-text">0</strong></span>
+              <span>Due: <strong id="stat-fc-due" class="text-blue-600 dark:text-blue-400">0</strong></span>
+              <span>New: <strong id="stat-fc-new">0</strong></span>
+              <span>Review: <strong id="stat-fc-review">0</strong></span>
+              <span id="stat-fc-learning" class="hidden">0</span>
+              <span id="fsrs-retention-pill" class="hidden"></span>
+            </div>
+
+            <div id="flashcards-study-area" class="flex-1 flex flex-col items-center justify-center min-h-[220px]">
+              <div id="fc-empty-state" class="text-center py-6 text-alabaster-muted dark:text-charcoal-muted text-xs">
+                <p class="font-semibold text-alabaster-text dark:text-charcoal-text mb-1">All Caught Up</p>
+                <p>No cards due for review right now.</p>
+              </div>
+
+              <!-- Flippable Card Container -->
+              <div id="fc-active-card-container" class="hidden w-full perspective-1000 my-auto">
+                <div id="fsrs-card-flipper" class="relative w-full min-h-[180px] transform-style-3d cursor-pointer bg-alabaster-canvas dark:bg-charcoal-canvas border border-alabaster-border dark:border-charcoal-border rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                  <!-- Front -->
+                  <div id="fsrs-card-front" class="backface-hidden flex-1 flex flex-col justify-between">
+                    <div>
+                      <div class="flex items-center justify-between text-[10px] text-alabaster-muted dark:text-charcoal-muted uppercase tracking-wider font-mono">
+                        <span>Prompt</span>
+                        <button id="btn-edit-active-card" type="button" class="hover:text-blue-600 dark:hover:text-blue-400">Edit</button>
+                      </div>
+                      <p id="fsrs-front-text" class="text-xs font-semibold text-alabaster-text dark:text-charcoal-text mt-2 leading-relaxed"></p>
+                    </div>
+                    <div class="text-[10px] text-alabaster-muted dark:text-charcoal-muted text-center italic mt-3">Click or press Space to flip</div>
+                  </div>
+                  <!-- Back -->
+                  <div id="fsrs-card-back" class="hidden backface-hidden flex-1 flex flex-col justify-between">
+                    <div>
+                      <div class="flex items-center justify-between text-[10px] text-alabaster-muted dark:text-charcoal-muted uppercase tracking-wider font-mono">
+                        <span>Answer</span>
+                        <button id="btn-edit-active-card-back" type="button" class="hover:text-blue-600 dark:hover:text-blue-400">Edit</button>
+                      </div>
+                      <p id="fsrs-back-text" class="text-xs text-alabaster-text dark:text-charcoal-text mt-2 leading-relaxed whitespace-pre-wrap"></p>
+                      <div id="fsrs-quote-box" class="hidden mt-2 p-2 rounded bg-alabaster-subcard dark:bg-charcoal-subcard text-[10px] font-mono"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Rating Buttons -->
+                <div id="fsrs-rating-bar" class="hidden mt-3 grid grid-cols-4 gap-1.5 text-center text-xs">
+                  <button id="btn-fsrs-again" class="p-1.5 rounded border border-alabaster-border dark:border-charcoal-border hover:bg-alabaster-hover dark:hover:bg-charcoal-hover">
+                    <div class="font-bold text-red-600 dark:text-red-400">Again</div>
+                    <div id="interval-again" class="text-[9px] font-mono text-alabaster-muted">1m</div>
+                  </button>
+                  <button id="btn-fsrs-hard" class="p-1.5 rounded border border-alabaster-border dark:border-charcoal-border hover:bg-alabaster-hover dark:hover:bg-charcoal-hover">
+                    <div class="font-bold text-amber-600 dark:text-amber-400">Hard</div>
+                    <div id="interval-hard" class="text-[9px] font-mono text-alabaster-muted">5m</div>
+                  </button>
+                  <button id="btn-fsrs-good" class="p-1.5 rounded border border-alabaster-border dark:border-charcoal-border hover:bg-alabaster-hover dark:hover:bg-charcoal-hover">
+                    <div class="font-bold text-blue-600 dark:text-blue-400">Good</div>
+                    <div id="interval-good" class="text-[9px] font-mono text-alabaster-muted">10m</div>
+                  </button>
+                  <button id="btn-fsrs-easy" class="p-1.5 rounded border border-alabaster-border dark:border-charcoal-border hover:bg-alabaster-hover dark:hover:bg-charcoal-hover">
+                    <div class="font-bold text-emerald-600 dark:text-emerald-400">Easy</div>
+                    <div id="interval-easy" class="text-[9px] font-mono text-alabaster-muted">7d</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab Content D: Q&A NotebookLM -->
+          <div id="pane-qa-notebook" class="hidden flex-1 flex flex-col min-h-0 space-y-2">
+            <div class="pb-2 border-b border-alabaster-border dark:border-charcoal-border shrink-0 text-xs font-semibold text-alabaster-text dark:text-charcoal-text">
+              Grounded Q&A Notebook
+            </div>
+            <div id="qa-messages-list" class="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
+              <div class="p-2.5 rounded-lg bg-alabaster-subcard dark:bg-charcoal-subcard border border-alabaster-border dark:border-charcoal-border text-alabaster-muted dark:text-charcoal-muted leading-relaxed">
+                Ask questions across all ingested course materials. Answers cite source timestamps and page numbers.
+              </div>
+            </div>
+            <form id="qa-input-form" class="pt-2 border-t border-alabaster-border dark:border-charcoal-border flex items-center gap-1.5 shrink-0">
+              <input type="text" id="input-qa-query" required placeholder="Ask a question..." class="flex-1 bg-alabaster-canvas dark:bg-charcoal-canvas border border-alabaster-border dark:border-charcoal-border rounded-lg px-2.5 py-1.5 text-xs text-alabaster-text dark:text-charcoal-text focus:outline-none focus:ring-1 focus:ring-blue-500">
+              <button type="submit" id="btn-submit-qa" class="bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs px-3 py-1.5 rounded-lg transition active:scale-95 shrink-0">
+                <span id="qa-btn-text">Ask</span>
+                <div id="qa-spinner" class="hidden w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
               </button>
             </form>
           </div>
 
-          <!-- Tab Content D: Quiz & Mastery Loop -->
-          <div id="pane-quiz-mastery" class="hidden flex-1 flex flex-col min-h-0 bg-white dark:bg-slate-900/60 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm overflow-y-auto">
-            <!-- Quiz Header & Action Bar -->
-            <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
-              <div>
-                <div class="flex items-center gap-2">
-                  <h3 id="quiz-title-heading" class="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">Lesson Citation Quiz</h3>
-                  <span id="quiz-mastery-badge" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full font-mono"></span>
-                </div>
-                <p class="text-[11px] text-slate-500 dark:text-slate-400">Strictly grounded questions. Score &ge;80% marks lesson <strong class="text-emerald-600 dark:text-emerald-400">Tested Out</strong> and reflows your schedule.</p>
+          <!-- Tab Content E: Python Code Scratchpad (Dark Code theme from mockup) -->
+          <div id="pane-pyodide-scratchpad" class="hidden flex-1 flex flex-col min-h-0 space-y-2">
+            <div class="flex items-center justify-between pb-2 border-b border-alabaster-border dark:border-charcoal-border shrink-0 text-xs">
+              <div class="flex items-center gap-1.5">
+                <span class="font-semibold text-alabaster-text dark:text-charcoal-text">Code</span>
+                <span id="pyodide-status-pill" class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-alabaster-subcard dark:bg-charcoal-subcard text-alabaster-muted dark:text-charcoal-muted">Pyodide</span>
               </div>
-              <div class="flex items-center gap-2">
-                <select id="quiz-question-count" class="bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs">
-                  <option value="3">3 Questions</option>
-                  <option value="5" selected>5 Questions</option>
-                  <option value="10">10 Questions</option>
+              <div class="flex items-center gap-1">
+                <select id="pyodide-presets" class="bg-alabaster-canvas dark:bg-charcoal-canvas text-alabaster-text dark:text-charcoal-text border border-alabaster-border dark:border-charcoal-border rounded px-1.5 py-0.5 text-[11px]">
+                  <option value="dfa">DFA Simulator</option>
+                  <option value="math">Formula Calc</option>
+                  <option value="regex">Regex Matcher</option>
                 </select>
-                <button id="btn-generate-lesson-quiz" class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-95">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                  <span>Generate Quiz</span>
+                <button id="btn-run-pyodide" class="bg-blue-600 hover:bg-blue-700 text-white font-medium text-[11px] px-2.5 py-0.5 rounded transition shadow-sm active:scale-95">
+                  Run
+                </button>
+                <button id="btn-stop-pyodide" class="text-red-500 hover:text-red-700 text-[11px] px-1.5 py-0.5 rounded transition">
+                  Stop
                 </button>
               </div>
             </div>
 
-            <!-- Quiz Results Banner (Appears after submission) -->
-            <div id="quiz-results-banner" class="hidden mb-4 p-3 rounded-xl border flex items-center justify-between text-xs"></div>
-
-            <!-- Quiz Form Container -->
-            <form id="quiz-form" class="space-y-4">
-              <div id="quiz-questions-list" class="space-y-4">
-                <div class="text-center py-8 text-slate-400 dark:text-slate-500 text-xs">
-                  <svg class="w-10 h-10 mx-auto mb-2 text-slate-400 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-                  Click "Generate Quiz" to create citation-grounded questions for this lesson.
-                </div>
+            <!-- Code Editor matching mockup card -->
+            <div class="flex-1 flex flex-col min-h-0 bg-[#16171a] border border-[#26282e] rounded-xl overflow-hidden shadow-inner">
+              <div class="flex items-center justify-between px-3 py-1 bg-[#1c1d22] border-b border-[#26282e] text-[10px] text-zinc-400 font-mono">
+                <span>python_scratchpad.py</span>
+                <button id="btn-clear-code" class="hover:text-white">Clear</button>
               </div>
-              <div id="quiz-submit-bar" class="hidden pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
-                <button type="submit" id="btn-submit-lesson-quiz" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs px-5 py-2 rounded-xl transition shadow-md shadow-emerald-500/20 active:scale-95">
-                  Submit Quiz & Evaluate Mastery
-                </button>
-              </div>
-            </form>
-          </div>
-
-          <!-- Tab Content E: FSRS Spaced Repetition Flashcards -->
-          <div id="pane-flashcards-fsrs" class="hidden flex-1 flex flex-col min-h-0 bg-white dark:bg-slate-900/60 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm overflow-y-auto">
-            <!-- Flashcards Header & Stats -->
-            <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
-              <div>
-                <div class="flex items-center gap-2">
-                  <h3 class="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">FSRS Spaced Repetition</h3>
-                  <span id="fsrs-retention-pill" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300 dark:border-rose-800">Target Retention: 90%</span>
-                </div>
-                <div class="flex items-center gap-3 mt-1 text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                  <span>Total: <strong id="stat-fc-total" class="text-slate-900 dark:text-white">0</strong></span>
-                  <span>Due: <strong id="stat-fc-due" class="text-amber-600 dark:text-amber-400">0</strong></span>
-                  <span>New: <strong id="stat-fc-new" class="text-blue-600 dark:text-blue-400">0</strong></span>
-                  <span>Learning: <strong id="stat-fc-learning" class="text-violet-600 dark:text-violet-400">0</strong></span>
-                  <span>Review: <strong id="stat-fc-review" class="text-emerald-600 dark:text-emerald-400">0</strong></span>
-                </div>
-              </div>
-              <div class="flex items-center gap-2">
-                <button id="btn-add-card-manual" class="bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 text-xs px-2.5 py-1 rounded-lg border border-rose-200 dark:border-rose-800/80 transition flex items-center gap-1 font-semibold active:scale-95">
-                  <span>+ New Card</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Flashcard Study Interactive Area -->
-            <div id="flashcards-study-area" class="flex-1 flex flex-col items-center justify-center min-h-[280px]">
-              <!-- Empty Queue State -->
-              <div id="fc-empty-state" class="text-center py-8 text-slate-400 dark:text-slate-500 text-xs">
-                <svg class="w-10 h-10 mx-auto mb-2 text-slate-400 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                <p class="font-bold text-slate-700 dark:text-slate-300 mb-1">All Caught Up!</p>
-                <p>No cards due for review right now. Scoring &lt;60% on quizzes automatically creates review cards.</p>
-              </div>
-
-              <!-- Active 3D Flippable Card -->
-              <div id="fc-active-card-container" class="hidden w-full max-w-lg perspective-1000 my-auto">
-                <div id="fsrs-card-flipper" class="relative w-full min-h-[220px] transform-style-3d cursor-pointer bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-2xl p-6 shadow-md flex flex-col justify-between transition-transform duration-300">
-                  <!-- Front Face -->
-                  <div id="fsrs-card-front" class="backface-hidden flex-1 flex flex-col justify-between">
-                    <div>
-                      <div class="flex items-center justify-between mb-2">
-                        <span class="text-[10px] uppercase font-bold tracking-wider text-rose-600 dark:text-rose-400 font-mono">Concept Prompt</span>
-                        <button id="btn-edit-active-card" type="button" class="text-xs text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 p-1 flex items-center gap-1 font-semibold" title="Edit this flashcard prompt or answer">
-                          <span>✏️ Edit Card</span>
-                        </button>
-                      </div>
-                      <p id="fsrs-front-text" class="text-sm font-semibold text-slate-900 dark:text-white mt-2 leading-relaxed"></p>
-                    </div>
-                    <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-4 text-center italic">
-                      Click to flip or press <kbd class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-mono text-[10px] text-slate-700 dark:text-slate-300">Space</kbd>
-                    </div>
-                  </div>
-
-                  <!-- Back Face (Revealed on flip) -->
-                  <div id="fsrs-card-back" class="hidden backface-hidden flex-1 flex flex-col justify-between">
-                    <div>
-                      <div class="flex items-center justify-between mb-2">
-                        <span class="text-[10px] uppercase font-bold tracking-wider text-emerald-600 dark:text-emerald-400 font-mono">Answer & Evidence</span>
-                        <button id="btn-edit-active-card-back" type="button" class="text-xs text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 p-1 flex items-center gap-1 font-semibold" title="Edit this flashcard prompt or answer">
-                          <span>✏️ Edit Card</span>
-                        </button>
-                      </div>
-                      <p id="fsrs-back-text" class="text-xs text-slate-800 dark:text-slate-200 mt-2 leading-relaxed whitespace-pre-wrap"></p>
-                      <div id="fsrs-quote-box" class="hidden mt-3 p-2.5 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 font-mono leading-relaxed"></div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Rating Buttons Bar (Revealed when card is flipped) -->
-                <div id="fsrs-rating-bar" class="hidden mt-4 grid grid-cols-4 gap-2">
-                  <button id="btn-fsrs-again" class="p-2 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/80 dark:hover:bg-red-900 border border-red-200 dark:border-red-800/80 text-center transition group active:scale-95">
-                    <div class="text-xs font-bold text-red-700 dark:text-red-200">Again</div>
-                    <div id="interval-again" class="text-[10px] text-red-500 dark:text-red-400 font-mono">1m</div>
-                    <kbd class="text-[9px] text-red-400 dark:text-red-500 font-mono">1</kbd>
-                  </button>
-                  <button id="btn-fsrs-hard" class="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/80 dark:hover:bg-amber-900 border border-amber-200 dark:border-amber-800/80 text-center transition group active:scale-95">
-                    <div class="text-xs font-bold text-amber-700 dark:text-amber-200">Hard</div>
-                    <div id="interval-hard" class="text-[10px] text-amber-500 dark:text-amber-400 font-mono">5m</div>
-                    <kbd class="text-[9px] text-amber-400 dark:text-amber-500 font-mono">2</kbd>
-                  </button>
-                  <button id="btn-fsrs-good" class="p-2 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/80 dark:hover:bg-blue-900 border border-blue-200 dark:border-blue-800/80 text-center transition group active:scale-95">
-                    <div class="text-xs font-bold text-blue-700 dark:text-blue-200">Good</div>
-                    <div id="interval-good" class="text-[10px] text-blue-500 dark:text-blue-400 font-mono">10m</div>
-                    <kbd class="text-[9px] text-blue-400 dark:text-blue-500 font-mono">3</kbd>
-                  </button>
-                  <button id="btn-fsrs-easy" class="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/80 dark:hover:bg-emerald-900 border border-emerald-200 dark:border-emerald-800/80 text-center transition group active:scale-95">
-                    <div class="text-xs font-bold text-emerald-700 dark:text-emerald-200">Easy</div>
-                    <div id="interval-easy" class="text-[10px] text-emerald-500 dark:text-emerald-400 font-mono">7d</div>
-                    <kbd class="text-[9px] text-emerald-400 dark:text-emerald-500 font-mono">4</kbd>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tab Content F: In-Browser Pyodide Web Worker Scratchpad -->
-          <div id="pane-pyodide-scratchpad" class="hidden flex-1 flex flex-col min-h-0 bg-white dark:bg-slate-900/60 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-            <!-- Toolbar -->
-            <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-2 border-b border-slate-200 dark:border-slate-800 shrink-0">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">Python Scratchpad</span>
-                <span id="pyodide-status-pill" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800">Pyodide Web Worker</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <select id="pyodide-presets" class="bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs">
-                  <option value="dfa">Template: DFA Simulator</option>
-                  <option value="math">Template: Exam Formula Calc</option>
-                  <option value="regex">Template: Regex Matcher</option>
-                </select>
-                <button id="btn-run-pyodide" class="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-md shadow-cyan-500/20 active:scale-95">
-                  <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                  <span>Run Python</span>
-                </button>
-                <button id="btn-stop-pyodide" class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 shadow-sm active:scale-95" title="Kill worker thread to terminate infinite loops or hung scripts">
-                  <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/></svg>
-                  <span>Stop / Kill</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Editor & Console Split -->
-            <div class="flex-1 flex flex-col min-h-0 space-y-2">
-              <div class="flex-1 flex flex-col min-h-0">
-                <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1">
-                  <span>Python 3.12 (Client-Side Pyodide in Web Worker • Zero Server Execution)</span>
-                  <button id="btn-clear-code" class="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">Clear</button>
-                </div>
-                <textarea id="pyodide-code-input" class="w-full flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-900 dark:text-emerald-300 font-mono focus:outline-none focus:ring-1 focus:ring-slate-500 leading-relaxed resize-none shadow-inner" spellcheck="false"># In-browser Python scratchpad for exam prep
-# Simulating a DFA for strings ending in '01'
-class DFA:
-    def __init__(self):
-        self.state = 'q0'
-    def transition(self, char):
-        if self.state == 'q0':
-            self.state = 'q1' if char == '0' else 'q0'
-        elif self.state == 'q1':
-            self.state = 'q2' if char == '1' else 'q1'
-        elif self.state == 'q2':
-            self.state = 'q1' if char == '0' else 'q0'
-    def accepts(self, s):
-        self.state = 'q0'
-        for c in s:
-            self.transition(c)
-        return self.state == 'q2'
-
-dfa = DFA()
-test_strings = ['101', '0101', '100', '11101', '00']
-for s in test_strings:
-    print(f"String '{s}' accepted? {dfa.accepts(s)}")
+              <textarea id="pyodide-code-input" class="w-full flex-1 bg-transparent p-3 text-xs text-[#a9b1d6] font-mono focus:outline-none leading-relaxed resize-none selection:bg-blue-600 selection:text-white" spellcheck="false">def insert(self, key):
+    for i in self.keys():
+        assert(self, key)
+    return key
 </textarea>
-              </div>
+            </div>
 
-              <!-- Output Console -->
-              <div class="h-36 bg-zinc-950 border border-zinc-800 rounded-xl p-3 flex flex-col font-mono text-[11px] shrink-0 text-zinc-100">
-                <div class="flex items-center justify-between text-zinc-400 border-b border-zinc-800 pb-1 mb-1">
-                  <span>TERMINAL STDOUT / STDERR</span>
-                  <span id="pyodide-exec-time" class="text-cyan-400">0 ms</span>
-                </div>
-                <pre id="pyodide-output" class="flex-1 overflow-y-auto text-zinc-300 whitespace-pre-wrap">Click "Run Python" to execute code inside the client-side Pyodide Web Worker.</pre>
+            <!-- Output Console -->
+            <div class="h-28 bg-[#111214] border border-[#222429] rounded-xl p-2.5 flex flex-col font-mono text-[10px] shrink-0 text-zinc-300">
+              <div class="flex items-center justify-between text-zinc-500 pb-1 mb-1 border-b border-zinc-800">
+                <span>CONSOLE</span>
+                <span id="pyodide-exec-time" class="text-blue-400">0 ms</span>
               </div>
+              <pre id="pyodide-output" class="flex-1 overflow-y-auto whitespace-pre-wrap text-zinc-400">Ready.</pre>
             </div>
           </div>
+
         </div>
       </section>
 
-      <!-- Right Pane: CourseIt-Inspired Day-Wise Schedule & Pacing -->
-      <section id="pane-schedule" class="w-full md:w-5/12 flex flex-col bg-slate-50 dark:bg-[#090e1c] overflow-hidden transition-all duration-300 border-l border-slate-200/80 dark:border-slate-800/80">
-        
-        <!-- Schedule Timeline Header & Choice Toggles -->
-        <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/80 flex flex-wrap items-center justify-between gap-2 shrink-0">
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider font-mono">📅 Study Roadmap</span>
-            <span class="text-[10px] text-slate-500 dark:text-slate-400">Day-by-Day Plan</span>
-          </div>
-          <!-- Buffer Choice Toggle -->
-          <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700/80 text-[11px]">
-            <span class="text-slate-400 text-[10px] px-1 font-medium">Buffer:</span>
-            <button id="pill-buffer-zero" class="px-2 py-0.5 rounded-md font-medium transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" title="Finish on Exam Date (0 days buffer)">
-              0 Days
-            </button>
-            <button id="pill-buffer-two" class="px-2 py-0.5 rounded-md font-semibold transition bg-indigo-600 text-white shadow-sm" title="Finish 2 days early for mock tests and revision">
-              2 Days
-            </button>
-          </div>
-        </div>
-
-        <!-- Filter Bar & Collapsible Controls (CourseIt Style) -->
-        <div class="px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-950/50 flex items-center justify-between text-xs shrink-0">
-          <div class="flex items-center gap-1.5">
-            <span class="text-[11px] text-slate-500 mr-0.5 font-medium">Filter:</span>
-            <button id="btn-filter-all" class="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-indigo-600 text-white shadow-sm">All</button>
-            <button id="btn-filter-concepts" class="px-2.5 py-0.5 rounded-md text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800/80 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition" title="Skip question & example videos to accelerate prep">Concepts Only</button>
-            <button id="btn-filter-examples" class="px-2.5 py-0.5 rounded-md text-[11px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 border border-purple-300 dark:border-purple-800/80 hover:bg-purple-100 dark:hover:bg-purple-900/60 transition">Examples Only</button>
-          </div>
-          <div class="flex items-center gap-2">
-            <button id="btn-toggle-collapse-all" class="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold">Collapse Days</button>
-          </div>
-        </div>
-
-        <!-- Day-Wise Schedule Scrollable Timeline -->
-        <div id="schedule-days-container" class="flex-1 overflow-y-auto p-4 space-y-3">
-          <!-- Injected dynamically via app.js -->
-        </div>
-
-        <!-- Inline Speed & Replan Footer -->
-        <div class="px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/70 flex items-center justify-between text-xs shrink-0">
-          <div class="flex items-center space-x-2">
-            <label class="text-slate-500 dark:text-slate-400 font-medium">Speed:</label>
-            <select id="inline-playback-speed" class="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-mono">
-              <option value="1.0">1.0x</option>
-              <option value="1.25">1.25x</option>
-              <option value="1.5">1.5x</option>
-              <option value="2.0">2.0x</option>
-            </select>
-            <label class="text-slate-500 dark:text-slate-400 font-medium ml-1">Min/Day:</label>
-            <input type="number" id="inline-minutes-day" class="w-14 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-center font-mono" min="15" max="480" step="15" value="90">
-          </div>
-          <button id="btn-replan-now" class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold px-3.5 py-1.5 rounded-lg shadow-md shadow-indigo-500/20 transition active:scale-95">
-            Apply Replan
-          </button>
-        </div>
-      </section>
     </div>
 
-    <!-- Curriculum Drawer (NotebookLM Source Inspector & Selective Video Toggling) -->
-    <aside id="curriculum-drawer" class="hidden absolute right-0 top-0 bottom-0 w-80 md:w-96 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl z-30 flex flex-col transition-transform duration-300">
-      <div class="p-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950">
+    <!-- Curriculum Drawer (Right Slide-Over) -->
+    <aside id="curriculum-drawer" class="hidden absolute right-0 top-0 bottom-0 w-80 md:w-96 bg-alabaster-card dark:bg-charcoal-card border-l border-alabaster-border dark:border-charcoal-border shadow-2xl z-30 flex flex-col transition-transform duration-200">
+      <div class="p-3 border-b border-alabaster-border dark:border-charcoal-border flex items-center justify-between bg-alabaster-subcard dark:bg-charcoal-subcard">
         <div>
-          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">Course Curriculum</h3>
-          <p class="text-[11px] text-slate-500 dark:text-slate-400">Toggle videos to include or skip</p>
+          <h3 class="text-xs font-semibold text-alabaster-text dark:text-charcoal-text">Course Curriculum</h3>
+          <p class="text-[10px] text-alabaster-muted dark:text-charcoal-muted">Filter or skip playlist videos</p>
         </div>
-        <button id="btn-close-curriculum" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1">✕</button>
+        <button id="btn-close-curriculum" class="text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text p-1">✕</button>
       </div>
 
-      <div class="p-3 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2">
-        <input type="text" id="curriculum-search" placeholder="Search lessons..." class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      <div class="p-2.5 border-b border-alabaster-border dark:border-charcoal-border flex items-center gap-2">
+        <input type="text" id="curriculum-search" placeholder="Search lessons..." class="w-full bg-alabaster-canvas dark:bg-charcoal-canvas border border-alabaster-border dark:border-charcoal-border rounded px-2 py-1 text-xs text-alabaster-text dark:text-charcoal-text focus:outline-none focus:ring-1 focus:ring-blue-500">
       </div>
 
-      <div class="px-3 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 flex justify-between text-[11px]">
-        <button id="btn-curriculum-include-all" class="text-indigo-600 dark:text-indigo-400 font-bold hover:underline">Select All</button>
-        <button id="btn-curriculum-skip-examples" class="text-amber-600 dark:text-amber-400 font-bold hover:underline" title="Skip questions & example videos">⚡ Skip All Examples</button>
+      <div class="px-3 py-1.5 border-b border-alabaster-border dark:border-charcoal-border bg-alabaster-subcard/50 dark:bg-charcoal-subcard/50 flex justify-between text-[11px]">
+        <button id="btn-curriculum-include-all" class="text-blue-600 dark:text-blue-400 font-medium hover:underline">Select All</button>
+        <button id="btn-curriculum-skip-examples" class="text-amber-600 dark:text-amber-400 font-medium hover:underline" title="Skip questions & example videos">Skip All Examples</button>
       </div>
 
-      <div id="curriculum-lessons-list" class="flex-1 overflow-y-auto p-3 space-y-1.5 divide-y divide-slate-100 dark:divide-slate-800">
+      <div id="curriculum-lessons-list" class="flex-1 overflow-y-auto p-2 space-y-1 divide-y divide-alabaster-border/50 dark:divide-charcoal-border/50">
         <!-- Injected via JS -->
       </div>
     </aside>
