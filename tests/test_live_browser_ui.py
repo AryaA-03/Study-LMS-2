@@ -81,6 +81,38 @@ def ui_test_server():
                 (lid, cid, sid, title, duration, duration, priority, idx),
             )
 
+        # Seed chunks and chunks_fts for FTS5 matching
+        test_chunks = [
+            ("chk-1", cid, "l1", "Automata theory introduces finite state machines, alphabets, languages, grammars, and computation models."),
+            ("chk-2", cid, "l2", "Deterministic Finite Automata DFA consists of 5 tuples: states, input alphabet, transition function delta, start state, and accept states."),
+            ("chk-4", cid, "l4", "Nondeterministic Finite Automata NFA allows epsilon transitions and multiple next states. Subset construction converts NFA to equivalent DFA."),
+            ("chk-6", cid, "l6", "Regular expressions define regular languages recognized by finite automata using union, concatenation, and Kleene star operators."),
+        ]
+        for chk_id, c_id, l_id, text in test_chunks:
+            conn.execute(
+                """
+                INSERT INTO chunks (id, course_id, lesson_id, chunk_index, token_count, start_sec, end_sec, content)
+                VALUES (?, ?, ?, 0, 50, 0, 300, ?);
+                """,
+                (chk_id, c_id, l_id, text),
+            )
+            conn.execute(
+                """
+                INSERT INTO chunks_fts (id, course_id, lesson_id, content)
+                VALUES (?, ?, ?, ?);
+                """,
+                (chk_id, c_id, l_id, text),
+            )
+
+        # Seed sample note for lesson 2 (DFA)
+        conn.execute(
+            """
+            INSERT INTO notes (id, course_id, lesson_id, content_markdown, personal_notes)
+            VALUES ('note-l2', ?, 'l2', '# Deterministic Finite Automata (DFA)\n\n- Formal definition of DFA with 5-tuple.\n- State transition tables and state diagrams.\n\n### Core Properties\n- Deterministic transition on each symbol.\n- Minimum state DFA construction.', '');
+            """,
+            (cid,)
+        )
+
         # Generate initial schedule
         lessons_dict = [
             {"id": lid, "title": title, "raw_duration_sec": duration, "priority": priority, "start_sec": 0, "end_sec": duration}
@@ -571,5 +603,111 @@ def test_ui_drag_and_drop_schedule_attributes(ui_test_server):
         first_day = day_cards.first
         assert first_day.get_attribute("data-day-date") is not None
         assert "window.handleDayDrop" in (first_day.get_attribute("ondrop") or "")
+
+        browser.close()
+
+def test_ui_pyq_upload_and_cram_sheet_print(ui_test_server):
+    """Verifies end-to-end PYQ upload -> syllabus badge display -> Cram Sheet generation -> print layout."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(viewport={"width": 1440, "height": 900})
+        page = context.new_page()
+
+        console_errors = []
+        page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+
+        page.goto(ui_test_server)
+        page.wait_for_selector(".allocation-card")
+
+        # 1. Open Add Source Modal and select Past Papers (PYQ) Tab
+        page.click("#btn-open-add-source")
+        page.wait_for_selector("#add-source-modal:not(.hidden)")
+        page.click("#tab-src-pyq")
+        page.wait_for_selector("#form-upload-pyq:not(.hidden)")
+
+        # 2. Enter paper title and paste PYQ questions
+        page.fill("#input-pyq-title", "University End-Term 2024")
+        pyq_paste_text = (
+            "Q1. (a) Define Deterministic Finite Automata DFA and describe its 5 tuples with transition function. [5M]\n"
+            "    (b) Construct a minimal DFA for binary strings divisible by 3. [5 Marks]\n"
+            "Q2. Explain NFA to DFA subset construction algorithm with transition table. [10M]\n"
+        )
+        page.fill("#input-pyq-raw-text", pyq_paste_text)
+
+        # Handle alert dialog upon extraction
+        dialog_messages = []
+        page.on("dialog", lambda dialog: (dialog_messages.append(dialog.message), dialog.accept()))
+
+        page.click("#btn-submit-pyq")
+
+        # Wait for modal to close after upload
+        page.wait_for_selector("#add-source-modal", state="hidden", timeout=8000)
+        assert any("Extracted" in msg or "Successfully" in msg for msg in dialog_messages)
+
+        # 3. Verify syllabus displays PYQ badges on matched lessons
+        page.wait_for_selector(".allocation-card")
+        pyq_badges = page.locator(".allocation-card span:has-text('PYQ ×')")
+        assert pyq_badges.count() >= 1
+
+        # 4. Test High-Yield PYQs Filter Toggle
+        filter_btn = page.locator("#btn-filter-pyq")
+        assert filter_btn.is_visible()
+        filter_btn.click()
+        page.wait_for_timeout(300)
+
+        # All currently visible cards must have PYQ badges
+        visible_cards = page.locator(".allocation-card:visible")
+        assert visible_cards.count() >= 1
+        for i in range(visible_cards.count()):
+            card = visible_cards.nth(i)
+            assert "PYQ ×" in card.inner_text()
+
+        # Toggle filter back to All
+        filter_btn.click()
+        page.wait_for_timeout(300)
+
+        # 5. Click on the high-yield DFA lesson card and verify Studio PYQ tab
+        dfa_card = page.locator(".allocation-card:has-text('Deterministic Finite Automata')").first
+        dfa_card.click()
+        page.wait_for_timeout(300)
+
+        # Switch to PYQ tab in right Studio panel
+        pyq_tab = page.locator("#tab-pyq-questions")
+        assert pyq_tab.is_visible()
+        pyq_tab.click()
+        page.wait_for_selector("#pane-pyq-questions:not(.hidden)")
+
+        # Verify matched question cards in container
+        q_cards = page.locator("#pyq-questions-container > div")
+        assert q_cards.count() >= 1
+        first_q_text = q_cards.first.inner_text()
+        assert "Q1" in first_q_text or "Deterministic Finite Automata" in first_q_text
+
+        # 6. Test Cram Sheet Generation & Modal
+        cram_sheet_btn = page.locator("#btn-open-cram-sheet")
+        assert cram_sheet_btn.is_visible()
+        page.evaluate("() => window.loadCramSheet(false)")
+
+        page.wait_for_selector("#modal-cram-sheet:not(.hidden)", timeout=10000)
+        page.wait_for_selector("#cram-sheet-content h1, #cram-sheet-content h2")
+
+        cram_text = page.locator("#cram-sheet-content").inner_text()
+        assert "Last-Night" in cram_text or "Exam Cram Sheet" in cram_text or "Revision" in cram_text
+        assert "Deterministic Finite Automata" in cram_text
+
+        # 7. Verify print button and print styling container
+        assert page.locator("#btn-print-cram-sheet").is_visible()
+        assert page.locator("#btn-download-cram-md").is_visible()
+
+        # Capture visual verification artifact
+        page.screenshot(path="tests/cram_sheet_modal_verification.png")
+
+        # Close Cram Sheet Modal
+        page.click("#btn-close-cram-sheet")
+        page.wait_for_selector("#modal-cram-sheet", state="hidden")
+
+        # 8. Filter harmless network / favicon console errors and verify zero app errors
+        critical_errors = [e for e in console_errors if "favicon" not in e and "video" not in e]
+        assert len(critical_errors) == 0, f"Unexpected console errors: {critical_errors}"
 
         browser.close()

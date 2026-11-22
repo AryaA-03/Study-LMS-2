@@ -91,6 +91,8 @@ class LessonResponse(BaseModel):
     chapter_title: Optional[str] = None
     is_tested_out: bool = False
     is_excluded: bool = False
+    pyq_hit_count: int = 0
+    pyq_total_marks: int = 0
 
 class LessonFilterRequest(BaseModel):
     include_examples: Optional[bool] = Field(None, description="Set True to include, False to exclude questions/examples videos")
@@ -115,6 +117,8 @@ class AllocationResponse(BaseModel):
     is_completed: bool
     is_skipped: bool
     priority: str
+    pyq_hit_count: int = 0
+    pyq_total_marks: int = 0
 
 class AllocationRescheduleRequest(BaseModel):
     target_date: str = Field(..., description="Target date for this allocation (YYYY-MM-DD)")
@@ -360,5 +364,43 @@ class FlashcardCountsResponse(BaseModel):
     new: int
     learning: int
     review: int
+
+# --- PYQ (Past Papers) Schemas ---
+class PYQUploadTextRequest(BaseModel):
+    title: str = Field(..., max_length=256)
+    raw_text: str = Field(..., min_length=10)
+
+class PYQQuestionItem(BaseModel):
+    id: str
+    question_number: str
+    question_text: str
+    marks: Optional[int] = None
+    matched_lesson_id: Optional[str] = None
+    matched_chunk_id: Optional[str] = None
+    snippet: Optional[str] = ""
+
+class PYQUploadResponse(BaseModel):
+    success: bool = True
+    paper_id: str
+    title: str
+    filename: Optional[str] = ""
+    questions_count: int
+    matched_count: int
+    questions: List[PYQQuestionItem] = Field(default_factory=list)
+
+# --- Cram Sheet Schemas ---
+class CramSheetGenerateRequest(BaseModel):
+    force_refresh: bool = False
+
+class CramSheetResponse(BaseModel):
+    id: str
+    course_id: str
+    content_markdown: str
+    notes_hash: str
+    is_generated_by_llm: bool = False
+    cached: bool = False
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
 
 

@@ -128,7 +128,9 @@ def get_course_schedule(course_id: str, db: sqlite3.Connection = Depends(get_db)
 
     rows = db.execute(
         """
-        SELECT sa.*, l.title as lesson_title, l.video_id, l.video_url, l.priority
+        SELECT sa.*, l.title as lesson_title, l.video_id, l.video_url, l.priority,
+               COALESCE(l.pyq_hit_count, 0) as pyq_hit_count,
+               COALESCE(l.pyq_total_marks, 0) as pyq_total_marks
         FROM schedule_allocations sa
         JOIN lessons l ON sa.lesson_id = l.id
         WHERE sa.course_id = ?
@@ -166,6 +168,8 @@ def get_course_schedule(course_id: str, db: sqlite3.Connection = Depends(get_db)
             is_completed=bool(r["is_completed"]),
             is_skipped=bool(r["is_skipped"]),
             priority=r["priority"],
+            pyq_hit_count=int(r["pyq_hit_count"]) if "pyq_hit_count" in r.keys() else 0,
+            pyq_total_marks=int(r["pyq_total_marks"]) if "pyq_total_marks" in r.keys() else 0,
         )
         allocs_by_date[r["scheduled_date"]].append(alloc_dto)
         dates_seen.add(r["scheduled_date"])
@@ -281,7 +285,9 @@ def toggle_allocation(
 
     updated = db.execute(
         """
-        SELECT sa.*, l.title as lesson_title, l.video_id, l.video_url, l.priority
+        SELECT sa.*, l.title as lesson_title, l.video_id, l.video_url, l.priority,
+               COALESCE(l.pyq_hit_count, 0) as pyq_hit_count,
+               COALESCE(l.pyq_total_marks, 0) as pyq_total_marks
         FROM schedule_allocations sa
         JOIN lessons l ON sa.lesson_id = l.id
         WHERE sa.id = ?;
@@ -306,6 +312,8 @@ def toggle_allocation(
         is_completed=bool(updated["is_completed"]),
         is_skipped=bool(updated["is_skipped"]),
         priority=updated["priority"],
+        pyq_hit_count=int(updated["pyq_hit_count"]) if "pyq_hit_count" in updated.keys() else 0,
+        pyq_total_marks=int(updated["pyq_total_marks"]) if "pyq_total_marks" in updated.keys() else 0,
     )
 
 @router.post("/allocations/{allocation_id}/skip", response_model=ScheduleResponse)

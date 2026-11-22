@@ -97,3 +97,30 @@
 - [x] **Test Verification**:
   - 12 unit and integration tests passing (`tests/test_scheduler.py`, `tests/test_migrations.py`, `tests/test_integration_pipeline.py`).
   - 8 Playwright live browser UI tests passing (`tests/test_live_browser_ui.py`) covering theme switching, date alignment, studio collapsing, selective video filtering, course editing, lesson editing, and personal notes.
+
+---
+
+## Milestone 6.0: University PYQ Weightage Matcher & Last-Night Cram Sheet Generator
+- [x] **PYQ Upload & Parsing**:
+  - In the Subject Notebook sources panel, added **"Past Papers (PYQ)"** tab supporting exam PDF uploads and raw question text pasting.
+  - Lightweight regex parser supporting diverse university styles: sub-questions (`Q1(a)`, `2(b)`), marks annotations (`[5M]`, `[10 Marks]`, `(6 marks)`), and question text clean extraction.
+- [x] **FTS5 BM25 Syllabus Matching & Frequency Tagging**:
+  - Matched extracted past exam questions against 300–600 token lesson chunks using **SQLite FTS5 BM25 search**.
+  - Computed per-lesson aggregates `pyq_hit_count` and `pyq_total_marks`, updating `lessons` schema.
+  - Left Lesson Rail displays subtle, non-intrusive badges on high-yield lessons (e.g. `PYQ ×3`).
+  - Added **"🔥 PYQs"** toggle filter chip in syllabus view to instantly isolate high-yield exam topics.
+  - Added dedicated **PYQ Tab** in Right Studio panel (`#tab-pyq-questions`) displaying exact past paper questions, marks tags, paper titles, and a 1-click `💬 Ask AI Solution` button.
+- [x] **Last-Night Cram Sheet Generator (1-2 Page Revision Sheet)**:
+  - Added **"⚡ Cram Sheet"** button in top header navbar and 2-day revision buffer views.
+  - 1-click synthesis condensing lesson notes, exam weightage matrix, definitions, comparison tables, and top PYQ phrasings into a high-density Last-Night Cram Sheet.
+  - Cached in SQLite `cram_sheets` table by SHA-256 hash of underlying notes and PYQs for sub-millisecond retrieval and zero extra token usage.
+  - Deterministic no-key fallback extracting tables, key takeaways, and PYQs if no LLM key is configured.
+- [x] **Clean Print-Ready View & Export**:
+  - Distraction-free modal reader with `@media print` CSS for crisp A4 two-column or compact single-column printing with automatic navbar/sidebar hiding.
+  - "🖨️ Print / Save PDF" and "📥 Download .md" buttons.
+- [x] **Verification**:
+  - Unit & integration tests in `tests/test_pyq_and_cram_sheet.py`: verified question splitting, FTS5 BM25 matching, and SHA-256 caching.
+  - Playwright live browser UI test `test_ui_pyq_upload_and_cram_sheet_print` in `tests/test_live_browser_ui.py`: end-to-end PYQ upload -> syllabus badge display -> high-yield filter -> Right Studio PYQ questions -> Cram Sheet modal -> print layout rendering.
+  - Visual verification artifact saved: `21_cram_sheet_and_pyq_verification.png`.
+  - Non-destructive migration `006_pyq_and_cram_sheets.sql` applied with automatic backup.
+  - Core test suites passing 100%.

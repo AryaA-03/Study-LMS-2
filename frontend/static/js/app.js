@@ -787,6 +787,44 @@ function setupEventListeners() {
   formUploadPdf.addEventListener('submit', handleUploadPdf);
   formImportWeb.addEventListener('submit', handleImportWeb);
 
+  // Past Papers (PYQ) Listeners
+  document.getElementById('tab-src-pyq')?.addEventListener('click', () => switchSourceModalTab('pyq'));
+  document.getElementById('form-upload-pyq')?.addEventListener('submit', handleUploadPyq);
+  document.getElementById('tab-pyq-questions')?.addEventListener('click', () => switchNotesTab('pyq'));
+  document.getElementById('btn-open-pyq-upload-shortcut')?.addEventListener('click', () => openAddSourceModalWithTab('pyq'));
+
+  // PYQ High-Yield Filter Listener
+  const btnFilterPyq = document.getElementById('btn-filter-pyq');
+  if (btnFilterPyq) {
+    btnFilterPyq.addEventListener('click', () => {
+      if (window.currentLessonFilter === 'pyq') {
+        window.currentLessonFilter = null;
+        btnFilterPyq.className = 'px-2 py-0.5 rounded text-[11px] font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 border border-transparent hover:border-amber-300 dark:hover:border-amber-700/60 transition';
+      } else {
+        window.currentLessonFilter = 'pyq';
+        btnFilterPyq.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-amber-600 text-white shadow-sm border border-amber-700 transition';
+      }
+      if (currentSchedule) {
+        renderSchedule(currentSchedule);
+      }
+    });
+  }
+
+  // Last-Night Cram Sheet Listeners
+  document.getElementById('btn-open-cram-sheet')?.addEventListener('click', () => loadCramSheet(false));
+  document.getElementById('btn-close-cram-sheet')?.addEventListener('click', () => {
+    document.getElementById('modal-cram-sheet')?.classList.add('hidden');
+  });
+  document.getElementById('btn-refresh-cram-sheet')?.addEventListener('click', () => loadCramSheet(true));
+  document.getElementById('btn-print-cram-sheet')?.addEventListener('click', () => window.print());
+  document.getElementById('btn-download-cram-md')?.addEventListener('click', () => {
+    if (!currentCourseId) {
+      alert('Select a course first.');
+      return;
+    }
+    window.open(`/api/courses/${currentCourseId}/cram-sheet/download`, '_blank');
+  });
+
   // Quiz & Mastery Listeners
   tabQuizMastery.addEventListener('click', () => switchNotesTab('quiz'));
   btnGenerateLessonQuiz.addEventListener('click', () => {
@@ -1448,51 +1486,71 @@ function renderSchedule(sched) {
     let allocsHtml = '';
     if (day.allocations.length === 0) {
       allocsHtml = `
-        <div class="p-2.5 text-xs text-alabaster-muted dark:text-charcoal-muted italic text-center">
-          ${day.is_revision_day ? 'Dedicated strictly for comprehensive revision.' : day.is_rest_day ? 'Rest & recharge.' : 'No study allocations.'}
+        <div class="p-2.5 text-xs text-alabaster-muted dark:text-charcoal-muted italic text-center space-y-1.5">
+          <div>${day.is_revision_day ? 'Dedicated strictly for comprehensive revision.' : day.is_rest_day ? 'Rest & recharge.' : 'No study allocations.'}</div>
+          ${day.is_revision_day ? `
+            <button type="button" onclick="window.loadCramSheet(false)" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-semibold transition active:scale-95 shadow-sm">
+              <span>⚡ Open Last-Night Cram Sheet</span>
+            </button>
+          ` : ''}
         </div>
       `;
     } else {
-      allocsHtml = `<div class="divide-y divide-alabaster-border/40 dark:divide-charcoal-border/40">`;
-      day.allocations.forEach(alloc => {
-        const isCompleted = alloc.is_completed;
-        const splitBadge = alloc.split_count > 1 ? `<span class="ml-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 font-medium">Part ${alloc.split_index + 1}/${alloc.split_count}</span>` : '';
-
-        allocsHtml += `
-          <div class="allocation-card px-2.5 py-1.5 hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition flex items-center justify-between gap-2 cursor-pointer alloc-item group ${isCompleted ? 'opacity-40' : ''}" 
-               data-alloc-id="${alloc.id}" 
-               data-source-date="${day.date}"
-               draggable="true"
-               ondragstart="window.handleCardDragStart(event, '${alloc.id}', '${day.date}')"
-               ondragend="window.handleCardDragEnd(event, this)"
-               onclick="window.selectAllocation('${alloc.id}')">
-            
-            <div class="flex items-center gap-1.5 min-w-0 flex-1">
-              <div class="drag-handle text-alabaster-muted/40 hover:text-blue-500 cursor-grab active:cursor-grabbing shrink-0 select-none text-[11px]" title="Drag to move to another day">
-                ⋮⋮
-              </div>
-              <input type="checkbox" class="btn-complete-allocation rounded text-blue-600 focus:ring-0 alloc-checkbox cursor-pointer w-3.5 h-3.5 shrink-0" data-alloc-id="${alloc.id}" ${isCompleted ? 'checked' : ''} onclick="event.stopPropagation()">
-              <h4 class="text-xs text-alabaster-text dark:text-charcoal-text truncate font-normal group-hover:text-blue-600 dark:group-hover:text-blue-400 transition flex items-center gap-1 min-w-0 ${isCompleted ? 'line-through text-alabaster-muted dark:text-charcoal-muted' : ''}">
-                <span class="truncate">${alloc.lesson_title}</span>
-                ${splitBadge}
-              </h4>
-            </div>
-
-            <div class="flex items-center gap-1.5 shrink-0">
-              <span class="text-[11px] font-mono text-alabaster-muted dark:text-charcoal-muted">${Math.round(alloc.effective_minutes)}m</span>
-              <div class="flex items-center opacity-0 group-hover:opacity-100 transition">
-                <button class="p-0.5 rounded text-alabaster-muted hover:text-blue-600 dark:hover:text-blue-400" title="Edit lesson" onclick="window.editScheduleLesson('${alloc.lesson_id}', '${alloc.id}', event)">
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-                </button>
-                <button class="btn-skip-allocation p-0.5 rounded text-alabaster-muted hover:text-amber-500" title="Skip lesson & reflow" onclick="window.skipAllocation('${alloc.id}', event)">
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
-                </button>
-              </div>
-            </div>
-          </div>
-        `;
+      const matchedAllocs = day.allocations.filter(alloc => {
+        if (window.currentLessonFilter === 'pyq') {
+          return alloc.pyq_hit_count && alloc.pyq_hit_count > 0;
+        }
+        return true;
       });
-      allocsHtml += `</div>`;
+
+      if (matchedAllocs.length === 0 && day.allocations.length > 0) {
+        allocsHtml = `<div class="p-2.5 text-[11px] text-alabaster-muted/70 dark:text-charcoal-muted/70 italic text-center">No high-yield PYQ topics on this day.</div>`;
+      } else {
+        allocsHtml = `<div class="divide-y divide-alabaster-border/40 dark:divide-charcoal-border/40">`;
+        matchedAllocs.forEach(alloc => {
+          const isCompleted = alloc.is_completed;
+          const splitBadge = alloc.split_count > 1 ? `<span class="ml-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 font-medium">Part ${alloc.split_index + 1}/${alloc.split_count}</span>` : '';
+          const pyqBadge = (alloc.pyq_hit_count && alloc.pyq_hit_count > 0)
+            ? `<span class="ml-1 text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 shrink-0 font-semibold" title="${alloc.pyq_hit_count} past exam questions matched (${alloc.pyq_total_marks || 0} marks)">PYQ ×${alloc.pyq_hit_count}</span>`
+            : '';
+
+          allocsHtml += `
+            <div class="allocation-card px-2.5 py-1.5 hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition flex items-center justify-between gap-2 cursor-pointer alloc-item group ${isCompleted ? 'opacity-40' : ''}" 
+                 data-alloc-id="${alloc.id}" 
+                 data-source-date="${day.date}"
+                 draggable="true"
+                 ondragstart="window.handleCardDragStart(event, '${alloc.id}', '${day.date}')"
+                 ondragend="window.handleCardDragEnd(event, this)"
+                 onclick="window.selectAllocation('${alloc.id}')">
+              
+              <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                <div class="drag-handle text-alabaster-muted/40 hover:text-blue-500 cursor-grab active:cursor-grabbing shrink-0 select-none text-[11px]" title="Drag to move to another day">
+                  ⋮⋮
+                </div>
+                <input type="checkbox" class="btn-complete-allocation rounded text-blue-600 focus:ring-0 alloc-checkbox cursor-pointer w-3.5 h-3.5 shrink-0" data-alloc-id="${alloc.id}" ${isCompleted ? 'checked' : ''} onclick="event.stopPropagation()">
+                <h4 class="text-xs text-alabaster-text dark:text-charcoal-text truncate font-normal group-hover:text-blue-600 dark:group-hover:text-blue-400 transition flex items-center gap-1 min-w-0 ${isCompleted ? 'line-through text-alabaster-muted dark:text-charcoal-muted' : ''}">
+                  <span class="truncate">${alloc.lesson_title}</span>
+                  ${splitBadge}
+                  ${pyqBadge}
+                </h4>
+              </div>
+
+              <div class="flex items-center gap-1.5 shrink-0">
+                <span class="text-[11px] font-mono text-alabaster-muted dark:text-charcoal-muted">${Math.round(alloc.effective_minutes)}m</span>
+                <div class="flex items-center opacity-0 group-hover:opacity-100 transition">
+                  <button class="p-0.5 rounded text-alabaster-muted hover:text-blue-600 dark:hover:text-blue-400" title="Edit lesson" onclick="window.editScheduleLesson('${alloc.lesson_id}', '${alloc.id}', event)">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                  </button>
+                  <button class="btn-skip-allocation p-0.5 rounded text-alabaster-muted hover:text-amber-500" title="Skip lesson & reflow" onclick="window.skipAllocation('${alloc.id}', event)">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          `;
+        });
+        allocsHtml += `</div>`;
+      }
     }
 
     dayEl.innerHTML = dayHeader + `<div id="day-body-${day.date}" class="day-body ${isCollapsed ? 'hidden' : ''}">${allocsHtml}</div>`;
@@ -2316,6 +2374,11 @@ function switchNotesTab(tab) {
       btn: tabPyodideScratchpad, 
       pane: panePyodideScratchpad,
     },
+    { 
+      id: 'pyq', 
+      btn: document.getElementById('tab-pyq-questions'), 
+      pane: document.getElementById('pane-pyq-questions'),
+    },
   ];
 
   // If user requested 'grounded' (e.g. from legacy script), ensure center reading pane is visible and show personal notes or quiz on right
@@ -2354,6 +2417,8 @@ function switchNotesTab(tab) {
     loadQAHistory(currentCourseId);
   } else if (tab === 'quiz' && activeAllocation) {
     checkOrCreateLessonQuiz(activeAllocation.lesson_id);
+  } else if (tab === 'pyq' && activeAllocation) {
+    loadLessonPyqs(activeAllocation.lesson_id);
   } else if (tab === 'flashcards') {
     loadFlashcards();
   } else if (tab === 'pyodide') {
@@ -2399,6 +2464,9 @@ async function loadLessonNotesAndArtifacts(lessonId, forceRegen = false) {
       }
       Logger.api(method, endpoint, resNotes.status, Math.round(performance.now() - t0), noteData);
     }
+
+    // 4. Fetch matched PYQs for this lesson
+    await loadLessonPyqs(lessonId);
   } catch (err) {
     Logger.error('Failed to load lesson notes & artifacts', err);
   }
@@ -2434,6 +2502,33 @@ function renderMarkdownNotes(markdownText) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+
+  // Markdown tables: lines with pipes
+  html = html.replace(/((?:^\|[^\n]+\|\r?\n)+)/gm, (tableBlock) => {
+    const rows = tableBlock.trim().split(/\r?\n/).map(r => r.trim()).filter(Boolean);
+    if (rows.length < 2) return tableBlock;
+    const isSeparator = /^\|(?:\s*:?-+:?\s*\|)+$/.test(rows[1]);
+    let out = '<div class="overflow-x-auto my-3 rounded-xl border border-alabaster-border dark:border-charcoal-border shadow-sm"><table class="w-full text-left text-xs border-collapse">';
+    let bodyStarted = false;
+    rows.forEach((row, idx) => {
+      if (idx === 1 && isSeparator) return;
+      const cells = row.split('|').slice(1, -1).map(c => c.trim());
+      if (idx === 0) {
+        out += '<thead class="bg-alabaster-subcard dark:bg-charcoal-subcard text-alabaster-text dark:text-charcoal-text font-bold border-b border-alabaster-border dark:border-charcoal-border"><tr>';
+        cells.forEach(c => { out += `<th class="p-2 sm:p-2.5 font-bold text-zinc-900 dark:text-zinc-100">${c}</th>`; });
+        out += '</tr></thead><tbody>';
+        bodyStarted = true;
+      } else {
+        if (!bodyStarted) { out += '<tbody>'; bodyStarted = true; }
+        out += '<tr class="border-b border-alabaster-border/50 dark:border-charcoal-border/50 hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition">';
+        cells.forEach(c => { out += `<td class="p-2 sm:p-2.5 text-alabaster-text dark:text-charcoal-text">${c}</td>`; });
+        out += '</tr>';
+      }
+    });
+    if (bodyStarted) out += '</tbody>';
+    out += '</table></div>';
+    return out;
+  });
 
   // GitHub style alerts: > [!NOTE], > [!IMPORTANT], > [!TIP], > [!WARNING]
   html = html.replace(/&gt; \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n((?:&gt; .*\n?)+)/gi, (match, p1, p2) => {
@@ -2486,6 +2581,22 @@ function renderMarkdownNotes(markdownText) {
     }
     return `<button type="button" data-timestamp-sec="${totalSec}" onclick="window.seekToSeconds(${totalSec})" class="timestamp-link inline-flex items-center gap-1 font-mono text-[11px] font-medium bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/80 rounded px-1.5 py-0.2 cursor-pointer transition shadow-sm active:scale-95" title="Jump video to ${match}"><span>▶</span> ${match}</button>`;
   });
+
+  // High-yield PYQ notice banner
+  if (activeAllocation && activeAllocation.pyq_hit_count && activeAllocation.pyq_hit_count > 0) {
+    const pyqBanner = `
+      <div class="mb-3.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-between gap-2 text-xs shadow-sm">
+        <div class="flex items-center gap-2">
+          <span class="text-amber-600 dark:text-amber-400 font-bold">🔥 High-Yield Exam Topic</span>
+          <span class="text-[11px] text-amber-700 dark:text-amber-300 font-medium">${activeAllocation.pyq_hit_count} past exam questions matched (${activeAllocation.pyq_total_marks || 0} marks)</span>
+        </div>
+        <button type="button" onclick="switchNotesTab('pyq')" class="text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer">
+          View Exam Questions →
+        </button>
+      </div>
+    `;
+    html = pyqBanner + html;
+  }
 
   notesContent.innerHTML = html;
 }
@@ -2549,12 +2660,14 @@ function handlePersonalNotesInput() {
 function switchSourceModalTab(tab) {
   const tabPdf = document.getElementById('tab-src-pdf');
   const tabWeb = document.getElementById('tab-src-web');
+  const tabPyq = document.getElementById('tab-src-pyq');
   const tabDisc = document.getElementById('tab-src-discover-web');
   const formPdf = document.getElementById('form-upload-pdf');
   const formWeb = document.getElementById('form-import-web');
+  const formPyq = document.getElementById('form-upload-pyq');
   const viewDisc = document.getElementById('view-discover-web');
 
-  [tabPdf, tabWeb, tabDisc].forEach(t => {
+  [tabPdf, tabWeb, tabPyq, tabDisc].forEach(t => {
     if (t) {
       t.classList.remove('bg-white', 'dark:bg-zinc-800', 'font-semibold', 'text-zinc-900', 'dark:text-white', 'shadow-sm');
       t.classList.add('text-zinc-500', 'dark:text-zinc-400');
@@ -2562,6 +2675,7 @@ function switchSourceModalTab(tab) {
   });
   if (formPdf) formPdf.classList.add('hidden');
   if (formWeb) formWeb.classList.add('hidden');
+  if (formPyq) formPyq.classList.add('hidden');
   if (viewDisc) viewDisc.classList.add('hidden');
 
   if (tab === 'pdf') {
@@ -2576,6 +2690,12 @@ function switchSourceModalTab(tab) {
       tabWeb.classList.remove('text-zinc-500', 'dark:text-zinc-400');
     }
     if (formWeb) formWeb.classList.remove('hidden');
+  } else if (tab === 'pyq') {
+    if (tabPyq) {
+      tabPyq.classList.add('bg-white', 'dark:bg-zinc-800', 'font-semibold', 'text-zinc-900', 'dark:text-white', 'shadow-sm');
+      tabPyq.classList.remove('text-zinc-500', 'dark:text-zinc-400');
+    }
+    if (formPyq) formPyq.classList.remove('hidden');
   } else if (tab === 'discover-web') {
     if (tabDisc) {
       tabDisc.classList.add('bg-white', 'dark:bg-zinc-800', 'font-semibold', 'text-zinc-900', 'dark:text-white', 'shadow-sm');
@@ -2766,6 +2886,313 @@ async function handleImportWeb(e) {
     btn.disabled = false;
   }
 }
+
+// --- Past Exam Papers (PYQ) Management & High-Yield Analysis ---
+async function handleUploadPyq(e) {
+  e.preventDefault();
+  if (!currentCourseId) {
+    alert('Select a course first.');
+    return;
+  }
+
+  const titleInput = document.getElementById('input-pyq-title');
+  const fileInput = document.getElementById('input-pyq-file');
+  const rawTextInput = document.getElementById('input-pyq-raw-text');
+  const submitBtn = document.getElementById('btn-submit-pyq');
+
+  const title = (titleInput?.value || '').trim() || 'Past Examination Paper';
+  const rawText = (rawTextInput?.value || '').trim();
+  const file = fileInput?.files?.[0];
+
+  if (!file && !rawText) {
+    alert('Please choose an exam PDF/text file or paste question text.');
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Extracting & Matching...';
+  }
+
+  const t0 = performance.now();
+  try {
+    let res;
+    if (file) {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('title', title);
+      res = await fetch(`/api/courses/${currentCourseId}/pyq/upload-file`, {
+        method: 'POST',
+        body: formData,
+      });
+    } else {
+      res = await fetch(`/api/courses/${currentCourseId}/pyq/upload-text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title, raw_text: rawText }),
+      });
+    }
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(errData.detail || 'Failed to process exam paper');
+    }
+
+    const data = await res.json();
+    Logger.api('POST', `/api/courses/${currentCourseId}/pyq/upload`, res.status, Math.round(performance.now() - t0), data);
+
+    // Reset inputs
+    if (titleInput) titleInput.value = '';
+    if (fileInput) fileInput.value = '';
+    if (rawTextInput) rawTextInput.value = '';
+
+    // Close modal
+    if (addSourceModal) addSourceModal.classList.add('hidden');
+
+    alert(`Successfully processed "${data.title || title}"!\n• Extracted ${data.questions_count} questions.\n• Matched ${data.matched_count} to syllabus lessons.`);
+
+    // Reload schedule to reflect new PYQ badges and hit counts
+    await loadSchedule(currentCourseId);
+    if (activeAllocation) {
+      await loadLessonPyqs(activeAllocation.lesson_id);
+    }
+  } catch (err) {
+    Logger.error('PYQ upload failed', err);
+    alert('PYQ upload failed: ' + err.message);
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Extract & Match PYQs';
+    }
+  }
+}
+
+async function loadLessonPyqs(lessonId) {
+  if (!currentCourseId || !lessonId) return;
+  const container = document.getElementById('pyq-questions-container');
+  const badgeCount = document.getElementById('badge-lesson-pyq-count');
+  const badgeHeader = document.getElementById('pyq-lesson-badge-header');
+
+  if (!container) return;
+
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/lessons/${lessonId}/pyq`);
+    if (!res.ok) {
+      container.innerHTML = '<div class="text-xs text-alabaster-muted dark:text-charcoal-muted italic p-2">Failed to load past questions.</div>';
+      return;
+    }
+    const data = await res.json();
+    const questions = Array.isArray(data) ? data : (data.questions || []);
+    const count = questions.length;
+    const marks = questions.reduce((acc, q) => acc + (q.marks || 0), 0);
+
+    if (badgeCount) {
+      if (count > 0) {
+        badgeCount.textContent = count;
+        badgeCount.classList.remove('hidden');
+      } else {
+        badgeCount.classList.add('hidden');
+      }
+    }
+
+    if (badgeHeader) {
+      badgeHeader.textContent = count > 0 ? `${count} Matched (${marks} Marks)` : '0 Matched';
+      if (count > 0) {
+        badgeHeader.className = 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 font-semibold';
+      } else {
+        badgeHeader.className = 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700';
+      }
+    }
+
+    if (questions.length === 0) {
+      container.innerHTML = `
+        <div class="p-4 rounded-xl border border-dashed border-alabaster-border dark:border-charcoal-border text-center space-y-2">
+          <div class="text-sm">📝</div>
+          <p class="text-xs text-alabaster-muted dark:text-charcoal-muted">No past-exam questions matched for this specific lesson yet.</p>
+          <button type="button" onclick="window.openAddSourceModalWithTab('pyq')" class="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 font-semibold hover:underline">
+            <span>+ Upload Past Papers (PYQ)</span>
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = questions.map((q, idx) => {
+      const qNum = q.question_number || `Q${idx + 1}`;
+      const marksBadge = q.marks ? `<span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-mono text-[10px] font-bold border border-amber-500/25 shrink-0">${q.marks} Marks</span>` : '';
+      const paperBadge = q.paper_title ? `<span class="text-[10px] text-alabaster-muted dark:text-charcoal-muted font-mono truncate max-w-[140px]">${q.paper_title}</span>` : '';
+      const escapedText = q.question_text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+      return `
+        <div class="p-3 rounded-xl bg-alabaster-card dark:bg-charcoal-card border border-alabaster-border dark:border-charcoal-border hover:border-amber-400/50 dark:hover:border-amber-500/50 transition space-y-2 group shadow-sm">
+          <div class="flex items-center justify-between gap-1.5">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="font-bold text-xs font-mono text-amber-600 dark:text-amber-400">${qNum}</span>
+              ${marksBadge}
+            </div>
+            ${paperBadge}
+          </div>
+          <p class="text-xs text-alabaster-text dark:text-charcoal-text leading-relaxed whitespace-pre-wrap">${escapedText}</p>
+          <div class="pt-1 flex items-center justify-end gap-2 border-t border-alabaster-border/40 dark:border-charcoal-border/40">
+            <button type="button" onclick="window.askPyqInQa(${JSON.stringify(q.question_text).replace(/"/g, '&quot;')})" class="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+              <span>💬 Ask AI Solution</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    Logger.error('Failed to load lesson PYQs', err);
+    if (container) container.innerHTML = '<div class="text-xs text-red-400 p-2">Error loading past exam questions.</div>';
+  }
+}
+
+function askPyqInQa(questionText) {
+  switchNotesTab('qa');
+  if (inputQaQuery) {
+    inputQaQuery.value = `Explain how to solve this past exam question step-by-step with full exam-ready answer:\n"${questionText}"`;
+    inputQaQuery.focus();
+  }
+}
+window.askPyqInQa = askPyqInQa;
+
+function openAddSourceModalWithTab(tab) {
+  if (addSourceModal) {
+    addSourceModal.classList.remove('hidden');
+    switchSourceModalTab(tab);
+  }
+}
+window.openAddSourceModalWithTab = openAddSourceModalWithTab;
+
+// --- Last-Night Cram Sheet Generator ---
+function renderCramSheetMarkdown(markdownText) {
+  if (!markdownText) return '<div class="text-center p-6 text-alabaster-muted dark:text-charcoal-muted">No cram sheet content generated yet.</div>';
+
+  let html = markdownText
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Markdown tables: lines with pipes
+  html = html.replace(/((?:^\|[^\n]+\|\r?\n)+)/gm, (tableBlock) => {
+    const rows = tableBlock.trim().split(/\r?\n/).map(r => r.trim()).filter(Boolean);
+    if (rows.length < 2) return tableBlock;
+    const isSeparator = /^\|(?:\s*:?-+:?\s*\|)+$/.test(rows[1]);
+    let out = '<div class="overflow-x-auto my-3 rounded-xl border border-alabaster-border dark:border-charcoal-border shadow-sm print-break-inside-avoid"><table class="w-full text-left text-xs border-collapse">';
+    let bodyStarted = false;
+    rows.forEach((row, idx) => {
+      if (idx === 1 && isSeparator) return;
+      const cells = row.split('|').slice(1, -1).map(c => c.trim());
+      if (idx === 0) {
+        out += '<thead class="bg-alabaster-subcard dark:bg-charcoal-subcard text-alabaster-text dark:text-charcoal-text font-bold border-b border-alabaster-border dark:border-charcoal-border"><tr>';
+        cells.forEach(c => { out += `<th class="p-2 sm:p-2.5 font-bold text-zinc-900 dark:text-zinc-100">${c}</th>`; });
+        out += '</tr></thead><tbody>';
+        bodyStarted = true;
+      } else {
+        if (!bodyStarted) { out += '<tbody>'; bodyStarted = true; }
+        out += '<tr class="border-b border-alabaster-border/50 dark:border-charcoal-border/50 hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition">';
+        cells.forEach(c => { out += `<td class="p-2 sm:p-2.5 text-alabaster-text dark:text-charcoal-text">${c}</td>`; });
+        out += '</tr>';
+      }
+    });
+    if (bodyStarted) out += '</tbody>';
+    out += '</table></div>';
+    return out;
+  });
+
+  // Callouts
+  html = html.replace(/&gt; \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n((?:&gt; .*\n?)+)/gi, (match, p1, p2) => {
+    const alertType = p1.toUpperCase();
+    const alertBody = p2.replace(/&gt; ?/g, '');
+    let colorClass = 'border-amber-500/60 bg-amber-50/50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200';
+    return `<div class="p-3 my-2 border-l-4 rounded-r-xl ${colorClass} text-xs leading-relaxed print-break-inside-avoid">
+      <div class="font-bold uppercase tracking-wider mb-0.5">${alertType}</div>
+      <div>${alertBody}</div>
+    </div>`;
+  });
+
+  // Headings
+  html = html.replace(/^### (.*$)/gim, '<h3 class="text-xs sm:text-sm font-bold text-alabaster-text dark:text-charcoal-text mt-3 mb-1 print-break-inside-avoid">$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2 class="text-sm sm:text-base font-bold text-alabaster-text dark:text-charcoal-text mt-4 mb-2 pb-1 border-b border-alabaster-border dark:border-charcoal-border print-break-inside-avoid flex items-center gap-1.5">$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1 class="text-base sm:text-lg font-extrabold text-alabaster-text dark:text-charcoal-text mt-4 mb-2 pb-1 border-b-2 border-alabaster-border dark:border-charcoal-border print-break-inside-avoid">$1</h1>');
+
+  // Bold & Italic
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-alabaster-text dark:text-charcoal-text font-bold">$1</strong>');
+  html = html.replace(/\*(.*?)\*/g, '<em class="italic text-alabaster-muted dark:text-charcoal-muted">$1</em>');
+
+  // Code spans
+  html = html.replace(/`([^`]+)`/g, '<code class="bg-alabaster-subcard dark:bg-charcoal-subcard text-blue-600 dark:text-blue-400 px-1 py-0.5 rounded text-[11px] font-mono border border-alabaster-border dark:border-charcoal-border">$1</code>');
+
+  // Bullets
+  html = html.replace(/^- (.*$)/gim, '<div class="flex items-start gap-2 my-1 text-xs text-alabaster-text dark:text-charcoal-text leading-relaxed"><span class="text-amber-600 dark:text-amber-400 font-bold mt-0.5">•</span><span>$1</span></div>');
+
+  return html;
+}
+
+async function loadCramSheet(forceRefresh = false) {
+  if (!currentCourseId) {
+    alert('Please select or create a course first.');
+    return;
+  }
+
+  const modal = document.getElementById('modal-cram-sheet');
+  const container = document.getElementById('cram-sheet-content');
+  const badgeCache = document.getElementById('badge-cram-cache');
+  const btnRefresh = document.getElementById('btn-refresh-cram-sheet');
+
+  if (modal) modal.classList.remove('hidden');
+  if (container) {
+    container.innerHTML = `
+      <div class="py-12 flex flex-col items-center justify-center space-y-3">
+        <div class="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+        <p class="text-xs font-semibold text-alabaster-muted dark:text-charcoal-muted">
+          ${forceRefresh ? 'Re-synthesizing Last-Night Cram Sheet from latest notes & past papers...' : 'Retrieving high-density exam revision sheet...'}
+        </p>
+      </div>
+    `;
+  }
+  if (btnRefresh) btnRefresh.disabled = true;
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/cram-sheet/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force_refresh: forceRefresh })
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to generate cram sheet (status ${res.status})`);
+    }
+    const data = await res.json();
+    Logger.api('POST', `/api/courses/${currentCourseId}/cram-sheet/generate`, res.status, Math.round(performance.now() - t0), data);
+
+    if (badgeCache) {
+      const shortHash = (data.notes_hash || '').slice(0, 8);
+      badgeCache.textContent = `SHA: ${shortHash}`;
+      badgeCache.title = `Cached by content hash: ${data.notes_hash}`;
+    }
+
+    if (container) {
+      container.innerHTML = renderCramSheetMarkdown(data.content_markdown);
+    }
+  } catch (err) {
+    Logger.error('Failed to load cram sheet', err);
+    if (container) {
+      container.innerHTML = `
+        <div class="p-6 text-center text-xs text-red-500 bg-red-50 dark:bg-red-950/30 rounded-xl border border-red-200 dark:border-red-900">
+          <p class="font-bold mb-1">Failed to generate Last-Night Cram Sheet</p>
+          <p>${err.message}</p>
+        </div>
+      `;
+    }
+  } finally {
+    if (btnRefresh) btnRefresh.disabled = false;
+  }
+}
+window.loadCramSheet = loadCramSheet;
 
 async function loadQAHistory(courseId) {
   if (!courseId) return;
@@ -4072,6 +4499,8 @@ window.learnLMS = {
   setRevisionBuffer: setRevisionBuffer,
   toggleTheme: toggleTheme,
   filterLessons: handleFilterLessons,
+  loadCramSheet: loadCramSheet,
+  loadLessonPyqs: loadLessonPyqs,
   logger: Logger,
 };
 

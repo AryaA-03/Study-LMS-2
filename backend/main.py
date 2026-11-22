@@ -19,7 +19,20 @@ logging.basicConfig(
 logger = logging.getLogger("learn_lms")
 
 from backend.config import BASE_DIR
-from backend.routers import courses, schedule, settings, transcripts, notes, screenshots, sources, qa, quizzes, flashcards
+from backend.routers import (
+    courses,
+    schedule,
+    settings,
+    transcripts,
+    notes,
+    screenshots,
+    sources,
+    qa,
+    quizzes,
+    flashcards,
+    pyq,
+    cram_sheet,
+)
 
 app = FastAPI(
     title="Learn LMS & Exam Prep API",
@@ -87,6 +100,8 @@ app.include_router(sources.router)
 app.include_router(qa.router)
 app.include_router(quizzes.router)
 app.include_router(flashcards.router)
+app.include_router(pyq.router)
+app.include_router(cram_sheet.router)
 
 # Mount Static Assets & Templates
 STATIC_DIR = BASE_DIR / "frontend" / "static"

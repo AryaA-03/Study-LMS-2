@@ -84,6 +84,52 @@
       outline-offset: -2px;
       background-color: rgba(37, 99, 235, 0.06) !important;
     }
+
+    /* Print styling for Last-Night Cram Sheet */
+    @media print {
+      body * {
+        visibility: hidden !important;
+      }
+      #modal-cram-sheet,
+      #modal-cram-sheet *,
+      #cram-sheet-print-container,
+      #cram-sheet-print-container * {
+        visibility: visible !important;
+      }
+      #modal-cram-sheet {
+        position: fixed !important;
+        inset: 0 !important;
+        background: white !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        z-index: 99999 !important;
+      }
+      #modal-cram-sheet > div {
+        border: none !important;
+        box-shadow: none !important;
+        height: auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        background: white !important;
+      }
+      #cram-sheet-print-container {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 12mm !important;
+        color: #000 !important;
+        background: #fff !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      @page {
+        size: A4;
+        margin: 10mm;
+      }
+    }
   </style>
 </head>
 <body class="bg-alabaster-canvas dark:bg-charcoal-canvas text-alabaster-text dark:text-charcoal-text h-full flex flex-col font-sans antialiased selection:bg-blue-600 selection:text-white dark:selection:bg-blue-500 dark:selection:text-black overflow-hidden transition-colors duration-150">
@@ -142,6 +188,9 @@
         </button>
         <button id="btn-mock-exam" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-alabaster-hover hover:bg-alabaster-subcard dark:bg-charcoal-hover dark:hover:bg-charcoal-subcard text-[11px] font-medium text-alabaster-text dark:text-charcoal-text border border-alabaster-border dark:border-charcoal-border transition active:scale-95" title="Start a timed full mock exam">
           <span>Mock Exam</span>
+        </button>
+        <button id="btn-open-cram-sheet" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 text-[11px] font-medium text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/80 transition active:scale-95 shadow-sm" title="Generate or view 1-2 page Last-Night Exam Cram Sheet">
+          <span>⚡ Cram Sheet</span>
         </button>
       </div>
     </div>
@@ -256,6 +305,7 @@
             <button id="btn-filter-all" class="px-2 py-0.5 rounded text-[11px] font-medium bg-blue-600 text-white shadow-sm">All</button>
             <button id="btn-filter-concepts" class="px-2 py-0.5 rounded text-[11px] font-medium text-alabaster-muted dark:text-charcoal-muted hover:text-alabaster-text dark:hover:text-charcoal-text" title="Skip question & example videos">Concepts</button>
             <button id="btn-filter-examples" class="px-2 py-0.5 rounded text-[11px] font-medium text-alabaster-muted dark:text-charcoal-muted hover:text-alabaster-text dark:hover:text-charcoal-text">Examples</button>
+            <button id="btn-filter-pyq" class="px-2 py-0.5 rounded text-[11px] font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 border border-transparent hover:border-amber-300 dark:hover:border-amber-700/60 transition" title="Show only high-yield topics with past exam questions">🔥 PYQs</button>
           </div>
           <!-- Buffer selector -->
           <div class="flex items-center gap-0.5 text-[10px]">
@@ -404,6 +454,10 @@
           </button>
           <button id="tab-pyodide-scratchpad" class="py-2.5 border-b-2 border-transparent text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text transition whitespace-nowrap">
             Code
+          </button>
+          <button id="tab-pyq-questions" class="py-2.5 border-b-2 border-transparent text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text transition whitespace-nowrap flex items-center gap-1">
+            <span>PYQs</span>
+            <span id="badge-lesson-pyq-count" class="hidden text-[10px] px-1.5 py-0.2 bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 rounded-full font-mono">0</span>
           </button>
         </div>
 
@@ -652,6 +706,21 @@
                 <span id="pyodide-exec-time" class="text-blue-400">0 ms</span>
               </div>
               <pre id="pyodide-output" class="flex-1 overflow-y-auto whitespace-pre-wrap text-zinc-400">Ready.</pre>
+            </div>
+          </div>
+
+          <!-- Tab Content F: University Past-Paper Questions (PYQ) -->
+          <div id="pane-pyq-questions" class="hidden flex-1 flex flex-col min-h-0 space-y-3">
+            <div class="flex items-center justify-between pb-2 border-b border-alabaster-border dark:border-charcoal-border shrink-0 text-xs">
+              <div class="flex items-center gap-1.5">
+                <span class="font-semibold text-alabaster-text dark:text-charcoal-text">Past Exam Questions</span>
+                <span id="pyq-lesson-badge-header" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60">0 Matched</span>
+              </div>
+              <button id="btn-open-pyq-upload-shortcut" class="text-blue-600 dark:text-blue-400 hover:underline text-[11px] font-medium" title="Upload more exam papers">+ Upload PYQ</button>
+            </div>
+
+            <div id="pyq-questions-container" class="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs">
+              <!-- Dynamically populated matched PYQs for active lesson -->
             </div>
           </div>
 
@@ -1101,6 +1170,7 @@
       <div class="flex items-center gap-2 mb-4 p-1 bg-zinc-100 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs shrink-0">
         <button id="tab-src-pdf" class="flex-1 py-1.5 rounded-md font-semibold text-zinc-900 dark:text-white bg-white dark:bg-zinc-800 shadow-sm transition">Upload PDF</button>
         <button id="tab-src-web" class="flex-1 py-1.5 rounded-md font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition">Import URL</button>
+        <button id="tab-src-pyq" class="flex-1 py-1.5 rounded-md font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition">Past Papers (PYQ)</button>
         <button id="tab-src-discover-web" class="flex-1 py-1.5 rounded-md font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition">Discover Docs</button>
       </div>
 
@@ -1133,6 +1203,29 @@
           </div>
           <div class="pt-2 flex justify-end">
             <button type="submit" id="btn-submit-web" class="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900 font-bold text-xs transition">Fetch & Index Article</button>
+          </div>
+        </form>
+
+        <!-- PYQ Upload Tab Form -->
+        <form id="form-upload-pyq" class="hidden space-y-4">
+          <div>
+            <label class="block text-xs font-semibold uppercase text-zinc-600 dark:text-zinc-300 mb-1">Paper Title (e.g. 2024 End-Term Exam)</label>
+            <input type="text" id="input-pyq-title" required placeholder="e.g. University End-Term Exam 2024" class="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase text-zinc-600 dark:text-zinc-300 mb-1">Upload Exam PDF (or text file)</label>
+            <input type="file" id="input-pyq-file" accept=".pdf,.txt,application/pdf,text/plain" class="w-full text-xs text-zinc-700 dark:text-zinc-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-900 file:text-white dark:file:bg-white dark:file:text-zinc-900 cursor-pointer">
+          </div>
+          <div class="relative flex py-1 items-center">
+            <div class="flex-grow border-t border-zinc-300 dark:border-zinc-700"></div>
+            <span class="flex-shrink mx-2 text-[10px] text-zinc-400 uppercase font-mono">Or paste question text</span>
+            <div class="flex-grow border-t border-zinc-300 dark:border-zinc-700"></div>
+          </div>
+          <div>
+            <textarea id="input-pyq-raw-text" rows="4" placeholder="Paste questions here, for example:&#10;Q1. (a) Explain ACID properties in DBMS [5M]&#10;Q2. What is 2-Phase Locking protocol? [10M]" class="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg p-2.5 text-xs text-zinc-900 dark:text-white font-mono"></textarea>
+          </div>
+          <div class="pt-2 flex justify-end">
+            <button type="submit" id="btn-submit-pyq" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition shadow-sm">Extract & Match PYQs</button>
           </div>
         </form>
 
@@ -1422,6 +1515,39 @@
           </div>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Last-Night Cram Sheet Modal (1-2 Page Revision Sheet & Print View) -->
+  <div id="modal-cram-sheet" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
+    <div class="bg-alabaster-card dark:bg-charcoal-card border border-alabaster-border dark:border-charcoal-border rounded-2xl max-w-4xl w-full h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- Header -->
+      <div class="px-5 py-3 border-b border-alabaster-border dark:border-charcoal-border flex items-center justify-between shrink-0 bg-alabaster-subcard/60 dark:bg-charcoal-subcard/60 no-print">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-bold text-alabaster-text dark:text-charcoal-text">⚡ Last-Night Exam Cram Sheet</span>
+          <span id="badge-cram-cache" class="text-[10px] px-2 py-0.5 rounded-full font-mono bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">Cached</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btn-print-cram-sheet" class="px-3 py-1 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex items-center gap-1 transition active:scale-95" title="Print crisp A4 two-column exam sheet or Save as PDF">
+            <span>🖨️ Print / Save PDF</span>
+          </button>
+          <button id="btn-download-cram-md" class="px-3 py-1 rounded-lg text-xs font-medium border border-alabaster-border dark:border-charcoal-border bg-alabaster-canvas dark:bg-charcoal-canvas hover:bg-alabaster-hover dark:hover:bg-charcoal-hover text-alabaster-text dark:text-charcoal-text transition active:scale-95" title="Download raw Markdown file">
+            <span>📥 Download .md</span>
+          </button>
+          <button id="btn-refresh-cram-sheet" class="px-2.5 py-1 rounded-lg text-xs font-medium border border-alabaster-border dark:border-charcoal-border text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text transition" title="Force regenerate cram sheet from latest notes & PYQs">
+            <span>🔄 Re-Synthesize</span>
+          </button>
+          <button id="btn-close-cram-sheet" class="p-1 rounded-lg text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text transition text-sm">
+            ✕
+          </button>
+        </div>
+      </div>
+      <!-- Scrollable Printable Container -->
+      <div class="flex-1 overflow-y-auto p-6 space-y-4 bg-alabaster-canvas dark:bg-charcoal-canvas">
+        <div id="cram-sheet-content" class="max-w-3xl mx-auto space-y-4 text-xs sm:text-sm leading-relaxed text-alabaster-text dark:text-charcoal-text">
+          <!-- Markdown rendered cram sheet -->
+        </div>
+      </div>
     </div>
   </div>
 
