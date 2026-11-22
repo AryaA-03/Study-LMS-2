@@ -37,7 +37,7 @@ from backend.routers import (
 app = FastAPI(
     title="Learn LMS & Exam Prep API",
     description="Local-first autonomous personal LMS and exam-prep platform.",
-    version="0.1.0",
+    version="0.6.0",
 )
 
 # Enable CORS for local client development (restricted to local origins, no invalid wildcard+credentials)
@@ -79,10 +79,11 @@ async def log_requests(request: Request, call_next):
             query = f"?{request.url.query}" if request.url.query else ""
             logger.info(f"{request.method} {request.url.path}{query} -> {status_badge} ({duration_ms}ms)")
         
-        # Ensure browser never uses stale cached assets during development
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
+        # Only no-cache API/HTML responses; let static assets benefit from HTTP caching
+        if not request.url.path.startswith("/static"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
         return response
     except Exception as exc:
         duration_ms = round((time.time() - start_time) * 1000, 1)
@@ -119,7 +120,7 @@ def index_page(request: Request):
 
 @app.get("/healthz")
 def health_check():
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "version": "0.6.0"}
 
 def export_openapi_spec(output_path: Path = BASE_DIR / "openapi.json"):
     """Dumps locked OpenAPI specification to openapi.json."""

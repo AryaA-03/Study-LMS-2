@@ -2,14 +2,41 @@
 
 Provides SHA-256 content-hash deduplication and caching for LLM requests
 (Structured Notes, Q&A Engine, Quiz Generation) backed by the SQLite `llm_cache` table.
+
+Optimization: table schema is probed once per connection and cached in a module-level
+dict to avoid repeated PRAGMA table_info I/O on every cache read/write.
 """
 
 import hashlib
 import json
 import logging
-from typing import Optional, Any, Dict
+from typing import Optional
 
 logger = logging.getLogger("learn_lms.llm_cache")
+
+# Module-level cache of verified column sets per connection id
+# Maps id(conn) -> frozenset of column names
+_conn_cols_cache: dict = {}
+
+
+def _get_llm_cache_cols(db_conn) -> frozenset:
+    """Returns the column set for llm_cache, probing once per connection object."""
+    conn_key = id(db_conn)
+    if conn_key in _conn_cols_cache:
+        return _conn_cols_cache[conn_key]
+    try:
+        cur = db_conn.cursor()
+        cur.execute("PRAGMA table_info(llm_cache);")
+        cols = frozenset(row[1] for row in cur.fetchall())
+        _conn_cols_cache[conn_key] = cols
+        return cols
+    except Exception:
+        return frozenset()
+
+
+def _invalidate_cols_cache(db_conn) -> None:
+    """Invalidates the column cache for a connection (call after DDL changes)."""
+    _conn_cols_cache.pop(id(db_conn), None)
 
 
 def ensure_llm_cache_table(db_conn) -> None:
@@ -33,27 +60,19 @@ def ensure_llm_cache_table(db_conn) -> None:
                 );
             """)
         else:
-            if "response_json" not in cols:
-                try:
-                    cur.execute("ALTER TABLE llm_cache ADD COLUMN response_json TEXT;")
-                except Exception:
-                    pass
-            if "response_text" not in cols:
-                try:
-                    cur.execute("ALTER TABLE llm_cache ADD COLUMN response_text TEXT;")
-                except Exception:
-                    pass
-            if "model" not in cols:
-                try:
-                    cur.execute("ALTER TABLE llm_cache ADD COLUMN model TEXT;")
-                except Exception:
-                    pass
-            if "model_name" not in cols:
-                try:
-                    cur.execute("ALTER TABLE llm_cache ADD COLUMN model_name TEXT;")
-                except Exception:
-                    pass
+            for col, col_type in [
+                ("response_json", "TEXT"),
+                ("response_text", "TEXT"),
+                ("model", "TEXT"),
+                ("model_name", "TEXT"),
+            ]:
+                if col not in cols:
+                    try:
+                        cur.execute(f"ALTER TABLE llm_cache ADD COLUMN {col} {col_type};")
+                    except Exception:
+                        pass
         db_conn.commit()
+        _invalidate_cols_cache(db_conn)
     except Exception as e:
         logger.warning(f"Error ensuring llm_cache table: {e}")
 
@@ -68,12 +87,11 @@ def get_cached_response(db_conn, prompt_hash: str) -> Optional[str]:
     if not db_conn:
         return None
     try:
-        cur = db_conn.cursor()
-        cur.execute("PRAGMA table_info(llm_cache);")
-        cols = {row[1] for row in cur.fetchall()}
+        cols = _get_llm_cache_cols(db_conn)
         if not cols:
             return None
 
+        cur = db_conn.cursor()
         if "response_json" in cols and "response_text" in cols:
             cur.execute(
                 "SELECT COALESCE(response_json, response_text) FROM llm_cache WHERE prompt_hash = ? LIMIT 1;",
@@ -106,9 +124,7 @@ def set_cached_response(
         return
     try:
         ensure_llm_cache_table(db_conn)
-        cur = db_conn.cursor()
-        cur.execute("PRAGMA table_info(llm_cache);")
-        cols = {row[1] for row in cur.fetchall()}
+        cols = _get_llm_cache_cols(db_conn)
 
         insert_cols = ["prompt_hash"]
         insert_vals = [prompt_hash]
@@ -131,7 +147,7 @@ def set_cached_response(
 
         placeholders = ", ".join(["?"] * len(insert_cols))
         colnames = ", ".join(insert_cols)
-        cur.execute(
+        db_conn.execute(
             f"INSERT OR REPLACE INTO llm_cache ({colnames}) VALUES ({placeholders});",
             tuple(insert_vals)
         )

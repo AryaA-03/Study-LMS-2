@@ -118,8 +118,7 @@ def delete_pyq_paper(
     db: sqlite3.Connection = Depends(get_db)
 ):
     """Deletes a past paper and its questions, recalculating lesson hit counts."""
-    cur = db.cursor()
-    cur.execute("DELETE FROM pyq_papers WHERE id = ? AND course_id = ?;", (paper_id, course_id))
-    cur.execute("DELETE FROM pyq_questions WHERE paper_id = ? AND course_id = ?;", (paper_id, course_id))
+    db.execute("DELETE FROM pyq_papers WHERE id = ? AND course_id = ?;", (paper_id, course_id))
+    db.execute("DELETE FROM pyq_questions WHERE paper_id = ? AND course_id = ?;", (paper_id, course_id))
     update_course_pyq_aggregates(db, course_id)
     return {"success": True, "message": "Past paper deleted and lesson weights updated"}

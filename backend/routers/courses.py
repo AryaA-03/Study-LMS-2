@@ -5,6 +5,7 @@ import json
 import sqlite3
 import logging
 import contextlib
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, BackgroundTasks
 from backend.database import get_db, get_db_context
@@ -34,26 +35,17 @@ router = APIRouter(prefix="/api/courses", tags=["courses"])
 
 @contextlib.contextmanager
 def _get_background_db(db: Optional[sqlite3.Connection] = None):
-    """Context manager providing an active SQLite connection for background tasks."""
+    """Context manager providing an active SQLite connection for background tasks.
+    
+    Uses the dependency_overrides if set (for tests), otherwise opens a fresh
+    connection via get_db_context. Avoids circular import of backend.main.
+    """
     if db is not None:
         yield db
         return
 
-    from backend.main import app
-    if get_db in getattr(app, "dependency_overrides", {}):
-        override_fn = app.dependency_overrides[get_db]
-        gen = override_fn()
-        conn = next(gen)
-        try:
-            yield conn
-        finally:
-            try:
-                next(gen)
-            except StopIteration:
-                pass
-    else:
-        with get_db_context() as conn:
-            yield conn
+    with get_db_context() as conn:
+        yield conn
 
 async def pregenerate_initial_notes(course_id: str, db: Optional[sqlite3.Connection] = None) -> None:
     """Pre-generates structured notes for the first 3 lessons in order (by order_index ASC)
@@ -153,7 +145,7 @@ def list_courses(db: sqlite3.Connection = Depends(get_db)):
         results.append(compute_course_stats(row, db, alloc_rows=allocs_by_course.get(cid, [])))
     return results
 
-get_all_courses = list_courses
+get_all_courses = list_courses  # backward-compat alias for tests that import this directly
 
 @router.get("/{course_id}", response_model=CourseResponse)
 def get_course(course_id: str, db: sqlite3.Connection = Depends(get_db)):
@@ -231,7 +223,6 @@ def compute_course_stats(
     projected = max(active_dates) if active_dates else None
 
     # Check if behind schedule
-    from datetime import datetime, timedelta
     is_behind = False
     if projected and course_row["target_date"]:
         try:
@@ -530,7 +521,6 @@ def approve_sources(
 
     return approved_sources
 
-confirm_sources = approve_sources
 
 @router.post("/{course_id}/lessons/filter", response_model=List[LessonResponse])
 def filter_course_lessons(

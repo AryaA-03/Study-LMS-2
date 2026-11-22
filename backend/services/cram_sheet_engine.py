@@ -228,58 +228,77 @@ async def generate_cram_sheet_with_llm(
 
     try:
         async with httpx.AsyncClient(timeout=25.0) as client:
+            # Try providers in priority order: Gemini → Groq → OpenRouter
+            # Each is tried independently so a quota/rate-limit error on one falls through to the next
             if gemini_key:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
-                payload = {
-                    "contents": [
-                        {"role": "user", "parts": [{"text": f"{system_instruction}\n\n{user_prompt}"}]}
-                    ],
-                    "generationConfig": {"temperature": 0.2, "maxOutputTokens": 3000}
-                }
-                resp = await client.post(url, json=payload)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    candidates = data.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts:
-                            return parts[0].get("text", "")
-            elif groq_key:
-                url = "https://api.groq.com/openai/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
-                payload = {
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "temperature": 0.2,
-                    "max_tokens": 3000,
-                }
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    choices = data.get("choices", [])
-                    if choices:
-                        return choices[0].get("message", {}).get("content", "")
-            elif openrouter_key:
-                url = "https://openrouter.ai/api/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {openrouter_key}", "Content-Type": "application/json"}
-                payload = {
-                    "model": "google/gemini-2.5-flash",
-                    "messages": [
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "temperature": 0.2,
-                    "max_tokens": 3000,
-                }
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    choices = data.get("choices", [])
-                    if choices:
-                        return choices[0].get("message", {}).get("content", "")
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
+                    payload = {
+                        "contents": [
+                            {"role": "user", "parts": [{"text": f"{system_instruction}\n\n{user_prompt}"}]}
+                        ],
+                        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 3000}
+                    }
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            if parts:
+                                return parts[0].get("text", "")
+                    else:
+                        logger.warning(f"Gemini cram sheet API returned {resp.status_code}; trying fallback providers")
+                except Exception as e:
+                    logger.warning(f"Gemini cram sheet call failed: {e}; trying fallback providers")
+
+            if groq_key:
+                try:
+                    url = "https://api.groq.com/openai/v1/chat/completions"
+                    headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+                    payload = {
+                        "model": "llama-3.3-70b-versatile",
+                        "messages": [
+                            {"role": "system", "content": system_instruction},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "temperature": 0.2,
+                        "max_tokens": 3000,
+                    }
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        choices = data.get("choices", [])
+                        if choices:
+                            return choices[0].get("message", {}).get("content", "")
+                    else:
+                        logger.warning(f"Groq cram sheet API returned {resp.status_code}; trying fallback providers")
+                except Exception as e:
+                    logger.warning(f"Groq cram sheet call failed: {e}; trying fallback providers")
+
+            if openrouter_key:
+                try:
+                    url = "https://openrouter.ai/api/v1/chat/completions"
+                    headers = {"Authorization": f"Bearer {openrouter_key}", "Content-Type": "application/json"}
+                    payload = {
+                        "model": "google/gemini-2.5-flash",
+                        "messages": [
+                            {"role": "system", "content": system_instruction},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "temperature": 0.2,
+                        "max_tokens": 3000,
+                    }
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        choices = data.get("choices", [])
+                        if choices:
+                            return choices[0].get("message", {}).get("content", "")
+                    else:
+                        logger.warning(f"OpenRouter cram sheet API returned {resp.status_code}")
+                except Exception as e:
+                    logger.warning(f"OpenRouter cram sheet call failed: {e}")
     except Exception as e:
         logger.warning(f"LLM cram sheet generation failed, falling back to deterministic: {e}")
 
@@ -334,6 +353,7 @@ async def get_or_create_cram_sheet(
         is_llm = 1
 
     sheet_id = existing[0] if existing else f"cram_{uuid.uuid4().hex[:10]}"
+    now_ts = None
     if existing:
         cur.execute(
             """
@@ -343,6 +363,11 @@ async def get_or_create_cram_sheet(
             """,
             (content, current_hash, is_llm, sheet_id)
         )
+        # Fetch updated timestamps
+        cur.execute("SELECT created_at, updated_at FROM cram_sheets WHERE id = ?;", (sheet_id,))
+        ts_row = cur.fetchone()
+        created_at_val = ts_row[0] if ts_row else None
+        updated_at_val = ts_row[1] if ts_row else None
     else:
         cur.execute(
             """
@@ -351,8 +376,18 @@ async def get_or_create_cram_sheet(
             """,
             (sheet_id, course_id, content, current_hash, is_llm)
         )
+        cur.execute("SELECT created_at, updated_at FROM cram_sheets WHERE id = ?;", (sheet_id,))
+        ts_row = cur.fetchone()
+        created_at_val = ts_row[0] if ts_row else None
+        updated_at_val = ts_row[1] if ts_row else None
 
     db_conn.commit()
+
+    # Fetch final timestamps for response
+    cur.execute("SELECT created_at, updated_at FROM cram_sheets WHERE id = ?;", (sheet_id,))
+    ts_row = cur.fetchone()
+    created_at_val = ts_row[0] if ts_row else None
+    updated_at_val = ts_row[1] if ts_row else None
 
     return {
         "id": sheet_id,
@@ -360,5 +395,7 @@ async def get_or_create_cram_sheet(
         "content_markdown": content,
         "notes_hash": current_hash,
         "is_generated_by_llm": bool(is_llm),
-        "cached": False
+        "cached": False,
+        "created_at": created_at_val,
+        "updated_at": updated_at_val,
     }

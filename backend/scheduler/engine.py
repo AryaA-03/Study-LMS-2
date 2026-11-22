@@ -525,13 +525,8 @@ def compute_schedule_diff(
         "deficit_message": deficit_message,
     }
 
-def trigger_course_reflow(*args, **kwargs):
-    """Reflow remaining allocations for a course schedule."""
-    from backend.routers.schedule import trigger_course_reflow as _tcr
-    return _tcr(*args, **kwargs)
 
-def replan_course_schedule(*args, **kwargs):
-    """Replan a course schedule programmatically."""
-    from backend.routers.schedule import replan_course_schedule as _rcs
-    return _rcs(*args, **kwargs)
+# NOTE: trigger_course_reflow and replan_course_schedule are intentionally NOT
+# re-exported here. Callers should import directly from backend.routers.schedule
+# to avoid circular imports (routers.schedule already imports from this module).
 
