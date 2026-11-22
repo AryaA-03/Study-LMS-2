@@ -85,10 +85,6 @@ def update_env_file(updates: Dict[str, str]) -> None:
     global ENV_VARS
     ENV_VARS = load_env_vars()
 
-# Ensure .venv/bin is on PATH so ffmpeg, yt-dlp, and mlx-whisper find local binaries
-VENV_BIN = BASE_DIR / ".venv" / "bin"
-if VENV_BIN.exists() and str(VENV_BIN) not in os.environ.get("PATH", ""):
-    os.environ["PATH"] = f"{VENV_BIN}:{os.environ.get('PATH', '')}"
 
 class Settings:
     @property

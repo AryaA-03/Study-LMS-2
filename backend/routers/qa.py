@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/courses", tags=["qa"])
 @router.post("/{course_id}/qa", response_model=QAResponse)
 async def ask_question(
     course_id: str,
-    payload: QARequest,
+    req: QARequest,
     db: sqlite3.Connection = Depends(get_db)
 ):
     """Answers a question strictly grounded in course evidence chunks."""
@@ -25,7 +25,7 @@ async def ask_question(
     if not cur.fetchone():
         raise HTTPException(status_code=404, detail="Course not found")
 
-    result = await answer_course_question(db, course_id, payload.query)
+    result = await answer_course_question(db, course_id, req.query, lesson_id=req.lesson_id)
     return result
 
 

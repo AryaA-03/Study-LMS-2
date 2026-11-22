@@ -9,19 +9,28 @@ import os
 import re
 import uuid
 import logging
+import hashlib
 from typing import List, Dict, Any, Optional, Tuple
 
 import httpx
 
 from backend.config import get_settings
+from backend.services.llm_cache import (
+    compute_sha256,
+    get_cached_response,
+    set_cached_response,
+    ensure_llm_cache_table,
+)
 
 logger = logging.getLogger("learn_lms.notes")
 settings = get_settings()
 
 
-def format_seconds_to_mm_ss(seconds: int) -> str:
+def format_seconds_to_mm_ss(seconds: Optional[int]) -> str:
     """Formats integer seconds to [MM:SS] or [HH:MM:SS]."""
-    hours, remainder = divmod(seconds, 3600)
+    if seconds is None:
+        return "[00:00]"
+    hours, remainder = divmod(int(seconds), 3600)
     minutes, secs = divmod(remainder, 60)
     if hours > 0:
         return f"[{hours:02d}:{minutes:02d}:{secs:02d}]"
@@ -109,8 +118,9 @@ def generate_no_key_structured_notes(
 async def generate_llm_structured_notes(
     lesson_title: str,
     chunks: List[Dict[str, Any]],
-    gemini_key: str,
-    screenshots: Optional[List[Dict[str, Any]]] = None
+    gemini_key: Optional[str] = None,
+    screenshots: Optional[List[Dict[str, Any]]] = None,
+    db_conn: Optional[Any] = None,
 ) -> str:
     """Generates LLM-synthesized structured study notes grounded in transcript chunks."""
     if not chunks:
@@ -136,34 +146,107 @@ async def generate_llm_structured_notes(
         "4. Use standard GitHub Flavored Markdown with > [!NOTE] or > [!IMPORTANT] alerts.\n"
     )
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
-    payload = {
-        "contents": [{
-            "parts": [{
-                "text": f"{system_instruction}\n\nLesson Title: {lesson_title}\n\nTranscript Chunks:\n{transcript_text}"
-            }]
-        }],
-        "generationConfig": {
-            "temperature": 0.2,
-            "maxOutputTokens": 2048,
-        }
-    }
+    prompt_text = f"{system_instruction}\n\nLesson Title: {lesson_title}\n\nTranscript Chunks:\n{transcript_text}"
+    prompt_hash = compute_sha256(prompt_text)
+
+    # 1. Check cache first
+    if db_conn is not None:
+        cached_content = get_cached_response(db_conn, prompt_hash)
+        if cached_content:
+            logger.info("Returning cached structured notes from llm_cache")
+            return cached_content
+
+    # 2. Determine provider and model
+    key = gemini_key or settings.GEMINI_API_KEY
+    groq_key = settings.GROQ_API_KEY
+    openrouter_key = settings.OPENROUTER_API_KEY
+
+    model_used = "deterministic"
+    generated_text = None
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(url, json=payload)
-            if resp.status_code == 200:
-                result = resp.json()
-                candidates = result.get("candidates", [])
-                if candidates:
-                    content_parts = candidates[0].get("content", {}).get("parts", [])
-                    if content_parts:
-                        return content_parts[0].get("text", "")
-            logger.warning(f"Gemini API returned status {resp.status_code}: {resp.text[:200]}")
+        async with httpx.AsyncClient(timeout=35.0) as client:
+            if key:
+                model_used = "gemini-2.5-flash"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent?key={key}"
+                payload = {
+                    "contents": [{
+                        "parts": [{
+                            "text": prompt_text
+                        }]
+                    }],
+                    "generationConfig": {
+                        "temperature": 0.2,
+                        "maxOutputTokens": 2048,
+                    }
+                }
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    result = resp.json()
+                    candidates = result.get("candidates", [])
+                    if candidates:
+                        content_parts = candidates[0].get("content", {}).get("parts", [])
+                        if content_parts:
+                            generated_text = content_parts[0].get("text", "")
+                else:
+                    logger.warning(f"Gemini API returned status {resp.status_code}: {resp.text[:200]}")
+            elif groq_key:
+                model_used = "llama-3.3-70b-versatile"
+                url = "https://api.groq.com/openai/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {groq_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": model_used,
+                    "messages": [
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": f"Lesson Title: {lesson_title}\n\nTranscript Chunks:\n{transcript_text}"}
+                    ],
+                    "temperature": 0.2,
+                    "max_tokens": 2048,
+                }
+                resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    choices = data.get("choices", [])
+                    if choices:
+                        generated_text = choices[0].get("message", {}).get("content", "")
+                else:
+                    logger.warning(f"Groq API returned status {resp.status_code}: {resp.text[:200]}")
+            elif openrouter_key:
+                model_used = "google/gemini-2.5-flash"
+                url = "https://openrouter.ai/api/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {openrouter_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": model_used,
+                    "messages": [
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": f"Lesson Title: {lesson_title}\n\nTranscript Chunks:\n{transcript_text}"}
+                    ],
+                    "temperature": 0.2,
+                    "max_tokens": 2048,
+                }
+                resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    choices = data.get("choices", [])
+                    if choices:
+                        generated_text = choices[0].get("message", {}).get("content", "")
+                else:
+                    logger.warning(f"OpenRouter API returned status {resp.status_code}: {resp.text[:200]}")
     except Exception as e:
-        logger.warning(f"Gemini API request failed: {e}")
+        logger.warning(f"LLM notes generation request failed: {e}")
 
-    # Fallback to deterministic generation if LLM fails
+    if generated_text:
+        if db_conn is not None:
+            set_cached_response(db_conn, prompt_hash, model_used, generated_text)
+        return generated_text
+
+    # Fallback to deterministic generation if LLM fails or is unconfigured
     return generate_no_key_structured_notes(lesson_title, chunks, screenshots)
 
 
@@ -237,8 +320,15 @@ async def get_or_generate_lesson_notes(
     screenshots = get_lesson_screenshots(db_conn, lesson_id)
 
     # 4. Generate structured notes
-    if settings.GEMINI_API_KEY:
-        markdown = await generate_llm_structured_notes(lesson_title, chunks, settings.GEMINI_API_KEY, screenshots)
+    has_llm = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY)
+    if has_llm:
+        markdown = await generate_llm_structured_notes(
+            lesson_title=lesson_title,
+            chunks=chunks,
+            gemini_key=settings.GEMINI_API_KEY,
+            screenshots=screenshots,
+            db_conn=db_conn,
+        )
     else:
         markdown = generate_no_key_structured_notes(lesson_title, chunks, screenshots)
 

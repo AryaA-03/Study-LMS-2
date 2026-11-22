@@ -6,7 +6,8 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from backend.database import get_db
 from backend.config import DATA_DIR, DB_PATH, TIMEZONE_STR, ENV_VARS, update_env_file
@@ -153,66 +154,121 @@ def update_settings(
     return {"success": True, "message": "Settings updated successfully."}
 
 @router.post("/test-connection", response_model=TestConnectionResponse)
-def test_connection(req: TestConnectionRequest):
+async def test_connection(req: TestConnectionRequest):
+    """Tests real connectivity to the configured LLM provider by making a lightweight HTTP call."""
     provider = req.provider.lower()
+
     if provider == "gemini":
         key = req.api_key or ENV_VARS.get("GEMINI_API_KEY")
         if not key:
             return TestConnectionResponse(
-                success=False,
-                provider="gemini",
+                success=False, provider="gemini",
                 message="Google Gemini API Key is missing.",
                 guide="1. Visit Google AI Studio: https://aistudio.google.com/app/apikey\n2. Create a free API key.\n3. Paste the key above and save."
             )
-        return TestConnectionResponse(
-            success=True,
-            provider="gemini",
-            message=f"Connection verified: Google Gemini ({req.model or 'gemini-2.5-flash'}) is configured and ready."
-        )
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                r = await client.get(
+                    "https://generativelanguage.googleapis.com/v1beta/models",
+                    params={"key": key}
+                )
+                if r.status_code == 200:
+                    return TestConnectionResponse(
+                        success=True, provider="gemini",
+                        message=f"Connection verified: Google Gemini API responded successfully ({req.model or 'gemini-2.5-flash'} ready)."
+                    )
+                elif r.status_code == 400:
+                    return TestConnectionResponse(
+                        success=False, provider="gemini",
+                        message=f"Gemini API key is invalid or malformed (HTTP 400).",
+                        guide="Check your key at https://aistudio.google.com/app/apikey"
+                    )
+                else:
+                    return TestConnectionResponse(
+                        success=False, provider="gemini",
+                        message=f"Gemini API returned HTTP {r.status_code}. Check your key or quota.",
+                    )
+        except Exception as e:
+            return TestConnectionResponse(
+                success=False, provider="gemini",
+                message=f"Could not reach Gemini API: {e}",
+                guide="Check your internet connection and API key."
+            )
+
     elif provider == "groq":
         key = req.api_key or ENV_VARS.get("GROQ_API_KEY")
         if not key:
             return TestConnectionResponse(
-                success=False,
-                provider="groq",
+                success=False, provider="groq",
                 message="Groq API Key is missing.",
                 guide="1. Go to Groq Console: https://console.groq.com/keys\n2. Generate an API key.\n3. Paste the key in the Groq field and save."
             )
-        return TestConnectionResponse(
-            success=True,
-            provider="groq",
-            message=f"Connection verified: Groq ({req.model or 'llama-3.3-70b-versatile'}) is configured and ready."
-        )
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                r = await client.get(
+                    "https://api.groq.com/openai/v1/models",
+                    headers={"Authorization": f"Bearer {key}"}
+                )
+                if r.status_code == 200:
+                    return TestConnectionResponse(
+                        success=True, provider="groq",
+                        message=f"Connection verified: Groq API responded successfully ({req.model or 'llama-3.3-70b-versatile'} ready)."
+                    )
+                else:
+                    return TestConnectionResponse(
+                        success=False, provider="groq",
+                        message=f"Groq API returned HTTP {r.status_code}. Check your API key.",
+                    )
+        except Exception as e:
+            return TestConnectionResponse(
+                success=False, provider="groq",
+                message=f"Could not reach Groq API: {e}",
+            )
+
     elif provider == "openrouter":
         key = req.api_key or ENV_VARS.get("OPENROUTER_API_KEY")
         if not key:
             return TestConnectionResponse(
-                success=False,
-                provider="openrouter",
+                success=False, provider="openrouter",
                 message="OpenRouter API Key is missing.",
                 guide="1. Create an API key at https://openrouter.ai/keys\n2. Paste it in the OpenRouter key field and save."
             )
-        return TestConnectionResponse(
-            success=True,
-            provider="openrouter",
-            message=f"Connection verified: OpenRouter ({req.model or 'google/gemini-2.5-flash'}) is configured and ready."
-        )
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                r = await client.get(
+                    "https://openrouter.ai/api/v1/models",
+                    headers={"Authorization": f"Bearer {key}"}
+                )
+                if r.status_code == 200:
+                    return TestConnectionResponse(
+                        success=True, provider="openrouter",
+                        message=f"Connection verified: OpenRouter API responded successfully ({req.model or 'google/gemini-2.5-flash'} available)."
+                    )
+                else:
+                    return TestConnectionResponse(
+                        success=False, provider="openrouter",
+                        message=f"OpenRouter returned HTTP {r.status_code}. Check your API key.",
+                    )
+        except Exception as e:
+            return TestConnectionResponse(
+                success=False, provider="openrouter",
+                message=f"Could not reach OpenRouter: {e}",
+            )
+
     elif provider == "ollama":
         base_url = req.base_url or ENV_VARS.get("OLLAMA_BASE_URL", "http://localhost:11434")
-        import urllib.request
         try:
-            with urllib.request.urlopen(f"{base_url.rstrip('/')}/api/tags", timeout=2) as resp:
-                if resp.status == 200:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                r = await client.get(f"{base_url.rstrip('/')}/api/tags")
+                if r.status_code == 200:
                     return TestConnectionResponse(
-                        success=True,
-                        provider="ollama",
+                        success=True, provider="ollama",
                         message=f"Connection verified: Ollama is running at {base_url}."
                     )
         except Exception:
             pass
         return TestConnectionResponse(
-            success=False,
-            provider="ollama",
+            success=False, provider="ollama",
             message=f"Could not connect to Ollama at {base_url}.",
             guide="1. Download Ollama from https://ollama.com\n2. Run 'ollama run llama3.2' in your terminal.\n3. Verify Ollama responds on http://localhost:11434."
         )
@@ -260,8 +316,17 @@ def update_api_keys(keys: Dict[str, str]):
 
 
 @router.get("/backup")
-def download_sqlite_backup():
-    """One-click download of the raw SQLite database for offline backup and portability."""
+def download_sqlite_backup(request: Request):
+    """One-click download of the raw SQLite database for offline backup and portability.
+    
+    Restricted to localhost only to prevent unintentional LAN DB exfiltration.
+    """
+    client_host = request.client.host if request.client else ""
+    if client_host not in ("127.0.0.1", "::1", "localhost", "testclient"):
+        raise HTTPException(
+            status_code=403,
+            detail="Database backup is only accessible from localhost."
+        )
     if not DB_PATH.exists():
         raise HTTPException(status_code=404, detail="Database file not found")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")

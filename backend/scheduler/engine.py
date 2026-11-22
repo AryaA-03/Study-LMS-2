@@ -524,3 +524,14 @@ def compute_schedule_diff(
         "deficit_minutes": deficit_minutes,
         "deficit_message": deficit_message,
     }
+
+def trigger_course_reflow(*args, **kwargs):
+    """Reflow remaining allocations for a course schedule."""
+    from backend.routers.schedule import trigger_course_reflow as _tcr
+    return _tcr(*args, **kwargs)
+
+def replan_course_schedule(*args, **kwargs):
+    """Replan a course schedule programmatically."""
+    from backend.routers.schedule import replan_course_schedule as _rcs
+    return _rcs(*args, **kwargs)
+

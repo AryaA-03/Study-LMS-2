@@ -59,6 +59,8 @@ let currentCourse = null;
 let currentSchedule = null;
 let currentLessons = [];
 let activeAllocation = null;
+let currentLessonId = null;
+let qaScope = 'lesson'; // 'lesson' | 'notebook'
 let ytPlayer = null;
 let isYtReady = false;
 let collapsedDays = new Set();
@@ -216,6 +218,9 @@ const inputQaQuery = document.getElementById('input-qa-query');
 const btnSubmitQa = document.getElementById('btn-submit-qa');
 const qaBtnText = document.getElementById('qa-btn-text');
 const qaSpinner = document.getElementById('qa-spinner');
+const qaScopeLesson = document.getElementById('qa-scope-lesson');
+const qaScopeNotebook = document.getElementById('qa-scope-notebook');
+const floatingExplainPill = document.getElementById('floating-explain-pill');
 
 const sourcesPillsList = document.getElementById('sources-pills-list');
 const btnOpenAddSource = document.getElementById('btn-open-add-source');
@@ -755,7 +760,16 @@ function setupEventListeners() {
   tabGroundedNotes.addEventListener('click', () => switchNotesTab('grounded'));
   tabPersonalNotes.addEventListener('click', () => switchNotesTab('personal'));
   tabQaNotebook.addEventListener('click', () => switchNotesTab('qa'));
-  qaInputForm.addEventListener('submit', handleAskQuestion);
+  qaInputForm?.addEventListener('submit', handleAskQuestion);
+  qaScopeLesson?.addEventListener('click', () => setQAScope('lesson'));
+  qaScopeNotebook?.addEventListener('click', () => setQAScope('notebook'));
+  document.querySelectorAll('.quick-prompt-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const prompt = chip.getAttribute('data-prompt') || chip.textContent.trim();
+      useQuickPrompt(prompt);
+    });
+  });
+  initHighlightToExplain();
   btnTranscribeLesson.addEventListener('click', handleTranscribeLesson);
   btnCaptureKeyframes.addEventListener('click', handleCaptureKeyframes);
   btnRegenerateNotes.addEventListener('click', () => {
@@ -1442,7 +1456,7 @@ function renderSchedule(sched) {
       allocsHtml = `<div class="divide-y divide-alabaster-border/40 dark:divide-charcoal-border/40">`;
       day.allocations.forEach(alloc => {
         const isCompleted = alloc.is_completed;
-        const splitText = alloc.split_count > 1 ? ` (${alloc.split_index + 1}/${alloc.split_count})` : '';
+        const splitBadge = alloc.split_count > 1 ? `<span class="ml-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 font-medium">Part ${alloc.split_index + 1}/${alloc.split_count}</span>` : '';
 
         allocsHtml += `
           <div class="allocation-card px-2.5 py-1.5 hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition flex items-center justify-between gap-2 cursor-pointer alloc-item group ${isCompleted ? 'opacity-40' : ''}" 
@@ -1458,8 +1472,9 @@ function renderSchedule(sched) {
                 ⋮⋮
               </div>
               <input type="checkbox" class="btn-complete-allocation rounded text-blue-600 focus:ring-0 alloc-checkbox cursor-pointer w-3.5 h-3.5 shrink-0" data-alloc-id="${alloc.id}" ${isCompleted ? 'checked' : ''} onclick="event.stopPropagation()">
-              <h4 class="text-xs text-alabaster-text dark:text-charcoal-text truncate font-normal group-hover:text-blue-600 dark:group-hover:text-blue-400 transition ${isCompleted ? 'line-through text-alabaster-muted dark:text-charcoal-muted' : ''}">
-                ${alloc.lesson_title}${splitText}
+              <h4 class="text-xs text-alabaster-text dark:text-charcoal-text truncate font-normal group-hover:text-blue-600 dark:group-hover:text-blue-400 transition flex items-center gap-1 min-w-0 ${isCompleted ? 'line-through text-alabaster-muted dark:text-charcoal-muted' : ''}">
+                <span class="truncate">${alloc.lesson_title}</span>
+                ${splitBadge}
               </h4>
             </div>
 
@@ -1592,6 +1607,7 @@ window.selectAllocation = function(allocId) {
     for (const a of d.allocations) {
       if (a.id === allocId) {
         activeAllocation = a;
+        currentLessonId = a.lesson_id;
         updateActiveLessonUI(a);
         playVideoSlice(a.video_id, a.allocated_start_sec, a.allocated_end_sec);
         loadLessonNotesAndArtifacts(a.lesson_id);
@@ -2763,6 +2779,92 @@ async function loadQAHistory(courseId) {
   }
 }
 
+function setQAScope(scope) {
+  qaScope = scope === 'notebook' ? 'notebook' : 'lesson';
+  const activeClasses = ['bg-blue-600', 'text-white', 'shadow-sm'];
+  const inactiveClasses = ['text-alabaster-muted', 'dark:text-charcoal-muted', 'hover:text-alabaster-text', 'dark:hover:text-charcoal-text'];
+
+  if (qaScopeLesson && qaScopeNotebook) {
+    if (qaScope === 'lesson') {
+      qaScopeLesson.classList.add(...activeClasses);
+      qaScopeLesson.classList.remove(...inactiveClasses);
+      qaScopeNotebook.classList.remove(...activeClasses);
+      qaScopeNotebook.classList.add(...inactiveClasses);
+    } else {
+      qaScopeNotebook.classList.add(...activeClasses);
+      qaScopeNotebook.classList.remove(...inactiveClasses);
+      qaScopeLesson.classList.remove(...activeClasses);
+      qaScopeLesson.classList.add(...inactiveClasses);
+    }
+  }
+}
+window.setQAScope = setQAScope;
+
+function useQuickPrompt(promptText) {
+  switchNotesTab('qa');
+  if (!inputQaQuery) return;
+  const currentVal = inputQaQuery.value.trim();
+  if (!currentVal) {
+    inputQaQuery.value = promptText;
+  } else if (!currentVal.startsWith(promptText)) {
+    inputQaQuery.value = `${promptText} ${currentVal}`;
+  }
+  inputQaQuery.focus();
+  const len = inputQaQuery.value.length;
+  inputQaQuery.setSelectionRange(len, len);
+}
+window.useQuickPrompt = useQuickPrompt;
+
+async function saveAIReplyToNotes(answerText) {
+  const lessonId = currentLessonId || (activeAllocation ? activeAllocation.lesson_id : null);
+  if (!currentCourseId || !lessonId) {
+    showToast('Please select a lesson to save notes', 'error');
+    return;
+  }
+  if (!answerText) return;
+
+  const currentText = inputPersonalNotes ? inputPersonalNotes.value.trim() : '';
+  const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const heading = `\n\n### 💡 AI Explanation (${timeStr})\n`;
+  const updatedPersonalNotes = currentText 
+    ? `${currentText}${heading}${answerText}` 
+    : `### 💡 AI Explanation\n${answerText}`;
+
+  if (inputPersonalNotes) {
+    inputPersonalNotes.value = updatedPersonalNotes;
+    updatePersonalNotesCount();
+  }
+
+  try {
+    let saved = false;
+    try {
+      const res = await fetch(`/api/courses/${currentCourseId}/lessons/${lessonId}/notes`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personal_notes: updatedPersonalNotes }),
+      });
+      if (res.ok) saved = true;
+    } catch (e) {
+      // fallback below
+    }
+
+    if (!saved) {
+      const fallbackRes = await fetch(`/api/lessons/${lessonId}/notes/personal`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personal_notes: updatedPersonalNotes }),
+      });
+      if (!fallbackRes.ok) throw new Error('Failed to persist note update');
+    }
+
+    showToast('Saved AI reply to My Notes! 📌', 'success');
+  } catch (err) {
+    Logger.error('Failed to save AI reply to notes', err);
+    showToast('Failed to save to notes: ' + err.message, 'error');
+  }
+}
+window.saveAIReplyToNotes = saveAIReplyToNotes;
+
 function renderQAThreads(threads) {
   if (!qaMessagesList) return;
   if (!threads || threads.length === 0) {
@@ -2815,8 +2917,22 @@ function renderQAThreads(threads) {
       <div class="bg-surface-900 border border-slate-800 text-slate-200 text-xs px-3.5 py-2.5 rounded-2xl rounded-tl-sm max-w-[90%] shadow-lg space-y-1.5 leading-relaxed">
         ${answerHtml}
         ${citationsHtml}
+        <div class="mt-2 pt-2 border-t border-slate-800/80 flex justify-end">
+          <button type="button" class="btn-save-ai-reply inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-violet-300 hover:text-white text-[11px] font-medium transition active:scale-95 shadow-sm cursor-pointer" title="Save this AI answer into your personal notes">
+            <span>📌</span>
+            <span>Save to My Notes</span>
+          </button>
+        </div>
       </div>
     `;
+
+    const saveBtn = aDiv.querySelector('.btn-save-ai-reply');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        saveAIReplyToNotes(t.answer_markdown);
+      });
+    }
+
     item.appendChild(aDiv);
     qaMessagesList.appendChild(item);
   });
@@ -2884,12 +3000,18 @@ async function handleAskQuestion(e) {
   qaMessagesList.scrollTop = qaMessagesList.scrollHeight;
   inputQaQuery.value = '';
 
+  const activeLessonId = currentLessonId || (activeAllocation ? activeAllocation.lesson_id : null);
+  const targetLessonId = qaScope === 'lesson' ? (activeLessonId || null) : null;
+
   const t0 = performance.now();
   try {
     const res = await fetch(`/api/courses/${currentCourseId}/qa`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: q }),
+      body: JSON.stringify({
+        query: q,
+        lesson_id: targetLessonId
+      }),
     });
     const data = await res.json();
     Logger.api('POST', `/api/courses/${currentCourseId}/qa`, res.status, Math.round(performance.now() - t0), data);
@@ -2901,6 +3023,78 @@ async function handleAskQuestion(e) {
     qaBtnText.textContent = 'Ask';
     qaSpinner.classList.add('hidden');
     btnSubmitQa.disabled = false;
+  }
+}
+
+// Highlight-to-Explain System
+let selectedExplainText = '';
+
+function initHighlightToExplain() {
+  if (!floatingExplainPill) return;
+
+  document.addEventListener('mouseup', handleHighlightSelection);
+  document.addEventListener('keyup', (e) => {
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Shift'].includes(e.key)) {
+      handleHighlightSelection();
+    }
+  });
+
+  document.addEventListener('mousedown', (e) => {
+    if (floatingExplainPill && !floatingExplainPill.contains(e.target)) {
+      floatingExplainPill.classList.add('hidden');
+    }
+  });
+
+  document.addEventListener('scroll', () => {
+    if (floatingExplainPill && !floatingExplainPill.classList.contains('hidden')) {
+      floatingExplainPill.classList.add('hidden');
+    }
+  }, true);
+
+  floatingExplainPill.addEventListener('click', () => {
+    if (!selectedExplainText) return;
+    switchNotesTab('qa');
+    if (inputQaQuery) {
+      inputQaQuery.value = `Explain this: "${selectedExplainText}"`;
+      inputQaQuery.focus();
+      const len = inputQaQuery.value.length;
+      inputQaQuery.setSelectionRange(len, len);
+    }
+    floatingExplainPill.classList.add('hidden');
+  });
+}
+
+function handleHighlightSelection() {
+  if (!floatingExplainPill) return;
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) {
+    floatingExplainPill.classList.add('hidden');
+    return;
+  }
+
+  const text = selection.toString().trim();
+  if (text.length < 10) {
+    floatingExplainPill.classList.add('hidden');
+    return;
+  }
+
+  selectedExplainText = text;
+  try {
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) {
+      floatingExplainPill.classList.add('hidden');
+      return;
+    }
+
+    const pillTop = Math.max(10, rect.top - 42);
+    const pillLeft = Math.max(10, Math.min(window.innerWidth - 170, rect.left + (rect.width / 2) - 75));
+
+    floatingExplainPill.style.top = `${pillTop}px`;
+    floatingExplainPill.style.left = `${pillLeft}px`;
+    floatingExplainPill.classList.remove('hidden');
+  } catch (e) {
+    floatingExplainPill.classList.add('hidden');
   }
 }
 
@@ -2991,12 +3185,20 @@ function renderQuiz(quiz) {
 
   const html = quiz.questions.map((q, idx) => {
     const isCompleted = quiz.score !== null && quiz.score !== undefined;
+    const isShortAnswer = q.question_type === 'short_answer';
+    const evalItem = (quiz.short_answer_evaluations || []).find(e => e.question_id === q.id);
+
     return `
       <div class="p-3.5 bg-surface-900 rounded-xl border border-slate-800 space-y-2.5">
         <div class="flex items-start justify-between gap-2">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <span class="w-5 h-5 rounded-full bg-surface-800 text-slate-300 text-[10px] font-bold flex items-center justify-center font-mono">${idx + 1}</span>
             <span class="text-xs font-semibold text-white leading-relaxed">${escapeHtml(q.question)}</span>
+            ${isShortAnswer ? `
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                Section B &bull; 5 Marks Subjective
+              </span>
+            ` : ''}
           </div>
           <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-violet-950/80 text-violet-300 border border-violet-800/60 shrink-0">
             [${escapeHtml(q.chunk_id)}]
@@ -3008,29 +3210,63 @@ function renderQuiz(quiz) {
           &ldquo;${escapeHtml(q.quote)}&rdquo;
         </div>
 
-        <!-- Options -->
-        <div class="space-y-1.5 pt-1">
-          ${q.options.map((opt, optIdx) => {
-            let optClass = 'bg-surface-850 hover:bg-surface-800 border-slate-700/60 text-slate-300';
-            if (isCompleted) {
-              if (optIdx === q.correct_index) {
-                optClass = 'bg-emerald-950/70 border-emerald-700 text-emerald-200 font-semibold';
-              }
-            }
-            return `
-              <label class="quiz-option-label flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition ${optClass}">
-                <input type="radio" name="quiz_q_${q.id}" value="${optIdx}" ${isCompleted ? 'disabled' : ''} class="quiz-option-input text-amber-500 focus:ring-0">
-                <span class="leading-relaxed">${escapeHtml(opt)}</span>
-              </label>
-            `;
-          }).join('')}
-        </div>
-
-        ${isCompleted ? `
-          <div class="mt-2 pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 font-mono">
-            💡 ${escapeHtml(q.explanation)}
+        ${isShortAnswer ? `
+          <!-- 5-Mark Subjective Rubric & Answer Box -->
+          <div class="px-2.5 py-2 rounded-lg bg-surface-950/90 border border-slate-800/90 text-[11px] text-slate-400 space-y-1">
+            <span class="font-semibold text-slate-300">Exam Rubric (Max 5.0 Marks):</span>
+            <ul class="list-disc list-inside space-y-0.5 text-[10.5px]">
+              ${(q.rubric || [
+                "Definition & Conceptual Core (2.0 Marks): Clear definition, intuition, and formal role.",
+                "Technical Mechanism & Steps (2.0 Marks): Detailed explanation of working principle, properties, or operations.",
+                "Practical Example & Application (1.0 Mark): Concrete scenario, code snippet, or engineering use-case."
+              ]).map(r => `<li>${escapeHtml(r)}</li>`).join('')}
+            </ul>
           </div>
-        ` : ''}
+
+          <div class="pt-1">
+            <textarea name="quiz_sa_${q.id}" class="w-full h-24 p-2.5 rounded-lg bg-surface-850 border border-slate-700/60 text-slate-200 text-xs focus:ring-1 focus:ring-amber-500 resize-y placeholder:text-slate-500" placeholder="Write your structured 5-mark answer covering: 1) Definition & intuition, 2) Technical mechanism & steps, 3) Practical example..." ${isCompleted ? 'disabled' : ''}>${escapeHtml(q.user_answer || '')}</textarea>
+          </div>
+
+          ${evalItem ? `
+            <div class="mt-2 p-2.5 rounded-lg bg-surface-950 border border-amber-800/60 text-xs space-y-1.5">
+              <div class="flex items-center justify-between font-semibold text-amber-300">
+                <span>Awarded: ${evalItem.marks_awarded} / ${q.max_marks || 5.0} Marks</span>
+                <span class="text-[10px] font-mono text-slate-400">Def: ${evalItem.breakdown?.definition ?? 0} | Mech: ${evalItem.breakdown?.mechanism ?? 0} | Ex: ${evalItem.breakdown?.example ?? 0}</span>
+              </div>
+              <div class="text-[11px] text-slate-300 leading-relaxed">${escapeHtml(evalItem.feedback || '')}</div>
+              ${q.sample_solution ? `
+                <div class="mt-1 pt-1.5 border-t border-slate-800/80 text-[10.5px] text-slate-400">
+                  <span class="font-semibold text-slate-300">Model Sample Solution:</span>
+                  <div class="whitespace-pre-line mt-0.5 font-mono text-[10px] text-slate-300/90">${escapeHtml(q.sample_solution)}</div>
+                </div>
+              ` : ''}
+            </div>
+          ` : ''}
+        ` : `
+          <!-- Multiple Choice Options -->
+          <div class="space-y-1.5 pt-1">
+            ${(q.options || []).map((opt, optIdx) => {
+              let optClass = 'bg-surface-850 hover:bg-surface-800 border-slate-700/60 text-slate-300';
+              if (isCompleted) {
+                if (optIdx === q.correct_index) {
+                  optClass = 'bg-emerald-950/70 border-emerald-700 text-emerald-200 font-semibold';
+                }
+              }
+              return `
+                <label class="quiz-option-label flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition ${optClass}">
+                  <input type="radio" name="quiz_q_${q.id}" value="${optIdx}" ${isCompleted ? 'disabled' : ''} class="quiz-option-input text-amber-500 focus:ring-0">
+                  <span class="leading-relaxed">${escapeHtml(opt)}</span>
+                </label>
+              `;
+            }).join('')}
+          </div>
+
+          ${isCompleted ? `
+            <div class="mt-2 pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 font-mono">
+              💡 ${escapeHtml(q.explanation)}
+            </div>
+          ` : ''}
+        `}
       </div>
     `;
   }).join('');
@@ -3047,6 +3283,7 @@ function showQuizScoreBanner(data) {
   quizResultsBanner.classList.remove('hidden');
   const score = data.score;
   const passed = data.passed || score >= 80;
+  const marksDetail = data.total_marks_possible ? ` (${data.total_marks_obtained ?? 0} / ${data.total_marks_possible} Marks)` : '';
 
   quizMasteryBadge.classList.remove('hidden');
   if (passed) {
@@ -3057,7 +3294,7 @@ function showQuizScoreBanner(data) {
       <div class="flex items-center gap-2">
         <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
         <div>
-          <strong class="text-white text-sm">${score}% Score</strong> &mdash; Concept Mastered!
+          <strong class="text-white text-sm">${score}% Score${marksDetail}</strong> &mdash; Concept Mastered!
           <span class="block text-[11px] text-emerald-300/80">Lesson marked Tested Out and freed from your remaining study schedule.</span>
         </div>
       </div>
@@ -3070,7 +3307,7 @@ function showQuizScoreBanner(data) {
       <div class="flex items-center gap-2">
         <svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
         <div>
-          <strong class="text-white text-sm">${score}% Score</strong> &mdash; Review Recommended.
+          <strong class="text-white text-sm">${score}% Score${marksDetail}</strong> &mdash; Review Recommended.
           <span class="block text-[11px] text-amber-300/80">Targeted FSRS flashcards generated for missed concepts. Drill them in the Flashcards tab!</span>
         </div>
       </div>
@@ -3080,7 +3317,7 @@ function showQuizScoreBanner(data) {
     quizMasteryBadge.textContent = 'PASSED';
     quizResultsBanner.className = 'mb-4 p-3 rounded-xl border flex items-center justify-between text-xs bg-blue-950/60 border-blue-700 text-blue-200';
     quizResultsBanner.innerHTML = `
-      <div><strong class="text-white text-sm">${score}% Score</strong> &mdash; Solid progress! Score 80%+ to test out completely.</div>
+      <div><strong class="text-white text-sm">${score}% Score${marksDetail}</strong> &mdash; Solid progress! Score 80%+ to test out completely.</div>
     `;
   }
 }
@@ -3090,23 +3327,32 @@ async function handleLessonQuizSubmit(e) {
   if (!currentQuiz) return;
 
   const answers = {};
+  const short_answers = {};
   for (const q of currentQuiz.questions) {
-    const checked = document.querySelector(`input[name="quiz_q_${q.id}"]:checked`);
-    if (checked) {
-      answers[q.id] = parseInt(checked.value, 10);
+    if (q.question_type === 'short_answer') {
+      const ta = document.querySelector(`textarea[name="quiz_sa_${q.id}"]`);
+      if (ta) {
+        short_answers[q.id] = ta.value.trim();
+        q.user_answer = ta.value.trim();
+      }
+    } else {
+      const checked = document.querySelector(`input[name="quiz_q_${q.id}"]:checked`);
+      if (checked) {
+        answers[q.id] = parseInt(checked.value, 10);
+      }
     }
   }
 
-  const answeredCount = Object.keys(answers).length;
+  const answeredCount = Object.keys(answers).length + Object.keys(short_answers).length;
   const timeTaken = quizStartTime ? Math.round((Date.now() - quizStartTime) / 1000) : 0;
-  Logger.quiz('Submit Lesson Quiz', { quizId: currentQuiz.id, answers, answeredCount, timeTaken });
+  Logger.quiz('Submit Lesson Quiz', { quizId: currentQuiz.id, answers, short_answers, answeredCount, timeTaken });
 
   const t0 = performance.now();
   try {
     const res = await fetch(`/api/courses/${currentCourseId}/quizzes/${currentQuiz.id}/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answers, time_taken_seconds: timeTaken }),
+      body: JSON.stringify({ answers, short_answers, time_taken_seconds: timeTaken }),
     });
     const result = await res.json();
     Logger.api('POST', `/api/courses/${currentCourseId}/quizzes/${currentQuiz.id}/submit`, res.status, Math.round(performance.now() - t0), result);
@@ -3115,9 +3361,27 @@ async function handleLessonQuizSubmit(e) {
 
     currentQuiz.score = result.score;
     currentQuiz.passed = result.passed;
+    currentQuiz.short_answer_evaluations = result.short_answer_evaluations || [];
+    currentQuiz.total_marks_obtained = result.total_marks_obtained;
+    currentQuiz.total_marks_possible = result.total_marks_possible;
     renderQuiz(currentQuiz);
 
-    if (result.tested_out_lessons && result.tested_out_lessons.length > 0) {
+    // Feature 2: Automated Replanning on Quiz Drops ("Plan updated — Undo" banner)
+    if (result.schedule_updated) {
+      await loadSchedule(currentCourseId);
+      if (result.diff_summary) {
+        const diff = result.diff_summary;
+        let diffMsg = `Plan updated — Undo: Finish ${diff.old_finish_date || '--'} → ${diff.new_finish_date || '--'}`;
+        if (diff.dropped_deep_dive_count > 0) {
+          diffMsg += ` • Dropped ${diff.dropped_deep_dive_count} deep-dive topics to compress schedule.`;
+        }
+        if (diff.deficit_message) {
+          diffMsg += ` • ⚠️ ${diff.deficit_message}`;
+        }
+        diffText.textContent = diffMsg;
+        diffBanner.classList.remove('hidden');
+      }
+    } else if (result.tested_out_lessons && result.tested_out_lessons.length > 0) {
       await loadSchedule(currentCourseId);
     }
     updateFlashcardCounts();

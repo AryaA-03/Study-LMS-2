@@ -414,6 +414,12 @@ def replan_schedule(
         (course_id,),
     ).fetchall()
     lessons = [dict(l) for l in lessons_rows]
+    if not lessons:
+        fallback_rows = db.execute(
+            "SELECT * FROM lessons WHERE course_id = ? AND is_excluded = 0 ORDER BY order_index ASC;",
+            (course_id,),
+        ).fetchall()
+        lessons = [dict(l) for l in fallback_rows]
 
     dropped_count = 0
     deficit_minutes = 0.0
@@ -647,7 +653,7 @@ def trigger_course_reflow(course_id: str, db: sqlite3.Connection) -> None:
         """
         SELECT sa.*, l.title as lesson_title, l.video_id, l.video_url, l.priority
         FROM schedule_allocations sa
-        JOIN lessons l ON sa.lesson_id = l.id
+        LEFT JOIN lessons l ON sa.lesson_id = l.id
         WHERE sa.course_id = ?
         ORDER BY sa.scheduled_date ASC, sa.split_index ASC;
         """,
@@ -661,7 +667,7 @@ def trigger_course_reflow(course_id: str, db: sqlite3.Connection) -> None:
             id=r["id"],
             course_id=r["course_id"],
             lesson_id=r["lesson_id"],
-            lesson_title=r["lesson_title"],
+            lesson_title=r["lesson_title"] or "",
             scheduled_date=r["scheduled_date"],
             allocated_start_sec=r["allocated_start_sec"],
             allocated_end_sec=r["allocated_end_sec"],
@@ -670,9 +676,9 @@ def trigger_course_reflow(course_id: str, db: sqlite3.Connection) -> None:
             split_count=r["split_count"],
             is_completed=bool(r["is_completed"]),
             is_skipped=bool(r["is_skipped"]),
-            priority=r["priority"],
-            video_id=r["video_id"],
-            video_url=r["video_url"],
+            priority=r["priority"] or "core",
+            video_id=r["video_id"] or "",
+            video_url=r["video_url"] or "",
         )
         for r in old_rows
     ]
@@ -723,4 +729,50 @@ def trigger_course_reflow(course_id: str, db: sqlite3.Connection) -> None:
         )
     db.commit()
     logger.info(f"[Schedule] Reflowed allocations after mastery test-out for course {course_id}")
+
+
+def replan_course_schedule(
+    course_id: str,
+    db: Optional[sqlite3.Connection] = None,
+    req: Optional[ReplanRequest] = None,
+    mode: str = "normal",
+    minutes_per_day: Optional[int] = None,
+    playback_speed: Optional[float] = None,
+    rest_days: Optional[List[str]] = None,
+    target_date: Optional[str] = None,
+    revision_buffer_days: Optional[int] = None,
+    schedule_strategy: Optional[str] = None,
+    **kwargs,
+) -> ReplanResponse:
+    """Helper function to replan a course schedule programmatically.
+    Supports:
+      replan_course_schedule(course_id, db=conn, mode="normal", ...)
+      replan_course_schedule(course_id, conn, req)
+      replan_course_schedule(course_id, req, conn)
+    """
+    if isinstance(db, ReplanRequest) and isinstance(req, sqlite3.Connection):
+        req, db = db, req
+    elif isinstance(db, ReplanRequest) and req is None:
+        req = db
+        db = kwargs.pop("db_conn", None)
+
+    if req is None:
+        req = ReplanRequest(
+            mode=mode,
+            minutes_per_day=minutes_per_day,
+            playback_speed=playback_speed,
+            rest_days=rest_days,
+            target_date=target_date,
+            revision_buffer_days=revision_buffer_days,
+            schedule_strategy=schedule_strategy,
+            **kwargs,
+        )
+
+    if db is None:
+        from backend.database import get_db_context
+        with get_db_context() as conn:
+            return replan_schedule(course_id=course_id, req=req, db=conn)
+
+    return replan_schedule(course_id=course_id, req=req, db=db)
+
 

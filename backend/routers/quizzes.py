@@ -89,12 +89,35 @@ def submit_quiz(
             conn=db,
             quiz_id=quiz_id,
             user_answers=req.answers,
+            short_answers=req.short_answers,
             time_taken_seconds=req.time_taken_seconds,
         )
 
-        # If any lesson was tested out, automatically reflow the schedule!
-        if result.get("tested_out_lessons"):
-            trigger_course_reflow(course_id, db)
+        schedule_updated = False
+        diff_summary = None
+
+        # Feature 2: Automated Replanning on Quiz Drops ("Plan updated — Undo" banner)
+        # If any lesson was tested out (score >= 80% or diagnostic) OR score dropped < 60% (needs review)
+        if result.get("tested_out_lessons") or result.get("mastery_status") == "needs_review":
+            try:
+                from backend.routers.schedule import replan_course_schedule
+                from backend.models.schemas import ReplanRequest
+                replan_res = replan_course_schedule(
+                    course_id=course_id,
+                    req=ReplanRequest(mode="normal"),
+                    db=db,
+                )
+                schedule_updated = True
+                diff_summary = replan_res.diff.model_dump()
+                logger.info(f"[Mastery Reflow] Auto-replanned schedule with snapshot for course {course_id}.")
+            except Exception as e:
+                logger.warning(f"Failed to auto-replan schedule after quiz trigger: {e}")
+                # Fallback to direct reflow if replan fails
+                if result.get("tested_out_lessons"):
+                    trigger_course_reflow(course_id, db)
+
+        result["schedule_updated"] = schedule_updated
+        result["diff_summary"] = diff_summary
 
         return result
     except ValueError as ve:

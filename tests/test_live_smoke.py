@@ -36,6 +36,8 @@ def test_live_user_large_video():
     """Live smoke test on single large lecture video (https://youtu.be/YRnjGeQbsHQ)."""
     try:
         meta = extract_metadata(LARGE_VIDEO_URL)
+        if not meta or not meta.get("duration"):
+            pytest.skip("Live YouTube large video fetch offline or throttled.")
     except Exception as e:
         pytest.skip(f"Live YouTube large video fetch restricted or throttled: {e}")
 

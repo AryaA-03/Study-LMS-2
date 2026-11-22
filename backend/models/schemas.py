@@ -224,7 +224,7 @@ class ManualTranscriptRequest(BaseModel):
 
 # --- Notes & Screenshot Schemas ---
 class PersonalNotesUpdate(BaseModel):
-    personal_notes: str
+    personal_notes: str = Field(..., max_length=200000)
 
 class NoteResponse(BaseModel):
     id: str
@@ -244,11 +244,12 @@ class ScreenshotResponse(BaseModel):
 
 # --- Multi-Source & Q&A Schemas ---
 class WebSourceImportRequest(BaseModel):
-    url: str
+    url: str = Field(..., max_length=2048)
     title: Optional[str] = None
 
 class QARequest(BaseModel):
-    query: str
+    query: str = Field(..., max_length=4000)
+    lesson_id: Optional[str] = None
 
 class CitationItem(BaseModel):
     chunk_id: str
@@ -271,9 +272,13 @@ class QuizQuestion(BaseModel):
     lesson_id: Optional[str] = None
     quote: str
     question: str
-    options: List[str]
-    correct_index: int
+    options: List[str] = Field(default_factory=list)
+    correct_index: int = 0
     explanation: str
+    question_type: str = "mcq"  # "mcq" or "short_answer"
+    max_marks: float = 1.0
+    rubric: Optional[List[str]] = None
+    sample_solution: Optional[str] = None
 
 class QuizGenerateRequest(BaseModel):
     lesson_id: Optional[str] = None
@@ -294,7 +299,8 @@ class QuizResponse(BaseModel):
     created_at: Optional[str] = None
 
 class QuizSubmitRequest(BaseModel):
-    answers: Dict[str, int] = Field(..., description="Mapping of question ID to chosen option index")
+    answers: Dict[str, int] = Field(default_factory=dict, description="Mapping of MCQ question ID to chosen option index")
+    short_answers: Dict[str, str] = Field(default_factory=dict, description="Mapping of short-answer question ID to student answer text")
     time_taken_seconds: int = 0
 
 class QuizSubmitResponse(BaseModel):
@@ -307,6 +313,11 @@ class QuizSubmitResponse(BaseModel):
     tested_out_lessons: List[str] = Field(default_factory=list)
     flashcards_created: int = 0
     missed_count: int = 0
+    schedule_updated: bool = False
+    diff_summary: Optional[Dict[str, Any]] = None
+    short_answer_evaluations: List[Dict[str, Any]] = Field(default_factory=list)
+    total_marks_obtained: Optional[float] = None
+    total_marks_possible: Optional[float] = None
 
 # --- FSRS Flashcard Schemas ---
 class FlashcardCreateRequest(BaseModel):

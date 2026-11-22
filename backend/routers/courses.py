@@ -4,9 +4,10 @@ import uuid
 import json
 import sqlite3
 import logging
+import contextlib
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from backend.database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, BackgroundTasks
+from backend.database import get_db, get_db_context
 from backend.models.schemas import (
     CourseCreateRequest,
     CourseUpdateRequest,
@@ -26,9 +27,73 @@ from backend.services.youtube import (
     split_video_into_lessons,
 )
 from backend.scheduler.engine import calculate_effective_minutes, get_study_dates, is_rest_day, default_clock
+from backend.services.notes import get_or_generate_lesson_notes
 
 logger = logging.getLogger("learn_lms.courses")
 router = APIRouter(prefix="/api/courses", tags=["courses"])
+
+@contextlib.contextmanager
+def _get_background_db(db: Optional[sqlite3.Connection] = None):
+    """Context manager providing an active SQLite connection for background tasks."""
+    if db is not None:
+        yield db
+        return
+
+    from backend.main import app
+    if get_db in getattr(app, "dependency_overrides", {}):
+        override_fn = app.dependency_overrides[get_db]
+        gen = override_fn()
+        conn = next(gen)
+        try:
+            yield conn
+        finally:
+            try:
+                next(gen)
+            except StopIteration:
+                pass
+    else:
+        with get_db_context() as conn:
+            yield conn
+
+async def pregenerate_initial_notes(course_id: str, db: Optional[sqlite3.Connection] = None) -> None:
+    """Pre-generates structured notes for the first 3 lessons in order (by order_index ASC)
+    of that course, skipping lessons that already have generated notes.
+    """
+    logger.info(f"[Courses] Background note pre-warming triggered for course {course_id}")
+    try:
+        with _get_background_db(db) as conn:
+            rows = conn.execute(
+                """
+                SELECT id, title FROM lessons
+                WHERE course_id = ?
+                ORDER BY order_index ASC
+                LIMIT 3;
+                """,
+                (course_id,),
+            ).fetchall()
+
+            for r in rows:
+                lesson_id = r["id"]
+                lesson_title = r["title"]
+                try:
+                    existing_note = conn.execute(
+                        """
+                        SELECT id FROM notes
+                        WHERE lesson_id = ? AND is_generated = 1 AND content_markdown IS NOT NULL AND content_markdown != '';
+                        """,
+                        (lesson_id,),
+                    ).fetchone()
+
+                    if not existing_note:
+                        logger.info(f"[Courses] Pre-generating initial notes for lesson {lesson_id} ({lesson_title})")
+                        await get_or_generate_lesson_notes(conn, course_id, lesson_id, force_regenerate=False)
+                    else:
+                        logger.info(f"[Courses] Notes already exist for lesson {lesson_id}, skipping pre-generation")
+                except Exception as inner_e:
+                    logger.warning(f"[Courses] Could not pre-generate notes for lesson {lesson_id}: {inner_e}")
+    except Exception as e:
+        logger.error(f"[Courses] Background note pregeneration failed for course {course_id}: {e}", exc_info=True)
+
 
 @router.post("", response_model=CourseResponse)
 def create_course(
@@ -65,10 +130,30 @@ def create_course(
 @router.get("", response_model=List[CourseResponse])
 def list_courses(db: sqlite3.Connection = Depends(get_db)):
     rows = db.execute("SELECT * FROM courses ORDER BY created_at DESC;").fetchall()
+    if not rows:
+        return []
+
+    # Batch query schedule allocations for all courses to avoid N+1 queries
+    course_ids = [r["id"] for r in rows]
+    allocs_by_course: Dict[str, List[sqlite3.Row]] = {cid: [] for cid in course_ids}
+    batch_size = 500
+    for i in range(0, len(course_ids), batch_size):
+        batch = course_ids[i:i + batch_size]
+        placeholders = ",".join("?" for _ in batch)
+        alloc_batch = db.execute(
+            f"SELECT * FROM schedule_allocations WHERE course_id IN ({placeholders});",
+            batch,
+        ).fetchall()
+        for a in alloc_batch:
+            allocs_by_course[a["course_id"]].append(a)
+
     results = []
     for row in rows:
-        results.append(compute_course_stats(row, db))
+        cid = row["id"]
+        results.append(compute_course_stats(row, db, alloc_rows=allocs_by_course.get(cid, [])))
     return results
+
+get_all_courses = list_courses
 
 @router.get("/{course_id}", response_model=CourseResponse)
 def get_course(course_id: str, db: sqlite3.Connection = Depends(get_db)):
@@ -114,15 +199,19 @@ def update_course(
     if updates:
         params.append(course_id)
         db.execute(f"UPDATE courses SET {', '.join(updates)} WHERE id = ?;", params)
-        db.commit()
 
     return get_course(course_id, db)
 
-def compute_course_stats(course_row: sqlite3.Row, db: sqlite3.Connection) -> CourseResponse:
+def compute_course_stats(
+    course_row: sqlite3.Row,
+    db: sqlite3.Connection,
+    alloc_rows: Optional[List[sqlite3.Row]] = None,
+) -> CourseResponse:
     cid = course_row["id"]
-    alloc_rows = db.execute(
-        "SELECT * FROM schedule_allocations WHERE course_id = ?;", (cid,)
-    ).fetchall()
+    if alloc_rows is None:
+        alloc_rows = db.execute(
+            "SELECT * FROM schedule_allocations WHERE course_id = ?;", (cid,)
+        ).fetchall()
 
     total_effective = 0.0
     completed_effective = 0.0
@@ -259,6 +348,7 @@ def discover_sources(
 def import_source(
     course_id: str,
     req: SourceImportRequest,
+    background_tasks: BackgroundTasks,
     db: sqlite3.Connection = Depends(get_db),
 ):
     course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
@@ -299,6 +389,7 @@ def import_source(
     if req.is_approved:
         created_ids = create_lessons_from_meta(course_id, source_id, meta, db)
         logger.info(f"[Courses] Created {len(created_ids)} lessons from approved source '{title}'")
+        background_tasks.add_task(pregenerate_initial_notes, course_id)
 
     return get_source_by_id(source_id, db)
 
@@ -315,7 +406,7 @@ def create_lessons_from_meta(
         for idx, entry in enumerate(entries):
             if not entry:
                 continue
-            lessons = split_video_into_lessons(entry)
+            lessons = split_video_into_lessons(entry, db_conn=db)
             for l in lessons:
                 lid = str(uuid.uuid4())
                 # Auto-detect if title sounds like an example or exercise
@@ -349,7 +440,7 @@ def create_lessons_from_meta(
                 created_lesson_ids.append(lid)
     else:
         # Single video
-        lessons = split_video_into_lessons(meta)
+        lessons = split_video_into_lessons(meta, db_conn=db)
         for l in lessons:
             lid = str(uuid.uuid4())
             t_lower = l["title"].lower()
@@ -384,9 +475,11 @@ def create_lessons_from_meta(
     return created_lesson_ids
 
 @router.post("/{course_id}/sources/approve", response_model=List[SourceResponse])
+@router.post("/{course_id}/sources/confirm", response_model=List[SourceResponse])
 def approve_sources(
     course_id: str,
     req: SourceApprovalRequest,
+    background_tasks: BackgroundTasks,
     db: sqlite3.Connection = Depends(get_db),
 ):
     course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
@@ -432,7 +525,12 @@ def approve_sources(
 
         approved_sources.append(get_source_by_id(sid, db))
 
+    if req.source_ids_to_approve:
+        background_tasks.add_task(pregenerate_initial_notes, course_id)
+
     return approved_sources
+
+confirm_sources = approve_sources
 
 @router.post("/{course_id}/lessons/filter", response_model=List[LessonResponse])
 def filter_course_lessons(
@@ -536,7 +634,6 @@ def update_lesson(
             f"UPDATE lessons SET {', '.join(updates)} WHERE id = ? AND course_id = ?;",
             params,
         )
-        db.commit()
 
     updated = db.execute(
         "SELECT * FROM lessons WHERE id = ? AND course_id = ?;", (lesson_id, course_id)
@@ -559,25 +656,52 @@ def update_lesson(
         is_excluded=bool(updated["is_excluded"]),
     )
 
+@router.put("/{course_id}/lessons/{lesson_id}/notes")
+def update_course_lesson_notes(
+    course_id: str,
+    lesson_id: str,
+    payload: Dict[str, Any],
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Updates user personal notes or full notes for a lesson under a course."""
+    from backend.services.notes import save_personal_notes
+    lesson = db.execute(
+        "SELECT id FROM lessons WHERE id = ? AND course_id = ?;", (lesson_id, course_id)
+    ).fetchone()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found in course")
+
+    personal_text = payload.get("personal_notes")
+    if personal_text is None:
+        personal_text = payload.get("content_markdown") or payload.get("notes") or ""
+
+    saved = save_personal_notes(db, course_id, lesson_id, personal_text)
+    return {"success": saved, "course_id": course_id, "lesson_id": lesson_id}
+
 @router.get("/{course_id}/sources", response_model=List[SourceResponse])
 def list_sources(course_id: str, db: sqlite3.Connection = Depends(get_db)):
     rows = db.execute(
         "SELECT * FROM sources WHERE course_id = ? ORDER BY created_at ASC;", (course_id,)
     ).fetchall()
-    return [
-        SourceResponse(
-            id=r["id"],
-            course_id=r["course_id"],
-            source_type=r["source_type"],
-            title=r["title"],
-            url=r["url"],
-            external_id=r["external_id"],
-            metadata=json.loads(r["metadata_json"] or "{}"),
-            is_approved=bool(r["is_approved"]),
-            created_at=str(r["created_at"]),
+    res = []
+    for r in rows:
+        meta = json.loads(r["metadata_json"] or "{}")
+        if "chunk_count" in r.keys() and r["chunk_count"] is not None:
+            meta["chunk_count"] = r["chunk_count"]
+        res.append(
+            SourceResponse(
+                id=r["id"],
+                course_id=r["course_id"],
+                source_type=r["source_type"],
+                title=r["title"],
+                url=r["url"],
+                external_id=r["external_id"],
+                metadata=meta,
+                is_approved=bool(r["is_approved"]),
+                created_at=str(r["created_at"]),
+            )
         )
-        for r in rows
-    ]
+    return res
 
 @router.get("/{course_id}/lessons", response_model=List[LessonResponse])
 def list_lessons(course_id: str, db: sqlite3.Connection = Depends(get_db)):
@@ -609,6 +733,9 @@ def get_source_by_id(source_id: str, db: sqlite3.Connection) -> SourceResponse:
     r = db.execute("SELECT * FROM sources WHERE id = ?;", (source_id,)).fetchone()
     if not r:
         raise HTTPException(status_code=404, detail="Source not found")
+    meta = json.loads(r["metadata_json"] or "{}")
+    if "chunk_count" in r.keys() and r["chunk_count"] is not None:
+        meta["chunk_count"] = r["chunk_count"]
     return SourceResponse(
         id=r["id"],
         course_id=r["course_id"],
@@ -616,7 +743,7 @@ def get_source_by_id(source_id: str, db: sqlite3.Connection) -> SourceResponse:
         title=r["title"],
         url=r["url"],
         external_id=r["external_id"],
-        metadata=json.loads(r["metadata_json"] or "{}"),
+        metadata=meta,
         is_approved=bool(r["is_approved"]),
         created_at=str(r["created_at"]),
     )

@@ -102,4 +102,64 @@ async def test_qa_fts_and_grounding(tmp_path):
     assert len(history) == 1
     assert history[0]["query"] == "Pumping Lemma explanation"
 
+    # 6. Test Lesson ID restriction in search_chunks_fts
+    conn.execute("INSERT INTO lessons (id, course_id, title, raw_duration_sec, order_index) VALUES ('les_yt', ?, 'YT Lecture', 180, 1);", (cid,))
+    conn.execute("INSERT INTO lessons (id, course_id, title, raw_duration_sec, order_index) VALUES ('les_pdf', ?, 'PDF Chapter', 300, 2);", (cid,))
+    conn.execute("UPDATE chunks SET lesson_id = 'les_yt' WHERE id = 'chk_1';")
+    conn.execute("UPDATE chunks SET lesson_id = 'les_pdf' WHERE id = 'chk_2';")
+    conn.commit()
+
+    # Search without lesson_id should find chk_1
+    all_hits = search_chunks_fts(conn, cid, "deterministic finite automaton")
+    assert any(h["id"] == "chk_1" for h in all_hits)
+
+    # Search with matching lesson_id should find chk_1
+    les_yt_hits = search_chunks_fts(conn, cid, "deterministic finite automaton", lesson_id="les_yt")
+    assert len(les_yt_hits) >= 1
+    assert all(h["lesson_id"] == "les_yt" for h in les_yt_hits)
+
+    # Search with non-matching lesson_id should NOT find chk_1
+    les_pdf_hits = search_chunks_fts(conn, cid, "deterministic finite automaton", lesson_id="les_pdf")
+    assert len(les_pdf_hits) == 0
+
+    # 7. Test llm_cache in answer_course_question
+    # First query computes and stores in llm_cache
+    first_res = await answer_course_question(conn, cid, "What is an NFA?", lesson_id="les_yt")
+    assert first_res["id"].startswith("qa_")
+
+    # Verify entry exists in llm_cache
+    cur = conn.cursor()
+    cur.execute("SELECT prompt_hash, response_json, response_text FROM llm_cache;")
+    cache_rows = cur.fetchall()
+    assert len(cache_rows) >= 1
+
+    # Second query with identical (cid, query, lesson_id) should hit llm_cache
+    second_res = await answer_course_question(conn, cid, "What is an NFA?", lesson_id="les_yt")
+    assert second_res["answer_markdown"] == first_res["answer_markdown"]
+    assert second_res["citations"] == first_res["citations"]
+
+    conn.close()
+
+
+@pytest.mark.asyncio
+async def test_qa_router_passes_lesson_id(tmp_path):
+    from backend.models.schemas import QARequest
+    from backend.routers.qa import ask_question
+
+    db_file = tmp_path / "test_qa_router.db"
+    apply_migrations(db_file)
+    conn = init_connection(db_file)
+
+    cid = "course_router_test"
+    conn.execute("INSERT INTO courses (id, title, goal_query, target_date) VALUES (?, 'Router Course', 'Goal', '2026-12-31');", (cid,))
+    conn.execute("INSERT INTO lessons (id, course_id, title, raw_duration_sec, order_index) VALUES ('l_1', ?, 'Lesson 1', 60, 1);", (cid,))
+    conn.execute("INSERT INTO chunks (id, course_id, lesson_id, chunk_index, token_count, content) VALUES ('chk_r1', ?, 'l_1', 0, 20, 'Unique keyword router test data');", (cid,))
+    conn.execute("INSERT INTO chunks_fts (id, course_id, lesson_id, content) VALUES ('chk_r1', ?, 'l_1', 'Unique keyword router test data');", (cid,))
+    conn.commit()
+
+    req = QARequest(query="Unique keyword", lesson_id="l_1")
+    res = await ask_question(course_id=cid, req=req, db=conn)
+    assert res["query"] == "Unique keyword"
+    assert "Unique keyword" in res["answer_markdown"]
+
     conn.close()

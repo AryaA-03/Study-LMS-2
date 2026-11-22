@@ -77,6 +77,9 @@ def extract_and_chunk_pdf(
     return chunks
 
 
+MAX_PDF_SIZE_BYTES = 100 * 1024 * 1024
+
+
 async def ingest_pdf_source(
     db_conn,
     course_id: str,
@@ -88,6 +91,9 @@ async def ingest_pdf_source(
     
     Returns (source_id, chunk_count).
     """
+    if len(pdf_bytes) > MAX_PDF_SIZE_BYTES:
+        raise ValueError(f"PDF exceeds maximum allowed size of 100MB ({len(pdf_bytes)} bytes)")
+
     upload_dir = get_pdf_upload_dir(course_id)
     source_id = f"src_pdf_{uuid.uuid4().hex[:10]}"
     safe_name = f"{source_id}_{Path(original_filename).name}"

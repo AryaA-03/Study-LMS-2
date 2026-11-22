@@ -1,57 +1,17 @@
 """Multi-Source Management API Router (PDF & Web Ingestion)."""
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 import sqlite3
 
 from backend.database import get_db
-from backend.models.schemas import SourceResponse, WebSourceImportRequest
+from backend.models.schemas import WebSourceImportRequest
 from backend.services.pdf_ingest import ingest_pdf_source
 from backend.services.web_ingest import ingest_web_page
 
 logger = logging.getLogger("learn_lms.api.sources")
 router = APIRouter(prefix="/api/courses", tags=["sources"])
-
-
-@router.get("/{course_id}/sources", response_model=List[SourceResponse])
-def list_course_sources(
-    course_id: str,
-    db: sqlite3.Connection = Depends(get_db)
-):
-    """Lists all approved and candidate sources for a course."""
-    cur = db.cursor()
-    cur.execute(
-        """
-        SELECT id, course_id, source_type, title, url, external_id, metadata_json, is_approved, created_at, chunk_count
-        FROM sources
-        WHERE course_id = ?
-        ORDER BY created_at ASC;
-        """,
-        (course_id,)
-    )
-    rows = cur.fetchall()
-    sources = []
-    for r in rows:
-        import json
-        meta = {}
-        try:
-            meta = json.loads(r[6]) if r[6] else {}
-        except Exception:
-            pass
-        meta["chunk_count"] = r[9]
-        sources.append({
-            "id": r[0],
-            "course_id": r[1],
-            "source_type": r[2],
-            "title": r[3],
-            "url": r[4],
-            "external_id": r[5],
-            "metadata": meta,
-            "is_approved": bool(r[7]),
-            "created_at": r[8] or ""
-        })
-    return sources
 
 
 @router.post("/{course_id}/sources/pdf")

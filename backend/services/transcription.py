@@ -504,7 +504,7 @@ async def ingest_lesson_transcript(
             e_sec = cur["end_sec"] or 900
             m1 = f"{s_sec // 60:02d}:{s_sec % 60:02d}"
             m2 = f"{(s_sec + 60) // 60:02d}:{(s_sec + 60) % 60:02d}"
-            synthetic_text = f"[{m1}] Overview and introduction to {ch_title}. Key principles, relational models, and transactional properties are introduced. [{m2}] Detailed analysis of constraints, ACID invariants, and database execution states."
+            synthetic_text = f"[{m1}] Overview and introduction to {ch_title}. Key concepts, foundational definitions, and core principles are introduced. [{m2}] Detailed analysis and structured walkthrough of {ch_title} with examples and application contexts."
             chunks = [{
                 "chunk_index": 0,
                 "start_sec": s_sec,

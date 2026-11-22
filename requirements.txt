@@ -9,6 +9,7 @@ python-multipart>=0.0.12  # Multipart form parsing for PDF and local media uploa
 yt-dlp>=2025.01.15        # YouTube metadata, search, and caption extraction without API quota
 imageio-ffmpeg>=0.5.1     # Bundled cross-platform ffmpeg binary fallback for audio slicing & frames
 mlx-whisper>=0.4.0; sys_platform == 'darwin' and platform_machine == 'arm64' # Apple Silicon Whisper MLX
+faster-whisper>=1.0.3; not (sys_platform == 'darwin' and platform_machine == 'arm64') # CPU Whisper fallback for non-Apple-Silicon
 
 # Study & Spaced Repetition Engine
 fsrs>=3.0.0               # Pure-Python Free Spaced Repetition Scheduler implementation

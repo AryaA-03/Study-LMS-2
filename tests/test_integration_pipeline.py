@@ -179,3 +179,147 @@ def test_full_m1_core_pipeline(test_setup):
     resp_course_restored = client.get(f"/api/courses/{course_id}")
     assert resp_course_restored.json()["playback_speed"] == 1.5
     assert resp_course_restored.json()["schedule_strategy"] == "paced"
+
+
+def test_source_confirmation_background_notes(test_setup):
+    """Verify that confirming sources triggers pregenerate_initial_notes in background,
+    generating notes for the first 3 lessons in order_index ASC without touching later lessons.
+    """
+    client, tmp_db_path = test_setup
+
+    # 1. Create a course
+    course_payload = {
+        "title": "Machine Learning Fundamentals",
+        "goal_query": "Machine Learning",
+        "target_date": "2026-12-30",
+        "minutes_per_day": 60,
+        "playback_speed": 1.0,
+        "rest_days": ["Sunday"],
+        "revision_buffer_days": 1,
+        "schedule_strategy": "paced",
+    }
+    resp = client.post("/api/courses", json=course_payload)
+    assert resp.status_code == 200
+    course_id = resp.json()["id"]
+
+    # 2. Insert candidate source and 5 lessons directly
+    conn = init_connection(tmp_db_path)
+    source_id = "s-ml-cand"
+    conn.execute(
+        """
+        INSERT INTO sources (id, course_id, source_type, title, url, external_id, is_approved)
+        VALUES (?, ?, 'youtube_video', 'ML Intro', 'https://youtu.be/ml_intro', 'ml_intro', 0);
+        """,
+        (source_id, course_id),
+    )
+
+    for i in range(5):
+        lid = f"les-ml-{i}"
+        conn.execute(
+            """
+            INSERT INTO lessons (
+                id, course_id, source_id, title, summary, video_id, video_url,
+                start_sec, end_sec, raw_duration_sec, priority, order_index, is_excluded
+            ) VALUES (?, ?, ?, ?, '', 'ml_intro', 'https://youtu.be/ml_intro', ?, ?, 600, 'core', ?, 0);
+            """,
+            (lid, course_id, source_id, f"ML Lesson {i}", i * 600, (i + 1) * 600, i),
+        )
+        # Add a chunk for each lesson so note generation has text
+        cid = f"chk-ml-{i}"
+        conn.execute(
+            """
+            INSERT INTO chunks (id, course_id, source_id, lesson_id, chunk_index, content, token_count, start_sec, end_sec)
+            VALUES (?, ?, ?, ?, 0, ?, 20, ?, ?);
+            """,
+            (cid, course_id, source_id, lid, f"Key concepts of Machine Learning topic {i}", i * 600, (i + 1) * 600),
+        )
+    conn.commit()
+    conn.close()
+
+    # 3. Approve / Confirm the source via POST /api/courses/{course_id}/sources/confirm
+    confirm_payload = {
+        "source_ids_to_approve": [source_id],
+        "source_ids_to_reject": [],
+    }
+    resp_confirm = client.post(f"/api/courses/{course_id}/sources/confirm", json=confirm_payload)
+    assert resp_confirm.status_code == 200
+    assert len(resp_confirm.json()) == 1
+
+    # 4. Check that notes were pre-generated for the first 3 lessons (order_index 0, 1, 2)
+    conn = init_connection(tmp_db_path)
+    notes_rows = conn.execute(
+        "SELECT lesson_id, is_generated, content_markdown FROM notes WHERE course_id = ? ORDER BY lesson_id;",
+        (course_id,),
+    ).fetchall()
+    conn.close()
+
+    generated_lesson_ids = {r["lesson_id"] for r in notes_rows if r["is_generated"] == 1 and r["content_markdown"]}
+    assert "les-ml-0" in generated_lesson_ids
+    assert "les-ml-1" in generated_lesson_ids
+    assert "les-ml-2" in generated_lesson_ids
+
+    # Lessons 3 and 4 should NOT have pre-generated notes
+    assert "les-ml-3" not in generated_lesson_ids
+    assert "les-ml-4" not in generated_lesson_ids
+
+
+def test_replan_course_schedule_and_trigger_reflow(test_setup):
+    """Verify replan_course_schedule helper and trigger_course_reflow after tested out lessons."""
+    from backend.routers.schedule import replan_course_schedule, trigger_course_reflow
+    client, tmp_db_path = test_setup
+
+    conn = init_connection(tmp_db_path)
+    course_id = "c-reflow-test"
+    conn.execute(
+        """
+        INSERT INTO courses (id, title, goal_query, target_date, minutes_per_day, playback_speed, rest_days, revision_buffer_days, schedule_strategy)
+        VALUES (?, 'Reflow Test Course', 'Reflow', '2026-12-15', 60, 1.0, '[]', 2, 'fixed');
+        """,
+        (course_id,),
+    )
+    source_id = "s-reflow-1"
+    conn.execute(
+        """
+        INSERT INTO sources (id, course_id, source_type, title, url, external_id, is_approved)
+        VALUES (?, ?, 'youtube_video', 'Reflow Source', 'https://youtu.be/reflow', 'reflow', 1);
+        """,
+        (source_id, course_id),
+    )
+
+    for i in range(4):
+        conn.execute(
+            """
+            INSERT INTO lessons (id, course_id, source_id, title, summary, video_id, video_url, start_sec, end_sec, raw_duration_sec, priority, order_index, is_excluded, is_tested_out)
+            VALUES (?, ?, ?, ?, '', 'reflow', 'https://youtu.be/reflow', 0, 1800, 1800, 'core', ?, 0, 0);
+            """,
+            (f"l-rf-{i}", course_id, source_id, f"Reflow Lesson {i}", i),
+        )
+    conn.commit()
+
+    # 1. Test replan_course_schedule
+    replan_res = replan_course_schedule(course_id=course_id, db=conn, mode="normal", minutes_per_day=60)
+    assert replan_res.success is True
+    assert replan_res.snapshot_id is not None
+
+    allocs = conn.execute("SELECT * FROM schedule_allocations WHERE course_id = ?;", (course_id,)).fetchall()
+    assert len(allocs) > 0
+
+    # 2. Mark lesson 0 as tested out and trigger reflow
+    conn.execute("UPDATE lessons SET is_tested_out = 1 WHERE id = 'l-rf-0';")
+    conn.commit()
+
+    trigger_course_reflow(course_id, conn)
+
+    # 3. Verify lesson 0 is excluded from reflowed allocations
+    reflowed_allocs = conn.execute(
+        "SELECT * FROM schedule_allocations WHERE course_id = ? ORDER BY scheduled_date ASC;",
+        (course_id,),
+    ).fetchall()
+    conn.close()
+
+    reflowed_lesson_ids = {a["lesson_id"] for a in reflowed_allocs}
+    assert "l-rf-0" not in reflowed_lesson_ids
+    assert "l-rf-1" in reflowed_lesson_ids
+    assert "l-rf-2" in reflowed_lesson_ids
+    assert "l-rf-3" in reflowed_lesson_ids
+

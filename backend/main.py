@@ -27,11 +27,20 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# Enable CORS for local client development
+# Enable CORS for local client development (restricted to local origins, no invalid wildcard+credentials)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:8001",
+        "http://127.0.0.1:8001",
+        "http://localhost:8008",
+        "http://127.0.0.1:8008",
+        "http://localhost:7860",
+        "http://127.0.0.1:7860",
+    ],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

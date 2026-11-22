@@ -20,6 +20,15 @@ def backup_db_before_migration(db_path: Path, current_version: int) -> Path:
             sidecar = Path(str(db_path) + ext)
             if sidecar.exists():
                 shutil.copy2(sidecar, Path(str(backup_file) + ext))
+        # Verify backup integrity before applying migration
+        try:
+            check_conn = sqlite3.connect(str(backup_file))
+            result = check_conn.execute("PRAGMA integrity_check;").fetchone()
+            check_conn.close()
+            if result and result[0] != "ok":
+                raise RuntimeError(f"Backup integrity check failed: {result[0]}. Aborting migration.")
+        except Exception as integrity_err:
+            raise RuntimeError(f"Cannot verify backup at {backup_file}: {integrity_err}") from integrity_err
     return backup_file
 
 def get_current_schema_version(conn: sqlite3.Connection) -> int:

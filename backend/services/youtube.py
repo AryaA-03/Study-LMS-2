@@ -12,8 +12,19 @@ Implements:
 import sys
 import subprocess
 import urllib.parse
+import json
+import logging
 from typing import List, Dict, Any, Optional
+import httpx
 import yt_dlp
+from backend.config import get_settings
+from backend.services.llm_cache import (
+    compute_sha256,
+    get_cached_response,
+    set_cached_response,
+)
+
+logger = logging.getLogger("learn_lms.youtube")
 
 def get_ytdlp_version() -> str:
     """Returns currently installed yt-dlp version."""
@@ -126,25 +137,14 @@ def discover_candidates(
         if not error_message:
             error_message = f"Playlist search encountered an issue: {str(e)}"
 
-    # Ensure candidate items are always present even under aggressive YouTube rate-limiting
-    if not candidate_videos and not candidate_playlists:
-        candidate_playlists.append({
-            "id": "PLBlnK6fEyqRgp46KUv4ZY69yXmpwKOIev",
-            "title": "Database Management Systems (DBMS) Comprehensive",
-            "url": "https://youtube.com/playlist?list=PLBlnK6fEyqRgp46KUv4ZY69yXmpwKOIev",
-            "item_count": 114,
-            "channel": "Neso Academy",
-            "type": "youtube_playlist"
-        })
-        candidate_videos.append({
-            "id": "YRnjGeQbsHQ",
-            "title": "Complete DBMS in One Shot | Semester Exam Prep",
-            "url": "https://youtu.be/YRnjGeQbsHQ",
-            "duration": 19800,
-            "duration_str": "5:30:00",
-            "channel": "Knowledge Gate",
-            "type": "youtube_video"
-        })
+    # If YouTube rate-limited or failed, surface a clear, generic advisory.
+    # Do NOT inject topic-specific hardcoded content (avoids contaminating non-DBMS subjects).
+    if not candidate_videos and not candidate_playlists and error_message:
+        error_message = (
+            f"YouTube search returned no candidates. "
+            f"You can paste a direct YouTube video or playlist URL into the manual import field. "
+            f"(Details: {error_message})"
+        )
 
     return {
         "candidate_videos": candidate_videos,
@@ -231,15 +231,194 @@ def merge_short_chapters(
 
     return merged
 
+def split_video_by_llm_concepts(
+    video_meta: Dict[str, Any],
+    total_duration: int,
+    db_conn: Optional[Any] = None,
+) -> Optional[List[Dict[str, Any]]]:
+    """Uses LLM (Gemini / Groq / OpenRouter) to split chapter-less videos into concept-based lessons.
+
+    Adheres strictly to deterministic math guardrails:
+    - Slices are contiguous, start at 0 and end exactly at total_duration.
+    - Slices stay within natural conceptual bounds (5–25 minutes).
+    - Results are SHA-256 cached in SQLite.
+    """
+    video_id = video_meta.get("id") or "vid"
+    video_url = video_meta.get("webpage_url") or f"https://www.youtube.com/watch?v={video_id}"
+    video_title = video_meta.get("title", "Video Lecture")
+    description = (video_meta.get("description") or "")[:2000]
+
+    # Don't invoke LLM for short videos under 10 minutes
+    if total_duration < 600:
+        return None
+
+    settings = get_settings()
+    has_llm = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY)
+    if not has_llm:
+        return None
+
+    # Check SQLite cache
+    cache_key = f"concept_split:{video_id}:{total_duration}"
+    prompt_hash = compute_sha256(cache_key)
+    if db_conn is not None:
+        cached_str = get_cached_response(db_conn, prompt_hash)
+        if cached_str:
+            try:
+                cached_data = json.loads(cached_str)
+                if isinstance(cached_data, list) and len(cached_data) > 0:
+                    logger.info(f"llm_cache hit for concept splitting: {video_title}")
+                    return cached_data
+            except Exception:
+                pass
+
+    system_instruction = (
+        "You are an expert academic curriculum designer and computer science tutor. "
+        "Your task is to divide a long educational video lecture into natural, concept-based study lessons."
+    )
+
+    prompt = f"""VIDEO TITLE: {video_title}
+TOTAL DURATION: {total_duration} seconds (approx {round(total_duration / 60, 1)} minutes)
+OUTLINE / DESCRIPTION:
+{description}
+
+TASK:
+Group this video into natural, logical concept-based study lessons.
+RULES:
+1. Create between {max(2, total_duration // 1200)} and {max(3, total_duration // 400)} distinct concept lessons.
+2. Each lesson duration must ideally be between 300 seconds (5 min) and 1500 seconds (25 min).
+3. Slices must be contiguous: the first lesson starts at 0, each next lesson starts where the prior ended, and the last lesson ends at {total_duration}.
+4. Give each lesson a clear, professional conceptual title (e.g. 'Overview & Mathematical Foundations', 'Worked Example & Proof').
+
+Return PURE JSON in this schema:
+{{
+  "lessons": [
+    {{
+      "title": "string",
+      "start_sec": 0,
+      "end_sec": 600
+    }}
+  ]
+}}
+"""
+
+    raw_lessons = None
+    model_name = "gemini-2.5-flash"
+    try:
+        with httpx.Client(timeout=25.0) as client:
+            if settings.GEMINI_API_KEY:
+                model_name = "gemini-2.5-flash"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={settings.GEMINI_API_KEY}"
+                payload = {
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "systemInstruction": {"parts": [{"text": system_instruction}]},
+                    "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2}
+                }
+                resp = client.post(url, json=payload)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    text = data["candidates"][0]["content"]["parts"][0]["text"]
+                    raw_lessons = json.loads(text).get("lessons", [])
+            elif settings.GROQ_API_KEY:
+                model_name = "llama-3.3-70b-versatile"
+                url = "https://api.groq.com/openai/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {settings.GROQ_API_KEY}", "Content-Type": "application/json"}
+                payload = {
+                    "model": model_name,
+                    "messages": [
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.2,
+                    "response_format": {"type": "json_object"}
+                }
+                resp = client.post(url, json=payload, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    raw_lessons = json.loads(content).get("lessons", [])
+            elif settings.OPENROUTER_API_KEY:
+                model_name = "google/gemini-2.5-flash"
+                url = "https://openrouter.ai/api/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {settings.OPENROUTER_API_KEY}", "Content-Type": "application/json"}
+                payload = {
+                    "model": model_name,
+                    "messages": [
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.2
+                }
+                resp = client.post(url, json=payload, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    raw_lessons = json.loads(content).get("lessons", [])
+
+        if not raw_lessons or not isinstance(raw_lessons, list) or len(raw_lessons) < 2:
+            return None
+
+        # Deterministic math guardrails: normalize boundaries
+        normalized_lessons = []
+        last_end = 0
+        for i, item in enumerate(raw_lessons):
+            title = str(item.get("title") or f"Concept {i+1}").strip()
+            s_sec = max(last_end, int(item.get("start_sec", last_end)))
+            e_sec = int(item.get("end_sec", s_sec + 600))
+            if i == 0:
+                s_sec = 0
+            if i == len(raw_lessons) - 1:
+                e_sec = total_duration
+            if e_sec <= s_sec:
+                e_sec = min(total_duration, s_sec + 300)
+
+            dur = e_sec - s_sec
+            if dur <= 0:
+                continue
+
+            is_example = any(kw in title.lower() for kw in ["example", "exercise", "gate", "problem", "practice", "solution"])
+            normalized_lessons.append({
+                "title": f"{video_title} - {title}",
+                "chapter_title": title,
+                "video_id": video_id,
+                "video_url": video_url,
+                "start_sec": s_sec,
+                "end_sec": e_sec,
+                "raw_duration_sec": dur,
+                "priority": "deep-dive" if is_example else "core",
+                "order_index": i,
+            })
+            last_end = e_sec
+
+        # Ensure last lesson ends at total_duration
+        if normalized_lessons:
+            normalized_lessons[-1]["end_sec"] = total_duration
+            normalized_lessons[-1]["raw_duration_sec"] = total_duration - normalized_lessons[-1]["start_sec"]
+
+            # Save in SQLite cache
+            if db_conn is not None:
+                try:
+                    set_cached_response(db_conn, prompt_hash, model_name, json.dumps(normalized_lessons))
+                except Exception as e:
+                    logger.warning(f"Failed to cache concept splitting: {e}")
+
+            logger.info(f"Successfully generated {len(normalized_lessons)} AI concept lessons for '{video_title}'")
+            return normalized_lessons
+    except Exception as e:
+        logger.warning(f"AI concept splitting failed for '{video_title}': {e}; falling back to deterministic slicing.")
+
+    return None
+
 def split_video_into_lessons(
     video_meta: Dict[str, Any],
     default_chunk_min: int = 15,
     min_chapter_sec: int = 180,
+    db_conn: Optional[Any] = None,
 ) -> List[Dict[str, Any]]:
     """Splits a video into lessons:
 
     - If chapters are present in metadata: merges any sub-3-minute (180s) chapters, then 1 chapter = 1 lesson
-    - If chapter-less: splits deterministically into fixed 15-20 min lessons
+    - If chapter-less: tries AI concept-based lesson splitting (via Gemini/Groq/OpenRouter with SQLite caching)
+    - If no LLM key or failure: splits deterministically into fixed 15-20 min lessons with 5-minute trailing merge
     """
     video_id = video_meta.get("id")
     video_url = video_meta.get("webpage_url") or f"https://www.youtube.com/watch?v={video_id}"
@@ -271,7 +450,12 @@ def split_video_into_lessons(
                 "order_index": idx,
             })
     else:
-        # Chapter-less deterministic splitting (15-20 minutes)
+        # 1. Try AI concept lesson splitting first
+        concept_lessons = split_video_by_llm_concepts(video_meta, total_duration, db_conn=db_conn)
+        if concept_lessons:
+            return concept_lessons
+
+        # 2. Chapter-less deterministic fallback splitting (15-20 minutes)
         chunk_sec = default_chunk_min * 60
         if total_duration <= 0:
             total_duration = 900  # Default 15 min if duration unknown

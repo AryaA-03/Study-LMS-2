@@ -13,6 +13,11 @@ from typing import List, Dict, Any, Optional, Tuple
 
 import httpx
 from backend.config import get_settings
+from backend.services.llm_cache import (
+    compute_sha256,
+    get_cached_response,
+    set_cached_response,
+)
 
 logger = logging.getLogger("learn_lms.qa_engine")
 settings = get_settings()
@@ -36,9 +41,10 @@ def search_chunks_fts(
     db_conn,
     course_id: str,
     query: str,
-    limit: int = 6
+    limit: int = 6,
+    lesson_id: Optional[str] = None
 ) -> List[Dict[str, Any]]:
-    """Performs FTS5 BM25 search against indexed chunks for a course."""
+    """Performs FTS5 BM25 search against indexed chunks for a course, optionally restricted to a lesson."""
     # Clean query for FTS5 match: keep alphanumeric words and join with OR
     words = re.findall(r"[A-Za-z0-9_]+", query)
     if not words:
@@ -49,33 +55,61 @@ def search_chunks_fts(
 
     cur = db_conn.cursor()
     try:
-        cur.execute(
-            """
-            SELECT c.id, c.source_id, c.lesson_id, c.start_sec, c.end_sec, c.content,
-                   s.title as source_title, s.source_type, bm25(chunks_fts) as rank
-            FROM chunks_fts f
-            JOIN chunks c ON f.id = c.id
-            LEFT JOIN sources s ON c.source_id = s.id
-            WHERE chunks_fts MATCH ? AND c.course_id = ?
-            ORDER BY rank ASC
-            LIMIT ?;
-            """,
-            (fts_expr, course_id, limit)
-        )
+        if lesson_id:
+            cur.execute(
+                """
+                SELECT c.id, c.source_id, c.lesson_id, c.start_sec, c.end_sec, c.content,
+                       s.title as source_title, s.source_type, bm25(chunks_fts) as rank
+                FROM chunks_fts f
+                JOIN chunks c ON f.id = c.id
+                LEFT JOIN sources s ON c.source_id = s.id
+                WHERE chunks_fts MATCH ? AND c.course_id = ? AND c.lesson_id = ?
+                ORDER BY rank ASC
+                LIMIT ?;
+                """,
+                (fts_expr, course_id, lesson_id, limit)
+            )
+        else:
+            cur.execute(
+                """
+                SELECT c.id, c.source_id, c.lesson_id, c.start_sec, c.end_sec, c.content,
+                       s.title as source_title, s.source_type, bm25(chunks_fts) as rank
+                FROM chunks_fts f
+                JOIN chunks c ON f.id = c.id
+                LEFT JOIN sources s ON c.source_id = s.id
+                WHERE chunks_fts MATCH ? AND c.course_id = ?
+                ORDER BY rank ASC
+                LIMIT ?;
+                """,
+                (fts_expr, course_id, limit)
+            )
         rows = cur.fetchall()
     except Exception as e:
         logger.warning(f"FTS5 MATCH failed with '{fts_expr}': {e}; falling back to LIKE")
-        cur.execute(
-            """
-            SELECT c.id, c.source_id, c.lesson_id, c.start_sec, c.end_sec, c.content,
-                   s.title as source_title, s.source_type, 0.0 as rank
-            FROM chunks c
-            LEFT JOIN sources s ON c.source_id = s.id
-            WHERE c.course_id = ? AND c.content LIKE ?
-            LIMIT ?;
-            """,
-            (course_id, f"%{words[0]}%", limit)
-        )
+        if lesson_id:
+            cur.execute(
+                """
+                SELECT c.id, c.source_id, c.lesson_id, c.start_sec, c.end_sec, c.content,
+                       s.title as source_title, s.source_type, 0.0 as rank
+                FROM chunks c
+                LEFT JOIN sources s ON c.source_id = s.id
+                WHERE c.course_id = ? AND c.lesson_id = ? AND c.content LIKE ?
+                LIMIT ?;
+                """,
+                (course_id, lesson_id, f"%{words[0]}%", limit)
+            )
+        else:
+            cur.execute(
+                """
+                SELECT c.id, c.source_id, c.lesson_id, c.start_sec, c.end_sec, c.content,
+                       s.title as source_title, s.source_type, 0.0 as rank
+                FROM chunks c
+                LEFT JOIN sources s ON c.source_id = s.id
+                WHERE c.course_id = ? AND c.content LIKE ?
+                LIMIT ?;
+                """,
+                (course_id, f"%{words[0]}%", limit)
+            )
         rows = cur.fetchall()
 
     results: List[Dict[str, Any]] = []
@@ -138,9 +172,9 @@ def format_no_key_answer(
 async def generate_llm_grounded_answer(
     query: str,
     chunks: List[Dict[str, Any]],
-    gemini_key: str
+    gemini_key: Optional[str] = None
 ) -> Tuple[str, List[Dict[str, Any]]]:
-    """Generates strict citation-grounded response using Gemini LLM API."""
+    """Generates strict citation-grounded response using Gemini, Groq, or OpenRouter LLM API."""
     if not chunks:
         return format_no_key_answer(query, chunks)
 
@@ -168,52 +202,108 @@ async def generate_llm_grounded_answer(
         "4. Be concise, direct, and structured with bullet points.\n"
     )
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
-    payload = {
-        "contents": [{
-            "parts": [{
-                "text": f"{system_instruction}\n\nEvidence:\n{evidence_text}\n\nStudent Question: {query}"
-            }]
-        }],
-        "generationConfig": {
-            "temperature": 0.1,
-            "maxOutputTokens": 1024,
-        }
-    }
+    key = gemini_key or settings.GEMINI_API_KEY
+    groq_key = settings.GROQ_API_KEY
+    openrouter_key = settings.OPENROUTER_API_KEY
+
+    raw_answer = None
 
     try:
-        async with httpx.AsyncClient(timeout=25.0) as client:
-            resp = await client.post(url, json=payload)
-            if resp.status_code == 200:
-                result = resp.json()
-                candidates = result.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        raw_answer = parts[0].get("text", "")
-                        # Parse citations present in answer (supporting UUID and chk_ identifiers)
-                        cited_ids = re.findall(r"\[ref:\s*([a-zA-Z0-9_\-]+)\]", raw_answer) + re.findall(r"\[(chk_[a-zA-Z0-9_\-]+)\]", raw_answer)
-                        citations = []
-                        for cid in set(cited_ids):
-                            if cid in chunk_map:
-                                chk = chunk_map[cid]
-                                citations.append({
-                                    "chunk_id": cid,
-                                    "source_title": chk["source_title"],
-                                    "source_type": chk.get("source_type", "youtube_video"),
-                                    "start_sec": chk.get("start_sec"),
-                                    "excerpt": chk["content"][:200]
-                                })
-                        if not citations and chunks:
-                            for chk in chunks[:3]:
-                                citations.append({
-                                    "chunk_id": chk["id"],
-                                    "source_title": chk["source_title"],
-                                    "source_type": chk.get("source_type", "youtube_video"),
-                                    "start_sec": chk.get("start_sec"),
-                                    "excerpt": chk["content"][:200]
-                                })
-                        return raw_answer, citations
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            if key:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
+                payload = {
+                    "contents": [{
+                        "parts": [{
+                            "text": f"{system_instruction}\n\nEvidence:\n{evidence_text}\n\nStudent Question: {query}"
+                        }]
+                    }],
+                    "generationConfig": {
+                        "temperature": 0.1,
+                        "maxOutputTokens": 1024,
+                    }
+                }
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    result = resp.json()
+                    candidates = result.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts:
+                            raw_answer = parts[0].get("text", "")
+                else:
+                    logger.warning(f"Gemini API returned status {resp.status_code}: {resp.text[:200]}")
+            elif groq_key:
+                url = "https://api.groq.com/openai/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {groq_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": f"Evidence:\n{evidence_text}\n\nStudent Question: {query}"}
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 1024,
+                }
+                resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    choices = data.get("choices", [])
+                    if choices:
+                        raw_answer = choices[0].get("message", {}).get("content", "")
+                else:
+                    logger.warning(f"Groq API returned status {resp.status_code}: {resp.text[:200]}")
+            elif openrouter_key:
+                url = "https://openrouter.ai/api/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {openrouter_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": "google/gemini-2.5-flash",
+                    "messages": [
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": f"Evidence:\n{evidence_text}\n\nStudent Question: {query}"}
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 1024,
+                }
+                resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    choices = data.get("choices", [])
+                    if choices:
+                        raw_answer = choices[0].get("message", {}).get("content", "")
+                else:
+                    logger.warning(f"OpenRouter API returned status {resp.status_code}: {resp.text[:200]}")
+
+        if raw_answer:
+            # Parse citations present in answer (supporting UUID and chk_ identifiers)
+            cited_ids = re.findall(r"\[ref:\s*([a-zA-Z0-9_\-]+)\]", raw_answer) + re.findall(r"\[(chk_[a-zA-Z0-9_\-]+)\]", raw_answer)
+            citations = []
+            for cid in set(cited_ids):
+                if cid in chunk_map:
+                    chk = chunk_map[cid]
+                    citations.append({
+                        "chunk_id": cid,
+                        "source_title": chk["source_title"],
+                        "source_type": chk.get("source_type", "youtube_video"),
+                        "start_sec": chk.get("start_sec"),
+                        "excerpt": chk["content"][:200]
+                    })
+            if not citations and chunks:
+                for chk in chunks[:3]:
+                    citations.append({
+                        "chunk_id": chk["id"],
+                        "source_title": chk["source_title"],
+                        "source_type": chk.get("source_type", "youtube_video"),
+                        "start_sec": chk.get("start_sec"),
+                        "excerpt": chk["content"][:200]
+                    })
+            return raw_answer, citations
     except Exception as e:
         logger.warning(f"LLM grounded Q&A call failed: {e}")
 
@@ -224,19 +314,71 @@ async def generate_llm_grounded_answer(
 async def answer_course_question(
     db_conn,
     course_id: str,
-    query: str
+    query: str,
+    lesson_id: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Orchestrates FTS5 search, answer synthesis, and persistence in qa_threads."""
-    # 1. Search top matching chunks
-    matching_chunks = search_chunks_fts(db_conn, course_id, query, limit=6)
+    """Orchestrates FTS5 search, answer synthesis, caching, and persistence in qa_threads."""
+    # 1. Check llm_cache for existing (course_id, query, lesson_id)
+    cache_key = f"qa:{course_id}:{query}:{lesson_id or ''}"
+    prompt_hash = compute_sha256(cache_key)
 
-    # 2. Synthesize answer
-    if settings.GEMINI_API_KEY:
+    if db_conn is not None:
+        cached_str = get_cached_response(db_conn, prompt_hash)
+        if cached_str:
+            logger.info("llm_cache hit for answer_course_question")
+            try:
+                cached_data = json.loads(cached_str)
+                if isinstance(cached_data, dict):
+                    cached_answer = cached_data.get("answer_markdown") or cached_data.get("answer") or ""
+                    cached_citations = cached_data.get("citations", [])
+                else:
+                    cached_answer = str(cached_data)
+                    cached_citations = []
+            except Exception:
+                cached_answer = cached_str
+                cached_citations = []
+
+            thread_id = f"qa_{uuid.uuid4().hex[:12]}"
+            try:
+                db_conn.execute(
+                    """
+                    INSERT INTO qa_threads (id, course_id, query, answer_markdown, citations_json)
+                    VALUES (?, ?, ?, ?, ?);
+                    """,
+                    (thread_id, course_id, query, cached_answer, json.dumps(cached_citations))
+                )
+                db_conn.commit()
+            except Exception as e:
+                logger.warning(f"Failed to record cached Q&A thread: {e}")
+
+            return {
+                "id": thread_id,
+                "course_id": course_id,
+                "query": query,
+                "answer_markdown": cached_answer,
+                "citations": cached_citations
+            }
+
+    # 2. Search top matching chunks (restricted to lesson_id if specified)
+    matching_chunks = search_chunks_fts(db_conn, course_id, query, limit=6, lesson_id=lesson_id)
+
+    # 3. Synthesize answer
+    has_llm = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY)
+    if has_llm:
         answer_text, citations = await generate_llm_grounded_answer(query, matching_chunks, settings.GEMINI_API_KEY)
     else:
         answer_text, citations = format_no_key_answer(query, matching_chunks)
 
-    # 3. Persist in qa_threads table
+    # 4. Save to llm_cache
+    if db_conn is not None:
+        cache_val = json.dumps({
+            "answer_markdown": answer_text,
+            "citations": citations
+        })
+        model_name = "gemini-2.5-flash" if settings.GEMINI_API_KEY else ("llama-3.3-70b-versatile" if settings.GROQ_API_KEY else ("google/gemini-2.5-flash" if settings.OPENROUTER_API_KEY else "deterministic"))
+        set_cached_response(db_conn, prompt_hash, model_name, cache_val)
+
+    # 5. Persist in qa_threads table
     thread_id = f"qa_{uuid.uuid4().hex[:12]}"
     citations_json = json.dumps(citations)
     db_conn.execute(
