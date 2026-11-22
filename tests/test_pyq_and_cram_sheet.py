@@ -220,10 +220,14 @@ async def test_cram_sheet_generation_and_sha256_cache():
         # Step 1: Initial Generation (Fresh, not cached)
         sheet1 = await get_or_create_cram_sheet(conn, cid, force_refresh=False)
         assert sheet1["cached"] is False
+        assert sheet1["created_at"] is not None
         assert "Theory of Computation — Last-Night Exam Cram Sheet" in sheet1["content_markdown"]
         assert "High-Yield Exam Weightage Matrix" in sheet1["content_markdown"]
         assert "DFA" in sheet1["content_markdown"]
         assert "Define DFA. Differentiate between DFA and NFA" in sheet1["content_markdown"]
+        # Ensure all bold markers are properly closed (even count of **)
+        bold_count = sheet1["content_markdown"].count("**")
+        assert bold_count % 2 == 0, f"Unbalanced ** bold markers found: count={bold_count}"
 
         initial_hash = sheet1["notes_hash"]
         assert len(initial_hash) == 64  # SHA-256
@@ -253,3 +257,107 @@ async def test_cram_sheet_generation_and_sha256_cache():
         assert "Pumping Lemma" in sheet3["content_markdown"]
 
         conn.close()
+
+
+def test_pyq_and_cram_sheet_api_endpoints():
+    """End-to-end API router test for PYQ upload/delete, Cram Sheet generation/download, and Allocation complete."""
+    from fastapi.testclient import TestClient
+    from backend.main import app
+    from backend.database import get_db
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "test_api.db"
+        apply_migrations(db_path)
+
+        def override_get_db():
+            conn = init_connection(db_path)
+            try:
+                yield conn
+                conn.commit()
+            finally:
+                conn.close()
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        with TestClient(app) as client:
+            # 1. Create a course
+            c_resp = client.post(
+                "/api/courses",
+                json={
+                    "title": "Computer Networks",
+                    "goal_query": "CN End-Term",
+                    "target_date": "2026-12-30",
+                    "minutes_per_day": 60,
+                }
+            )
+            assert c_resp.status_code == 200
+            cid = c_resp.json()["id"]
+
+            # Add a lesson & chunk
+            conn = init_connection(db_path)
+            lid = "les_cn_1"
+            conn.execute("INSERT INTO lessons (id, course_id, title, start_sec, end_sec, raw_duration_sec, order_index) VALUES (?, ?, 'OSI Model and TCP/IP', 0, 1200, 1200, 1);", (lid, cid))
+            conn.execute("INSERT INTO chunks (id, course_id, lesson_id, chunk_index, token_count, content) VALUES ('chk_cn_1', ?, ?, 0, 40, 'The OSI 7 layer architecture defines physical data link network transport session presentation application layers.');", (cid, lid))
+            conn.execute("INSERT INTO chunks_fts (id, course_id, lesson_id, content) VALUES ('chk_cn_1', ?, ?, 'The OSI 7 layer architecture defines physical data link network transport session presentation application layers.');", (cid, lid))
+            conn.execute("INSERT INTO schedule_allocations (id, course_id, lesson_id, scheduled_date, split_index, split_count, allocated_start_sec, allocated_end_sec, effective_minutes) VALUES ('alloc_1', ?, ?, '2026-12-01', 0, 1, 0, 1200, 20.0);", (cid, lid))
+            conn.commit()
+            conn.close()
+
+            # 2. Upload PYQ pasted text
+            pyq_resp = client.post(
+                f"/api/courses/{cid}/pyq/upload-text",
+                json={
+                    "title": "2024 Past Paper",
+                    "raw_text": "Q1. Explain the 7 layers of OSI Model with neat diagram. [10M]\nQ2. Explain TCP 3-way handshake mechanism. [5M]"
+                }
+            )
+            assert pyq_resp.status_code == 200
+            pyq_data = pyq_resp.json()
+            assert pyq_data["questions_count"] == 2
+            assert pyq_data["matched_count"] >= 1
+            paper_id = pyq_data["paper_id"]
+
+            # 3. Get PYQ summary
+            summary_resp = client.get(f"/api/courses/{cid}/pyq")
+            assert summary_resp.status_code == 200
+            assert summary_resp.json()["total_questions"] == 2
+
+            # 4. Get lesson PYQs
+            lesson_pyq_resp = client.get(f"/api/courses/{cid}/lessons/{lid}/pyq")
+            assert lesson_pyq_resp.status_code == 200
+            assert len(lesson_pyq_resp.json()) >= 1
+            assert lesson_pyq_resp.json()[0]["marks"] == 10
+
+            # 5. Generate Cram Sheet
+            cram_gen_resp = client.post(f"/api/courses/{cid}/cram-sheet/generate", json={"force_refresh": True})
+            assert cram_gen_resp.status_code == 200
+            assert "Last-Night Exam Cram Sheet" in cram_gen_resp.json()["content_markdown"]
+
+            # 6. Retrieve Cram Sheet (cached)
+            cram_get_resp = client.get(f"/api/courses/{cid}/cram-sheet")
+            assert cram_get_resp.status_code == 200
+            assert cram_get_resp.json()["cached"] is True
+
+            # 7. Download Cram Sheet Markdown
+            cram_dl_resp = client.get(f"/api/courses/{cid}/cram-sheet/download")
+            assert cram_dl_resp.status_code == 200
+            assert "text/markdown" in cram_dl_resp.headers["content-type"]
+            assert "attachment;" in cram_dl_resp.headers["content-disposition"]
+            assert len(cram_dl_resp.text) > 100
+
+            # 8. Test allocation complete endpoint
+            complete_resp = client.post(f"/api/courses/{cid}/schedule/allocations/alloc_1/complete")
+            assert complete_resp.status_code == 200
+            sched_data = complete_resp.json()
+            assert sched_data["completed_effective_minutes"] > 0
+
+            # 9. Delete PYQ paper
+            del_resp = client.delete(f"/api/courses/{cid}/pyq/papers/{paper_id}")
+            assert del_resp.status_code == 200
+            assert del_resp.json()["success"] is True
+
+            # Verify paper questions deleted
+            after_del_resp = client.get(f"/api/courses/{cid}/pyq")
+            assert after_del_resp.json()["total_questions"] == 0
+
+        app.dependency_overrides.clear()

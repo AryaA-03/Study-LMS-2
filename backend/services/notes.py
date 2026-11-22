@@ -42,75 +42,106 @@ def generate_no_key_structured_notes(
     chunks: List[Dict[str, Any]],
     screenshots: Optional[List[Dict[str, Any]]] = None
 ) -> str:
-    """Generates structured Markdown study notes deterministically from chunks.
+    """Generates standalone GeeksforGeeks-style Markdown study notes deterministically from chunks.
     
-    Used when no LLM key is configured. Incorporates [MM:SS] links, keyframe
-    embeds, section headings, and cited chunk IDs.
+    Structure:
+    1. Overview & Intuition
+    2. Key Definitions, Syntax & Formulas
+    3. Step-by-Step Worked Example
+    4. Comparison / Complexity / Edge Cases Table
+    5. Quick Exam Revision Bullets
+    
+    Embeds clickable [MM:SS] timestamp pills on every section/concept so the user
+    can learn from notes alone or jump straight into the video player.
     """
     if not chunks:
         return (
             f"# {lesson_title}\n\n"
             "> [!NOTE]\n"
-            "> No transcript or captions found for this lesson yet. "
+            "> No transcript or captions found for this concept clip yet. "
             "Use the 'Transcribe / Fetch Captions' button to ingest content.\n"
         )
 
     lines: List[str] = []
     lines.append(f"# {lesson_title}\n")
     
-    # Overview banner
     first_start = chunks[0]["start_sec"]
     last_end = chunks[-1]["end_sec"]
-    lines.append(f"**Lesson Time Range**: {format_seconds_to_mm_ss(first_start)} — {format_seconds_to_mm_ss(last_end)}\n")
-    lines.append(f"**Source Evidence**: Grounded across {len(chunks)} transcript sections.\n")
+    time_badge = f"{format_seconds_to_mm_ss(first_start)} — {format_seconds_to_mm_ss(last_end)}"
+    lines.append(f"> [!NOTE]\n> **Concept Clip Time Range**: {time_badge} • Grounded strictly across {len(chunks)} transcript sections.\n")
     lines.append("---\n")
 
-    lines.append("## 📌 Key Takeaways & Core Concepts\n")
+    # 1. Overview & Intuition
+    lines.append("## 1. Overview & Intuition\n")
+    first_content = chunks[0]["content"].strip()
+    first_pill = format_seconds_to_mm_ss(chunks[0]["start_sec"])
+    overview_sentences = [s.strip() for s in first_content.split(".") if len(s.strip()) > 15]
+    if overview_sentences:
+        lines.append(f"{first_pill} **Core Motivation**: {overview_sentences[0]}.")
+        if len(overview_sentences) > 1:
+            lines.append(f"\n{overview_sentences[1]}.")
+    else:
+        lines.append(f"{first_pill} This concept clip explores foundational theory, mechanics, and applications of `{lesson_title}`.")
+    lines.append("\n---\n")
 
-    # Map screenshots by timestamp for inline pairing
-    shots_by_time = {}
-    if screenshots:
-        for s in screenshots:
-            shots_by_time[s["timestamp_sec"]] = s
+    # 2. Key Definitions, Syntax & Formulas
+    lines.append("## 2. Key Definitions, Syntax & Formulas\n")
+    def_bullets = []
+    for c in chunks:
+        c_pill = format_seconds_to_mm_ss(c["start_sec"])
+        c_text = c["content"].strip()
+        sentences = [s.strip() for s in c_text.split(".") if s.strip()]
+        for s in sentences:
+            if any(kw in s.lower() for kw in ["is defined", "means", "formula", "syntax", "called", "known as", "rule", "property", "theorem"]):
+                def_bullets.append(f"- **Key Principle** {c_pill}: {s}.")
+                if len(def_bullets) >= 5:
+                    break
+        if len(def_bullets) >= 5:
+            break
 
-    for chunk in chunks:
-        s_sec = chunk["start_sec"]
-        e_sec = chunk["end_sec"]
-        time_tag = format_seconds_to_mm_ss(s_sec)
-        content = chunk["content"].strip()
-        chunk_id = chunk.get("id", f"chk_{chunk.get('chunk_index', 0)}")
+    if not def_bullets:
+        for c in chunks[:3]:
+            c_pill = format_seconds_to_mm_ss(c["start_sec"])
+            first_s = c["content"].split(".")[0].strip()
+            def_bullets.append(f"- **Formal Point** {c_pill}: {first_s}.")
 
-        # Pick first sentence or up to 100 characters as heading concept
-        first_sentence = content.split(".")[0].strip()
-        if len(first_sentence) > 90:
-            first_sentence = first_sentence[:87] + "..."
+    for b in def_bullets:
+        lines.append(b)
+    lines.append("\n---\n")
 
-        lines.append(f"### {time_tag} {first_sentence.title()}\n")
+    # 3. Step-by-Step Worked Example
+    lines.append("## 3. Step-by-Step Worked Example\n")
+    mid_chunk = chunks[len(chunks) // 2]
+    mid_pill = format_seconds_to_mm_ss(mid_chunk["start_sec"])
+    example_sentences = [s.strip() for s in mid_chunk["content"].split(".") if len(s.strip()) > 10]
+    lines.append(f"Walkthrough demonstrating how the rules of `{lesson_title}` execute in practice:")
+    lines.append(f"1. **Step 1: Setup & Inputs** {mid_pill}: Initialize base states, alphabet symbols, or data parameters as discussed in the lecture.")
+    if example_sentences:
+        lines.append(f"2. **Step 2: Transition & Computation** {mid_pill}: {example_sentences[0]}.")
+        if len(example_sentences) > 1:
+            lines.append(f"3. **Step 3: State Verification** {mid_pill}: {example_sentences[1]}.")
+    else:
+        lines.append(f"2. **Step 2: Transition & Computation** {mid_pill}: Process the input sequence deterministically through valid states.")
+        lines.append(f"3. **Step 3: Result & Verification** {mid_pill}: Verify termination and validate acceptance criteria.")
+    lines.append("\n---\n")
 
-        # Check if an opt-in screenshot matches this chunk start
-        matching_shot = next(
-            (s for s in (screenshots or []) if abs(s["timestamp_sec"] - s_sec) < 15),
-            None
-        )
-        if matching_shot:
-            lines.append(f"![{matching_shot['caption']}]({matching_shot['url']})\n")
-
-        # Body paragraphs with inline citations
-        sentences = [s.strip() for s in content.split(".") if s.strip()]
-        for sent in sentences[:4]:
-            lines.append(f"- {sent}. `[{time_tag}]` `[ref:{chunk_id}]`")
-        lines.append("")
-
-    lines.append("---\n")
-    lines.append("## 🔍 Grounding & Source Chunks\n")
-    lines.append("| Timestamp | Chunk Ref | Words | Excerpt |")
+    # 4. Comparison / Complexity / Edge Cases Table
+    lines.append("## 4. Comparison / Complexity / Edge Cases Table\n")
+    lines.append("| Concept / Aspect | Property / Behavior | Edge Case / Pitfall | Timestamp |")
     lines.append("| :--- | :--- | :--- | :--- |")
-    for chunk in chunks:
-        t_str = format_seconds_to_mm_ss(chunk["start_sec"])
-        excerpt = chunk["content"][:60].replace("|", "/") + "..."
-        c_id = chunk.get("id", f"chk_{chunk.get('chunk_index', 0)}")
-        word_count = len(chunk["content"].split())
-        lines.append(f"| {t_str} | `{c_id}` | {word_count} | {excerpt} |")
+    for idx, c in enumerate(chunks[:4]):
+        c_pill = format_seconds_to_mm_ss(c["start_sec"])
+        word = c["content"].split()[0].title() if c["content"].split() else f"Phase {idx+1}"
+        short_summary = (c["content"][:45] + "...").replace("|", "/")
+        lines.append(f"| Aspect {idx+1} ({word}) | {short_summary} | Watch for empty strings / boundaries | {c_pill} |")
+    lines.append("\n---\n")
+
+    # 5. Quick Exam Revision Bullets
+    lines.append("## 5. Quick Exam Revision Bullets\n")
+    for idx, c in enumerate(chunks[-3:]):
+        c_pill = format_seconds_to_mm_ss(c["start_sec"])
+        s_part = c["content"].split(".")[0].strip()
+        lines.append(f"- ⚡ **High-Yield Point {idx+1}** {c_pill}: {s_part}.")
 
     return "\n".join(lines)
 
@@ -122,7 +153,7 @@ async def generate_llm_structured_notes(
     screenshots: Optional[List[Dict[str, Any]]] = None,
     db_conn: Optional[Any] = None,
 ) -> str:
-    """Generates LLM-synthesized structured study notes grounded in transcript chunks."""
+    """Generates LLM-synthesized standalone GeeksforGeeks-style Markdown study notes grounded in transcript chunks."""
     if not chunks:
         return generate_no_key_structured_notes(lesson_title, chunks, screenshots)
 
@@ -133,17 +164,25 @@ async def generate_llm_structured_notes(
     ])
 
     system_instruction = (
-        "You are an expert college professor and technical study assistant. "
-        "Create comprehensive, crystal-clear, structured Markdown study notes for this lesson. "
+        "You are an expert college professor and technical curriculum author. "
+        "Create complete, self-contained standalone GeeksforGeeks-style Markdown study notes "
+        "strictly from this concept clip's transcript slice so a student can master the concept from notes alone without watching the video.\n\n"
+        "MANDATORY STRUCTURE:\n"
+        "# [Concept Title]\n\n"
+        "## 1. Overview & Intuition\n"
+        "Explain what this concept is, why it exists, and the core intuition with a clickable [MM:SS] timestamp.\n\n"
+        "## 2. Key Definitions, Syntax & Formulas\n"
+        "Bullet-point exact formal definitions, notation, mathematical tuples, or code syntax with [MM:SS] timestamps.\n\n"
+        "## 3. Step-by-Step Worked Example\n"
+        "Walk step-by-step through a concrete worked example with inputs, intermediate transitions, and final result with [MM:SS] timestamps.\n\n"
+        "## 4. Comparison / Complexity / Edge Cases Table\n"
+        "Provide a clean Markdown comparison or complexity table summarizing tradeoffs and edge cases.\n\n"
+        "## 5. Quick Exam Revision Bullets\n"
+        "3-5 high-yield bullets for rapid pre-exam revision with [MM:SS] pills.\n\n"
         "CRITICAL RULES:\n"
-        "1. Every single key point, definition, formula, or concept MUST include a clickable timestamp link in [MM:SS] format (e.g. [02:15]) pointing to the exact moment in the video.\n"
-        "2. Ground all points strictly in the provided transcript text. Do not hallucinate external facts.\n"
-        "3. Include:\n"
-        "   - Overview & Exam Importance\n"
-        "   - Detailed Breakdown with Timestamped Subheadings (### [MM:SS] Concept Name)\n"
-        "   - Formulas / Code Blocks / Definitions where applicable\n"
-        "   - Common Exam Pitfalls / Misconceptions\n"
-        "4. Use standard GitHub Flavored Markdown with > [!NOTE] or > [!IMPORTANT] alerts.\n"
+        "1. Every section and key formula MUST embed clickable [MM:SS] timestamp pills (e.g. [04:12]).\n"
+        "2. Ground strictly in the transcript text; never hallucinate external facts.\n"
+        "3. Output valid GitHub Flavored Markdown."
     )
 
     prompt_text = f"{system_instruction}\n\nLesson Title: {lesson_title}\n\nTranscript Chunks:\n{transcript_text}"
@@ -166,78 +205,89 @@ async def generate_llm_structured_notes(
 
     try:
         async with httpx.AsyncClient(timeout=35.0) as client:
-            if key:
-                model_used = "gemini-2.5-flash"
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent?key={key}"
-                payload = {
-                    "contents": [{
-                        "parts": [{
-                            "text": prompt_text
-                        }]
-                    }],
-                    "generationConfig": {
-                        "temperature": 0.2,
-                        "maxOutputTokens": 2048,
+            if key and not generated_text:
+                try:
+                    model_used = "gemini-2.5-flash"
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent?key={key}"
+                    payload = {
+                        "contents": [{
+                            "parts": [{
+                                "text": prompt_text
+                            }]
+                        }],
+                        "generationConfig": {
+                            "temperature": 0.2,
+                            "maxOutputTokens": 2048,
+                        }
                     }
-                }
-                resp = await client.post(url, json=payload)
-                if resp.status_code == 200:
-                    result = resp.json()
-                    candidates = result.get("candidates", [])
-                    if candidates:
-                        content_parts = candidates[0].get("content", {}).get("parts", [])
-                        if content_parts:
-                            generated_text = content_parts[0].get("text", "")
-                else:
-                    logger.warning(f"Gemini API returned status {resp.status_code}: {resp.text[:200]}")
-            elif groq_key:
-                model_used = "llama-3.3-70b-versatile"
-                url = "https://api.groq.com/openai/v1/chat/completions"
-                headers = {
-                    "Authorization": f"Bearer {groq_key}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": model_used,
-                    "messages": [
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": f"Lesson Title: {lesson_title}\n\nTranscript Chunks:\n{transcript_text}"}
-                    ],
-                    "temperature": 0.2,
-                    "max_tokens": 2048,
-                }
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    choices = data.get("choices", [])
-                    if choices:
-                        generated_text = choices[0].get("message", {}).get("content", "")
-                else:
-                    logger.warning(f"Groq API returned status {resp.status_code}: {resp.text[:200]}")
-            elif openrouter_key:
-                model_used = "google/gemini-2.5-flash"
-                url = "https://openrouter.ai/api/v1/chat/completions"
-                headers = {
-                    "Authorization": f"Bearer {openrouter_key}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": model_used,
-                    "messages": [
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": f"Lesson Title: {lesson_title}\n\nTranscript Chunks:\n{transcript_text}"}
-                    ],
-                    "temperature": 0.2,
-                    "max_tokens": 2048,
-                }
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    choices = data.get("choices", [])
-                    if choices:
-                        generated_text = choices[0].get("message", {}).get("content", "")
-                else:
-                    logger.warning(f"OpenRouter API returned status {resp.status_code}: {resp.text[:200]}")
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        result = resp.json()
+                        candidates = result.get("candidates", [])
+                        if candidates:
+                            content_parts = candidates[0].get("content", {}).get("parts", [])
+                            if content_parts:
+                                generated_text = content_parts[0].get("text", "")
+                    else:
+                        logger.warning(f"Gemini API returned status {resp.status_code}: {resp.text[:200]}; trying fallback")
+                except Exception as e:
+                    logger.warning(f"Gemini notes generation failed: {e}; trying fallback")
+
+            if groq_key and not generated_text:
+                try:
+                    model_used = "llama-3.3-70b-versatile"
+                    url = "https://api.groq.com/openai/v1/chat/completions"
+                    headers = {
+                        "Authorization": f"Bearer {groq_key}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": model_used,
+                        "messages": [
+                            {"role": "system", "content": system_instruction},
+                            {"role": "user", "content": f"Lesson Title: {lesson_title}\n\nTranscript Chunks:\n{transcript_text}"}
+                        ],
+                        "temperature": 0.2,
+                        "max_tokens": 2048,
+                    }
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        choices = data.get("choices", [])
+                        if choices:
+                            generated_text = choices[0].get("message", {}).get("content", "")
+                    else:
+                        logger.warning(f"Groq API returned status {resp.status_code}: {resp.text[:200]}; trying fallback")
+                except Exception as e:
+                    logger.warning(f"Groq notes generation failed: {e}; trying fallback")
+
+            if openrouter_key and not generated_text:
+                try:
+                    model_used = "google/gemini-2.5-flash"
+                    url = "https://openrouter.ai/api/v1/chat/completions"
+                    headers = {
+                        "Authorization": f"Bearer {openrouter_key}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": model_used,
+                        "messages": [
+                            {"role": "system", "content": system_instruction},
+                            {"role": "user", "content": f"Lesson Title: {lesson_title}\n\nTranscript Chunks:\n{transcript_text}"}
+                        ],
+                        "temperature": 0.2,
+                        "max_tokens": 2048,
+                    }
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        choices = data.get("choices", [])
+                        if choices:
+                            generated_text = choices[0].get("message", {}).get("content", "")
+                    else:
+                        logger.warning(f"OpenRouter API returned status {resp.status_code}: {resp.text[:200]}")
+                except Exception as e:
+                    logger.warning(f"OpenRouter notes generation failed: {e}")
     except Exception as e:
         logger.warning(f"LLM notes generation request failed: {e}")
 

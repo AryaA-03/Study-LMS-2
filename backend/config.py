@@ -46,7 +46,15 @@ except Exception:
 
 # Network & Server Config
 APP_HOST = os.getenv("APP_HOST", ENV_VARS.get("APP_HOST", "127.0.0.1"))
-APP_PORT = int(os.getenv("APP_PORT", ENV_VARS.get("APP_PORT", "8000")))
+_raw_port = os.getenv("APP_PORT", ENV_VARS.get("APP_PORT", "8000"))
+# Default to 8000; override legacy 8008
+if _raw_port == "8008":
+    APP_PORT = 8000
+else:
+    try:
+        APP_PORT = int(_raw_port)
+    except Exception:
+        APP_PORT = 8000
 
 def get_now() -> datetime:
     """Returns current localized timestamp."""

@@ -39,3 +39,29 @@ def test_migration_and_auto_backup():
         # Re-running migrations when already at latest should apply 0
         count2 = apply_migrations(tmp_db)
         assert count2 == 0
+
+
+def test_fts5_cleanup_trigger():
+    """Verifies that trg_chunks_delete_fts cleans up chunks_fts when a chunk is deleted."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_db = Path(tmpdir) / "test_fts_trigger.db"
+        apply_migrations(tmp_db)
+
+        conn = sqlite3.connect(tmp_db)
+        conn.execute("PRAGMA foreign_keys = ON;")
+
+        # Insert course, source, lesson, and chunk
+        conn.execute("INSERT INTO courses (id, title, goal_query, target_date) VALUES ('c1', 'T', 'G', '2026-12-31');")
+        conn.execute("INSERT INTO sources (id, course_id, source_type, title) VALUES ('s1', 'c1', 'web', 'S');")
+        conn.execute("INSERT INTO chunks (id, course_id, source_id, chunk_index, token_count, content) VALUES ('chk1', 'c1', 's1', 0, 10, 'Automata Theory');")
+        conn.execute("INSERT INTO chunks_fts (id, course_id, lesson_id, content) VALUES ('chk1', 'c1', NULL, 'Automata Theory');")
+        conn.commit()
+
+        assert conn.execute("SELECT COUNT(*) FROM chunks_fts;").fetchone()[0] == 1
+
+        # Deleting chunk should automatically trigger deletion in chunks_fts
+        conn.execute("DELETE FROM chunks WHERE id = 'chk1';")
+        conn.commit()
+
+        assert conn.execute("SELECT COUNT(*) FROM chunks_fts;").fetchone()[0] == 0
+        conn.close()

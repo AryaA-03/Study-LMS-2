@@ -18,7 +18,7 @@ logger = logging.getLogger("learn_lms.pyq_engine")
 # Common English question words and filler vocabulary to ignore in FTS5 keyword extraction
 STOPWORDS = {
     "what", "is", "a", "an", "the", "explain", "describe", "define", "discuss",
-    "with", "and", "or", "of", "in", "to", "for", "on", "by", "how", "does",
+    "with", "and", "or", "not", "of", "in", "to", "for", "on", "by", "how", "does",
     "it", "differ", "from", "between", "diagram", "neat", "suitable", "example",
     "examples", "state", "write", "short", "note", "notes", "following", "any",
     "which", "why", "whose", "whom", "where", "when", "can", "could", "should",
@@ -158,8 +158,8 @@ def match_question_to_course(
     if not keywords:
         return None
 
-    # Construct FTS5 query with OR
-    fts_expr = " OR ".join(keywords[:10])
+    # Construct FTS5 query with OR and safely quote each keyword
+    fts_expr = " OR ".join(f'"{kw}"' for kw in keywords[:10])
     cur = db_conn.cursor()
     try:
         cur.execute(

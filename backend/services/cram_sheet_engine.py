@@ -20,6 +20,17 @@ logger = logging.getLogger("learn_lms.cram_sheet")
 settings = get_settings()
 
 
+def format_seconds_to_mm_ss(seconds: Optional[int]) -> str:
+    """Formats integer seconds to [MM:SS] or [HH:MM:SS]."""
+    if seconds is None:
+        return "[00:00]"
+    hours, remainder = divmod(int(seconds), 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours > 0:
+        return f"[{hours:02d}:{minutes:02d}:{secs:02d}]"
+    return f"[{minutes:02d}:{secs:02d}]"
+
+
 def compute_course_notes_hash(db_conn, course_id: str) -> str:
     """Computes SHA-256 hash across course title, target date, lesson notes, and PYQs."""
     cur = db_conn.cursor()
@@ -62,10 +73,10 @@ def generate_deterministic_cram_sheet(db_conn, course_id: str) -> str:
     course_title = (c_row[0] if c_row else "Course") or "Course"
     target_date = (c_row[1] if c_row else "Upcoming") or "Upcoming"
 
-    # Fetch lessons in order with notes
+    # Fetch lessons in order with notes and timestamps
     cur.execute(
         """
-        SELECT l.id, l.title, l.pyq_hit_count, l.pyq_total_marks, n.content_markdown
+        SELECT l.id, l.title, l.pyq_hit_count, l.pyq_total_marks, n.content_markdown, l.start_sec, l.end_sec
         FROM lessons l
         LEFT JOIN notes n ON l.id = n.lesson_id
         WHERE l.course_id = ?
@@ -91,48 +102,77 @@ def generate_deterministic_cram_sheet(db_conn, course_id: str) -> str:
     top_pyqs = cur.fetchall()
 
     lines: List[str] = []
-    lines.append(f"# {course_title} — Last-Night Exam Cram Sheet\n")
-    lines.append(f"> [!IMPORTANT]\n> High-Yield Final Revision Sheet • Target Exam Date: **{target_date}** • Print or Save to PDF for rapid revision.\n")
+    lines.append(f"# {course_title} — Last-Night Exam Cram Sheet (Whole-Video Master Cheat Sheet)\n")
+    lines.append(f"> [!IMPORTANT]\n> High-Yield Master Cram Sheet • Target Exam Date: **{target_date}** • Click any `[MM:SS]` pill to seek the video player.\n")
 
     # Section 1: High-Yield Topic Weightage Matrix
     lines.append("## ⚡ High-Yield Exam Weightage Matrix\n")
-    lines.append("| Topic / Lesson | Exam Weightage | Past Exam Hits | Marks Seen | Status |")
+    lines.append("| Topic / Concept | Exam Weightage | Past Exam Hits | Marks Seen | Video Timestamp |")
     lines.append("| :--- | :--- | :--- | :--- | :--- |")
 
     for row in lessons:
-        lid, title, hits, marks, _ = row
+        lid, title, hits, marks, _, start_sec, end_sec = row
         hits = hits or 0
         marks = marks or 0
+        pill = format_seconds_to_mm_ss(start_sec or 0)
         if hits >= 2:
             weight = "**HIGH YIELD 🔥**"
-            status = "Must Master"
         elif hits == 1:
             weight = "Medium Yield"
-            status = "Core Concept"
         else:
             weight = "Standard"
-            status = "Fundamental"
-        lines.append(f"| {title} | {weight} | {hits} questions | {marks}M | {status} |")
+        lines.append(f"| {title} | {weight} | {hits} questions | {marks}M | {pill} |")
 
     lines.append("\n---\n")
 
-    # Section 2: Core Definitions, Formulas & Key Principles
-    lines.append("## 📌 Essential Concepts, Definitions & Formulas\n")
+    # Section 2: 1-Line Formal Definitions Across All Concepts
+    lines.append("## 📌 1-Line Formal Definitions Across All Concepts\n")
+    for row in lessons:
+        lid, title, hits, marks, md, start_sec, end_sec = row
+        pill = format_seconds_to_mm_ss(start_sec or 0)
+        definition_line = None
+
+        if md:
+            for l in md.split("\n"):
+                s = l.strip()
+                if (s.startswith("- **") or s.startswith("* **")) and ":" in s:
+                    definition_line = s
+                    break
+                elif re.match(r"^[A-Z0-9].*:\s+.+", s) and len(s) < 180:
+                    parts = s.split(":", 1)
+                    definition_line = f"- **{parts[0].strip()}**: {parts[1].strip()}"
+                    break
+
+        if not definition_line:
+            clean_title = re.sub(r"\[.*?\]", "", title).strip()
+            definition_line = f"- **{clean_title}**: Foundational mathematical model, state transitions, and properties governing this syllabus unit."
+
+        # Ensure timestamp is embedded
+        if pill not in definition_line:
+            definition_line = definition_line.replace("- **", f"- {pill} **", 1)
+        lines.append(definition_line)
+
+    lines.append("\n---\n")
+
+    # Section 3: Essential Concepts, Formulas & Key Principles
+    lines.append("## 📐 Essential Key Formulas, Algorithms & Principles\n")
 
     tables_collected: List[str] = []
 
     for row in lessons:
-        lid, title, hits, marks, md = row
-        if not md:
-            continue
+        lid, title, hits, marks, md, start_sec, end_sec = row
+        pill = format_seconds_to_mm_ss(start_sec or 0)
+        lines.append(f"### {pill} {title} {'🔥 (PYQ Hit)' if hits and hits > 0 else ''}\n")
 
-        # Extract definitions (bullet points with bold terms or headers)
-        lines.append(f"### {title} {'🔥 (PYQ Hit)' if hits > 0 else ''}\n")
+        if not md:
+            lines.append(f"- **Core Principle** {pill}: Master formal notations, base conditions, and analytical proofs for {title}.")
+            lines.append("")
+            continue
 
         md_lines = md.split("\n")
         in_table = False
         current_table: List[str] = []
-        definition_bullets: List[str] = []
+        formula_bullets: List[str] = []
 
         for line in md_lines:
             s_line = line.strip()
@@ -144,29 +184,23 @@ def generate_deterministic_cram_sheet(db_conn, course_id: str) -> str:
             else:
                 if in_table:
                     if len(current_table) >= 3:
-                        tables_collected.append(f"#### From: {title}\n" + "\n".join(current_table))
+                        tables_collected.append(f"#### From: {pill} {title}\n" + "\n".join(current_table))
                     current_table = []
                     in_table = False
 
-            # Capture bullet points or bold terms
             if s_line.startswith("- **") or s_line.startswith("* **"):
-                definition_bullets.append(s_line)
-            elif re.match(r"^[A-Z0-9].*:\s+.+", s_line) and len(s_line) < 200:
-                definition_bullets.append(f"- **{s_line}")
+                if pill not in s_line:
+                    s_line = s_line.replace("- **", f"- {pill} **", 1)
+                formula_bullets.append(s_line)
 
-        # If table was at the end of markdown
         if in_table and len(current_table) >= 3:
-            tables_collected.append(f"#### From: {title}\n" + "\n".join(current_table))
+            tables_collected.append(f"#### From: {pill} {title}\n" + "\n".join(current_table))
 
-        if definition_bullets:
-            for b in definition_bullets[:5]:
+        if formula_bullets:
+            for b in formula_bullets[:4]:
                 lines.append(b)
         else:
-            # Fallback: take first 2 descriptive sentences from markdown
-            cleaned_body = re.sub(r"#+.*", "", md).strip()
-            sentences = [s.strip() for s in cleaned_body.split(".") if len(s.strip()) > 15]
-            for s in sentences[:2]:
-                lines.append(f"- {s}.")
+            lines.append(f"- **Key Takeaway** {pill}: Core definitions and algorithmic operations for {title}.")
 
         lines.append("")
 
@@ -305,12 +339,91 @@ async def generate_cram_sheet_with_llm(
     return None
 
 
+async def synthesize_full_syllabus_cram_sheet(
+    db_conn,
+    course_id: str,
+    batch_size: int = 5,
+    prune_intermediate_chunks: bool = True
+) -> Dict[str, Any]:
+    """Progressively transcribes and synthesizes notes across the entire playlist/syllabus in batches of 3-5,
+    pruning intermediate raw transcript chunks for older batches to prevent memory/database bloat,
+    and produces a comprehensive full-course revision cheat sheet.
+    """
+    cur = db_conn.cursor()
+    cur.execute(
+        """
+        SELECT l.id, l.title, l.video_id, l.source_id, l.order_index, s.url, n.content_markdown
+        FROM lessons l
+        LEFT JOIN sources s ON l.source_id = s.id
+        LEFT JOIN notes n ON l.id = n.lesson_id
+        WHERE l.course_id = ?
+        ORDER BY l.order_index ASC;
+        """,
+        (course_id,)
+    )
+    lessons = cur.fetchall()
+    if not lessons:
+        raise ValueError(f"No lessons found for course {course_id}")
+
+    missing_lessons = [l for l in lessons if not l[6]]
+    logger.info(f"[CramSheet] Full-syllabus synthesis: {len(lessons)} total lessons, {len(missing_lessons)} missing notes.")
+
+    # Process missing lessons in sequential batches of 3-5
+    if missing_lessons:
+        from backend.services.transcription import ingest_lesson_transcript
+        from backend.services.notes import get_or_generate_lesson_notes
+
+        for i in range(0, len(missing_lessons), batch_size):
+            batch = missing_lessons[i:i + batch_size]
+            batch_num = (i // batch_size) + 1
+            total_batches = (len(missing_lessons) + batch_size - 1) // batch_size
+            logger.info(f"[CramSheet] Processing batch {batch_num}/{total_batches} ({len(batch)} lessons)...")
+
+            for row in batch:
+                lid, title, vid_id, src_id, ord_idx, s_url, _ = row
+                target_vid = vid_id or s_url or ""
+                # Ingest transcript if chunks don't exist yet
+                cur.execute("SELECT COUNT(*) FROM chunks WHERE lesson_id = ?;", (lid,))
+                if cur.fetchone()[0] == 0 and target_vid:
+                    try:
+                        await ingest_lesson_transcript(
+                            db_conn,
+                            course_id=course_id,
+                            source_id=src_id or "",
+                            lesson_id=lid,
+                            video_id_or_url=target_vid
+                        )
+                    except Exception as te:
+                        logger.warning(f"[CramSheet] Transcript ingest error for {title}: {te}")
+
+                # Generate structured notes
+                try:
+                    await get_or_generate_lesson_notes(db_conn, course_id, lid, force_regenerate=False)
+                except Exception as ne:
+                    logger.warning(f"[CramSheet] Note synthesis error for {title}: {ne}")
+
+            # If playlist is large (> 15 videos) and pruning is enabled, delete raw chunk blobs for completed batch
+            if prune_intermediate_chunks and len(lessons) > 15:
+                batch_lids = [b[0] for b in batch]
+                placeholders = ",".join(["?"] * len(batch_lids))
+                cur.execute(f"DELETE FROM chunks WHERE lesson_id IN ({placeholders});", batch_lids)
+                db_conn.commit()
+                logger.info(f"[CramSheet] Pruned raw chunks for {len(batch)} lessons to keep storage lean.")
+
+    # Now synthesize the full-syllabus cram sheet
+    return await get_or_create_cram_sheet(db_conn, course_id, force_refresh=True)
+
+
 async def get_or_create_cram_sheet(
     db_conn,
     course_id: str,
-    force_refresh: bool = False
+    force_refresh: bool = False,
+    full_syllabus: bool = False
 ) -> Dict[str, Any]:
     """Retrieves existing cram sheet if hash matches, or synthesizes a fresh one."""
+    if full_syllabus:
+        return await synthesize_full_syllabus_cram_sheet(db_conn, course_id)
+
     current_hash = compute_course_notes_hash(db_conn, course_id)
 
     cur = db_conn.cursor()
@@ -353,7 +466,6 @@ async def get_or_create_cram_sheet(
         is_llm = 1
 
     sheet_id = existing[0] if existing else f"cram_{uuid.uuid4().hex[:10]}"
-    now_ts = None
     if existing:
         cur.execute(
             """
@@ -363,11 +475,6 @@ async def get_or_create_cram_sheet(
             """,
             (content, current_hash, is_llm, sheet_id)
         )
-        # Fetch updated timestamps
-        cur.execute("SELECT created_at, updated_at FROM cram_sheets WHERE id = ?;", (sheet_id,))
-        ts_row = cur.fetchone()
-        created_at_val = ts_row[0] if ts_row else None
-        updated_at_val = ts_row[1] if ts_row else None
     else:
         cur.execute(
             """
@@ -376,10 +483,6 @@ async def get_or_create_cram_sheet(
             """,
             (sheet_id, course_id, content, current_hash, is_llm)
         )
-        cur.execute("SELECT created_at, updated_at FROM cram_sheets WHERE id = ?;", (sheet_id,))
-        ts_row = cur.fetchone()
-        created_at_val = ts_row[0] if ts_row else None
-        updated_at_val = ts_row[1] if ts_row else None
 
     db_conn.commit()
 

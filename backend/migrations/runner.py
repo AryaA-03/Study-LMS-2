@@ -46,6 +46,7 @@ def get_current_schema_version(conn: sqlite3.Connection) -> int:
 
 def apply_migrations(db_path: Path = DB_PATH) -> int:
     """Applies all pending migrations non-destructively, taking automated backups."""
+    db_path = Path(db_path)
     VERSIONS_DIR.mkdir(parents=True, exist_ok=True)
     conn = init_connection(db_path)
     try:

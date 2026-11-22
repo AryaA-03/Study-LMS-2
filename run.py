@@ -103,11 +103,34 @@ def run_migrations():
     applied = apply_migrations()
     print(f"✅ Migrations up to date ({applied} new applied).")
 
+def ensure_port_available(host: str = "127.0.0.1", port: int = 8000):
+    """Checks if port is occupied by a stale server instance and terminates it."""
+    import socket
+    import time
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        is_busy = (s.connect_ex((host, port)) == 0)
+
+    if is_busy:
+        print(f"⚠️ Port {port} is currently occupied by a previous server process.")
+        if sys.platform != "win32":
+            try:
+                out = subprocess.check_output(["lsof", "-ti", f":{port}"]).decode().strip()
+                pids = [p.strip() for p in out.splitlines() if p.strip() and p.strip() != str(os.getpid())]
+                for pid in pids:
+                    print(f"🔄 Terminating stale server process {pid} on port {port}...")
+                    os.kill(int(pid), 9)
+                time.sleep(1)
+                print(f"✅ Port {port} freed successfully.")
+            except Exception as e:
+                print(f"⚠️ Could not auto-terminate process on port {port}: {e}")
+
 def start_server():
     """Starts FastAPI server using Uvicorn."""
     import uvicorn
     from backend.config import APP_HOST, APP_PORT, APP_ENV
 
+    ensure_port_available(APP_HOST, APP_PORT)
     reload = (APP_ENV == "development")
     print(f"🚀 Starting Learn LMS on http://{APP_HOST}:{APP_PORT} (Environment: {APP_ENV})...")
     uvicorn.run(

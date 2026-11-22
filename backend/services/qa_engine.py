@@ -50,8 +50,8 @@ def search_chunks_fts(
     if not words:
         return []
 
-    # SQLite FTS5 query: word1 OR word2 OR word3
-    fts_expr = " OR ".join(words[:12])
+    # SQLite FTS5 query: safely quote each word to prevent reserved token errors (e.g. NOT, NEAR, OR)
+    fts_expr = " OR ".join(f'"{w}"' for w in words[:12])
 
     cur = db_conn.cursor()
     try:
@@ -135,8 +135,9 @@ def format_no_key_answer(
     """Generates grounded answer passages directly from chunks in No-Key mode."""
     if not chunks:
         return (
-            "The provided source materials do not contain sufficient evidence to answer this question. "
-            "Try adding more course sources, PDFs, or YouTube lectures.",
+            "The provided source materials do not contain sufficient evidence to answer this question.\n"
+            "- Click **\"Transcribe\"** in the notes workspace to generate full transcripts with clickable timestamps.\n"
+            "- Or add textbook PDFs / past exam papers in the **Sources Tray** to ground questions across your full syllabus.",
             []
         )
 
@@ -193,13 +194,13 @@ async def generate_llm_grounded_answer(
     evidence_text = "\n\n".join(evidence_blocks)
 
     system_instruction = (
-        "You are an expert college professor and strict study tutor. "
-        "Your task is to answer the student's question strictly and exclusively using the provided EVIDENCE CHUNKS.\n"
-        "STRICT GROUNDING RULES:\n"
-        "1. Every factual statement, claim, definition, or explanation MUST cite its evidence chunk using the format `[ref:CHUNK_ID]` (e.g. `[ref:chk_123]`) and include the timestamp in [MM:SS] if available.\n"
-        "2. Include verbatim quotes inside quotation marks to substantiate key facts.\n"
-        "3. If the evidence chunks DO NOT contain enough information to answer the question, do NOT invent facts. Explicitly state: 'The provided source materials do not contain sufficient evidence to answer this question.'\n"
-        "4. Be concise, direct, and structured with bullet points.\n"
+        "You are an expert college professor and helpful study tutor for engineering and computer science students.\n"
+        "Your task is to answer the student's question clearly, pedagogically, and accurately, using the provided COURSE EVIDENCE CHUNKS as your grounding foundation.\n"
+        "GUIDELINES:\n"
+        "1. GROUNDING & CITATIONS: Ground definitions, core principles, and technical claims in the provided chunks. Cite chunks where relevant using `[ref:CHUNK_ID]` (e.g. `[ref:chk_123]`) and `[MM:SS]` timestamps when available.\n"
+        "2. EXPLANATIONS & EXAMPLES: When the student asks to 'explain simply', 'give an example', '5-mark exam answer', or asks conceptual questions, synthesize a clear, comprehensive, educational response. You SHOULD provide standard illustrative examples (such as language L = {a^n b^n} for Pushdown Automata, transition traces, or step-by-step algorithms) to help the student understand and master the concept.\n"
+        "3. EXAM FOCUS: Format your answer with clean Markdown headers, bullet points, and code/math blocks where appropriate. Be structured, encouraging, and academic.\n"
+        "4. RELEVANCE: Keep your answer tightly focused on the student's query and the course subject."
     )
 
     key = gemini_key or settings.GEMINI_API_KEY
@@ -210,75 +211,86 @@ async def generate_llm_grounded_answer(
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            if key:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
-                payload = {
-                    "contents": [{
-                        "parts": [{
-                            "text": f"{system_instruction}\n\nEvidence:\n{evidence_text}\n\nStudent Question: {query}"
-                        }]
-                    }],
-                    "generationConfig": {
-                        "temperature": 0.1,
-                        "maxOutputTokens": 1024,
+            if key and not raw_answer:
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
+                    payload = {
+                        "contents": [{
+                            "parts": [{
+                                "text": f"{system_instruction}\n\nEvidence:\n{evidence_text}\n\nStudent Question: {query}"
+                            }]
+                        }],
+                        "generationConfig": {
+                            "temperature": 0.1,
+                            "maxOutputTokens": 1024,
+                        }
                     }
-                }
-                resp = await client.post(url, json=payload)
-                if resp.status_code == 200:
-                    result = resp.json()
-                    candidates = result.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts:
-                            raw_answer = parts[0].get("text", "")
-                else:
-                    logger.warning(f"Gemini API returned status {resp.status_code}: {resp.text[:200]}")
-            elif groq_key:
-                url = "https://api.groq.com/openai/v1/chat/completions"
-                headers = {
-                    "Authorization": f"Bearer {groq_key}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": f"Evidence:\n{evidence_text}\n\nStudent Question: {query}"}
-                    ],
-                    "temperature": 0.1,
-                    "max_tokens": 1024,
-                }
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    choices = data.get("choices", [])
-                    if choices:
-                        raw_answer = choices[0].get("message", {}).get("content", "")
-                else:
-                    logger.warning(f"Groq API returned status {resp.status_code}: {resp.text[:200]}")
-            elif openrouter_key:
-                url = "https://openrouter.ai/api/v1/chat/completions"
-                headers = {
-                    "Authorization": f"Bearer {openrouter_key}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": "google/gemini-2.5-flash",
-                    "messages": [
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": f"Evidence:\n{evidence_text}\n\nStudent Question: {query}"}
-                    ],
-                    "temperature": 0.1,
-                    "max_tokens": 1024,
-                }
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    choices = data.get("choices", [])
-                    if choices:
-                        raw_answer = choices[0].get("message", {}).get("content", "")
-                else:
-                    logger.warning(f"OpenRouter API returned status {resp.status_code}: {resp.text[:200]}")
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        result = resp.json()
+                        candidates = result.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            if parts:
+                                raw_answer = parts[0].get("text", "")
+                    else:
+                        logger.warning(f"Gemini API returned status {resp.status_code}: {resp.text[:200]}; trying fallback")
+                except Exception as e:
+                    logger.warning(f"Gemini API call failed: {e}; trying fallback")
+
+            if groq_key and not raw_answer:
+                try:
+                    url = "https://api.groq.com/openai/v1/chat/completions"
+                    headers = {
+                        "Authorization": f"Bearer {groq_key}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": "llama-3.3-70b-versatile",
+                        "messages": [
+                            {"role": "system", "content": system_instruction},
+                            {"role": "user", "content": f"Evidence:\n{evidence_text}\n\nStudent Question: {query}"}
+                        ],
+                        "temperature": 0.1,
+                        "max_tokens": 1024,
+                    }
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        choices = data.get("choices", [])
+                        if choices:
+                            raw_answer = choices[0].get("message", {}).get("content", "")
+                    else:
+                        logger.warning(f"Groq API returned status {resp.status_code}: {resp.text[:200]}; trying fallback")
+                except Exception as e:
+                    logger.warning(f"Groq API call failed: {e}; trying fallback")
+
+            if openrouter_key and not raw_answer:
+                try:
+                    url = "https://openrouter.ai/api/v1/chat/completions"
+                    headers = {
+                        "Authorization": f"Bearer {openrouter_key}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": "google/gemini-2.5-flash",
+                        "messages": [
+                            {"role": "system", "content": system_instruction},
+                            {"role": "user", "content": f"Evidence:\n{evidence_text}\n\nStudent Question: {query}"}
+                        ],
+                        "temperature": 0.1,
+                        "max_tokens": 1024,
+                    }
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        choices = data.get("choices", [])
+                        if choices:
+                            raw_answer = choices[0].get("message", {}).get("content", "")
+                    else:
+                        logger.warning(f"OpenRouter API returned status {resp.status_code}: {resp.text[:200]}")
+                except Exception as e:
+                    logger.warning(f"OpenRouter API call failed: {e}")
 
         if raw_answer:
             # Parse citations present in answer (supporting UUID and chk_ identifiers)
@@ -361,6 +373,38 @@ async def answer_course_question(
 
     # 2. Search top matching chunks (restricted to lesson_id if specified)
     matching_chunks = search_chunks_fts(db_conn, course_id, query, limit=6, lesson_id=lesson_id)
+    if not matching_chunks and lesson_id:
+        # Fallback to course-wide search if the specific lesson has no matching chunks
+        matching_chunks = search_chunks_fts(db_conn, course_id, query, limit=6, lesson_id=None)
+
+    # If still no chunks found, pull course/lesson title so the AI has grounding context
+    if not matching_chunks and db_conn is not None:
+        cur = db_conn.cursor()
+        cur.execute("SELECT title FROM courses WHERE id = ?;", (course_id,))
+        c_row = cur.fetchone()
+        c_title = (c_row[0] if c_row else "Course") or "Course"
+        l_title = ""
+        if lesson_id:
+            cur.execute("SELECT title FROM lessons WHERE id = ?;", (lesson_id,))
+            l_row = cur.fetchone()
+            if l_row:
+                l_title = l_row[0] or ""
+
+        synthetic_content = f"Course: {c_title}."
+        if l_title:
+            synthetic_content += f" Current Lesson: {l_title}."
+        synthetic_content += f" Study Topic: {query}."
+        matching_chunks = [{
+            "id": f"chk_syl_{course_id[:8]}",
+            "source_id": "course_syllabus",
+            "lesson_id": lesson_id or "",
+            "start_sec": None,
+            "end_sec": None,
+            "content": synthetic_content,
+            "source_title": f"{c_title} Syllabus",
+            "source_type": "syllabus",
+            "rank": 0.0
+        }]
 
     # 3. Synthesize answer
     has_llm = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY)
@@ -369,8 +413,8 @@ async def answer_course_question(
     else:
         answer_text, citations = format_no_key_answer(query, matching_chunks)
 
-    # 4. Save to llm_cache
-    if db_conn is not None:
+    # 4. Save to llm_cache only if it is a substantive answer
+    if db_conn is not None and not answer_text.startswith("**Study Guide for:"):
         cache_val = json.dumps({
             "answer_markdown": answer_text,
             "citations": citations

@@ -12,7 +12,7 @@
 const Logger = {
   api(method, url, status, timeMs, data) {
     const badge = `%c[LearnLMS:API]`;
-    const style = 'background: #4f46e5; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
+    const style = 'background: #2563eb; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
     console.groupCollapsed(`${badge} %c${method} ${url} -> ${status} (${timeMs}ms)`, style, 'color: #38bdf8;');
     if (data) console.log('Payload / Response:', data);
     console.trace('Callstack');
@@ -25,7 +25,7 @@ const Logger = {
   },
   schedule(action, details) {
     const badge = `%c[LearnLMS:Schedule]`;
-    const style = 'background: #8b5cf6; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
+    const style = 'background: #0284c7; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
     console.log(`${badge} ${action}:`, details);
   },
   quiz(action, details) {
@@ -47,6 +47,11 @@ const Logger = {
     const badge = `%c[LearnLMS:Theme]`;
     const style = 'background: #18181b; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
     console.log(`${badge} Switched to ${themeName} theme`);
+  },
+  layout(action, details) {
+    const badge = `%c[LearnLMS:Layout]`;
+    const style = 'background: #0284c7; color: #ffffff; padding: 2px 5px; border-radius: 4px; font-weight: bold;';
+    console.log(`${badge} ${action}:`, details);
   },
   error(msg, err) {
     console.error(`%c[LearnLMS:Error] ${msg}`, 'background: #991b1b; color: #ffffff; padding: 2px 5px; font-weight: bold;', err);
@@ -384,7 +389,7 @@ function stopPlayerTimeSync() {
 }
 
 function syncLiveNoteTimestamp(curTime) {
-  const container = document.getElementById('grounded-notes-container');
+  const container = document.getElementById('notes-content') || document.getElementById('grounded-notes-container');
   if (!container) return;
 
   const buttons = container.querySelectorAll('.timestamp-link, .qa-citation-badge');
@@ -408,12 +413,12 @@ function syncLiveNoteTimestamp(curTime) {
 
   // Remove active highlight from all buttons
   buttons.forEach(b => {
-    b.classList.remove('active-live-timestamp', 'ring-2', 'ring-indigo-500', 'bg-indigo-600', '!text-white', 'scale-105');
+    b.classList.remove('active-live-timestamp', 'ring-2', 'ring-accent', 'bg-accent', '!text-white', 'scale-105');
   });
 
   // Highlight active button if within 60s
   if (closestBtn && minDiff < 60) {
-    closestBtn.classList.add('active-live-timestamp', 'ring-2', 'ring-indigo-500', 'bg-indigo-600', '!text-white', 'scale-105');
+    closestBtn.classList.add('active-live-timestamp', 'ring-2', 'ring-accent', 'bg-accent', '!text-white', 'scale-105');
   }
 }
 
@@ -530,6 +535,7 @@ async function setRevisionBuffer(days) {
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('%c[LearnLMS] Booting Personal LMS & Exam Prep...', 'color: #3b82f6; font-size: 14px; font-weight: bold;');
   initTheme();
+  initSplitPanes();
   setupEventListeners();
   setDefaultTargetDate();
   await loadSettings();
@@ -688,19 +694,20 @@ function setupEventListeners() {
   // Collapsible Layout Toggles
   btnCollapsePlayer.addEventListener('click', togglePlayerCollapse);
   btnCollapseSchedule.addEventListener('click', toggleScheduleCollapse);
+  document.getElementById('btn-expand-rail-top')?.addEventListener('click', toggleScheduleCollapse);
   btnToggleCollapseAll.addEventListener('click', toggleCollapseAllDays);
 
   // Curriculum Drawer
   btnToggleCurriculum.addEventListener('click', () => curriculumDrawer.classList.toggle('hidden'));
   btnCloseCurriculum.addEventListener('click', () => curriculumDrawer.classList.add('hidden'));
   curriculumSearch.addEventListener('input', filterCurriculumDrawer);
-  btnCurriculumIncludeAll.addEventListener('click', () => handleFilterLessons(true));
-  btnCurriculumSkipExamples.addEventListener('click', () => handleFilterLessons(false));
+  btnCurriculumIncludeAll?.addEventListener('click', () => handleFilterLessons('all'));
+  btnCurriculumSkipExamples?.addEventListener('click', () => handleFilterLessons('concepts'));
 
-  // Quick Filters
-  btnFilterAll.addEventListener('click', () => handleFilterLessons(null));
-  btnFilterConcepts.addEventListener('click', () => handleFilterLessons(false));
-  btnFilterExamples.addEventListener('click', () => handleFilterLessons(true));
+  // Quick Filters (All / Concepts / Examples)
+  btnFilterAll?.addEventListener('click', () => handleFilterLessons('all'));
+  btnFilterConcepts?.addEventListener('click', () => handleFilterLessons('concepts'));
+  btnFilterExamples?.addEventListener('click', () => handleFilterLessons('examples'));
 
   // Settings Modal
   btnSettings.addEventListener('click', () => settingsModal.classList.remove('hidden'));
@@ -772,6 +779,11 @@ function setupEventListeners() {
   initHighlightToExplain();
   btnTranscribeLesson.addEventListener('click', handleTranscribeLesson);
   btnCaptureKeyframes.addEventListener('click', handleCaptureKeyframes);
+  document.getElementById('btn-snap-current-to-notes')?.addEventListener('click', () => insertCurrentFrameToNotes());
+  document.getElementById('btn-toolbar-snap-frame')?.addEventListener('click', () => insertCurrentFrameToNotes());
+  document.getElementById('btn-print-grounded-notes')?.addEventListener('click', () => printGroundedNotes());
+  document.getElementById('btn-download-grounded-notes')?.addEventListener('click', () => downloadGroundedNotesMarkdown());
+  document.getElementById('btn-copy-to-personal-notes')?.addEventListener('click', () => copyGroundedToPersonalNotes());
   btnRegenerateNotes.addEventListener('click', () => {
     if (activeAllocation) loadLessonNotesAndArtifacts(activeAllocation.lesson_id, true);
   });
@@ -810,12 +822,20 @@ function setupEventListeners() {
     });
   }
 
+  // Settings Modal Duplicate Action Handlers
+  document.getElementById('modal-btn-edit-course')?.addEventListener('click', openEditCourseModal);
+  document.getElementById('modal-pill-strategy-paced')?.addEventListener('click', () => setStrategy('paced'));
+  document.getElementById('modal-pill-strategy-fixed')?.addEventListener('click', () => setStrategy('fixed'));
+  document.getElementById('modal-btn-diagnostic-test')?.addEventListener('click', openDiagnosticPreTest);
+  document.getElementById('modal-btn-toggle-curriculum')?.addEventListener('click', () => curriculumDrawer.classList.toggle('hidden'));
+
   // Last-Night Cram Sheet Listeners
   document.getElementById('btn-open-cram-sheet')?.addEventListener('click', () => loadCramSheet(false));
   document.getElementById('btn-close-cram-sheet')?.addEventListener('click', () => {
     document.getElementById('modal-cram-sheet')?.classList.add('hidden');
   });
-  document.getElementById('btn-refresh-cram-sheet')?.addEventListener('click', () => loadCramSheet(true));
+  document.getElementById('btn-refresh-cram-sheet')?.addEventListener('click', () => loadCramSheet(true, false));
+  document.getElementById('btn-full-cram-sheet')?.addEventListener('click', () => loadCramSheet(true, true));
   document.getElementById('btn-print-cram-sheet')?.addEventListener('click', () => window.print());
   document.getElementById('btn-download-cram-md')?.addEventListener('click', () => {
     if (!currentCourseId) {
@@ -823,6 +843,49 @@ function setupEventListeners() {
       return;
     }
     window.open(`/api/courses/${currentCourseId}/cram-sheet/download`, '_blank');
+  });
+
+  // Syllabus Alignment & Matcher Listeners
+  document.getElementById('btn-open-syllabus-modal')?.addEventListener('click', openSyllabusModal);
+  document.getElementById('btn-curriculum-match-syllabus')?.addEventListener('click', openSyllabusModal);
+  document.getElementById('modal-btn-match-syllabus')?.addEventListener('click', openSyllabusModal);
+  document.getElementById('btn-close-syllabus-modal')?.addEventListener('click', closeSyllabusModal);
+  document.getElementById('btn-analyze-syllabus')?.addEventListener('click', handleAnalyzeSyllabus);
+  document.getElementById('btn-apply-syllabus')?.addEventListener('click', handleApplySyllabus);
+  document.getElementById('btn-syl-back')?.addEventListener('click', () => {
+    document.getElementById('syllabus-step-review')?.classList.add('hidden');
+    document.getElementById('syllabus-step-input')?.classList.remove('hidden');
+  });
+  document.getElementById('tab-syl-topics')?.addEventListener('click', () => switchSyllabusReviewTab('topics'));
+  document.getElementById('tab-syl-checklist')?.addEventListener('click', () => switchSyllabusReviewTab('checklist'));
+  document.getElementById('pill-syl-balanced')?.addEventListener('click', () => setSyllabusStrictness('balanced'));
+  document.getElementById('pill-syl-strict')?.addEventListener('click', () => setSyllabusStrictness('strict'));
+  document.getElementById('pill-syl-comprehensive')?.addEventListener('click', () => setSyllabusStrictness('comprehensive'));
+
+  document.getElementById('btn-syl-select-matched')?.addEventListener('click', () => {
+    if (window.currentSyllabusMatch) {
+      window.selectedSyllabusLessonIds = new Set(
+        window.currentSyllabusMatch.lessons.filter(l => l.is_matched).map(l => l.id)
+      );
+      renderSyllabusChecklistView(window.currentSyllabusMatch);
+      updateSyllabusSelectedCount();
+    }
+  });
+  document.getElementById('btn-syl-select-all')?.addEventListener('click', () => {
+    if (window.currentSyllabusMatch) {
+      window.selectedSyllabusLessonIds = new Set(
+        window.currentSyllabusMatch.lessons.map(l => l.id)
+      );
+      renderSyllabusChecklistView(window.currentSyllabusMatch);
+      updateSyllabusSelectedCount();
+    }
+  });
+  document.getElementById('btn-syl-deselect-all')?.addEventListener('click', () => {
+    window.selectedSyllabusLessonIds.clear();
+    if (window.currentSyllabusMatch) {
+      renderSyllabusChecklistView(window.currentSyllabusMatch);
+    }
+    updateSyllabusSelectedCount();
   });
 
   // Quiz & Mastery Listeners
@@ -868,6 +931,177 @@ function setupEventListeners() {
   btnExportBundle.addEventListener('click', handleExportCourseBundle);
 }
 
+// --- Dual Splitters & Layout Resizing ---
+function initSplitPanes() {
+  const getIframe = () => document.getElementById('yt-iframe') || document.querySelector('#yt-player iframe');
+
+  // 1. Horizontal Splitter (Video vs Notes)
+  const videoNotesSplitter = document.getElementById('video-notes-splitter');
+  const playerWrapper = document.getElementById('player-wrapper');
+  const snapCompact = document.getElementById('snap-compact-video');
+  const snapBalanced = document.getElementById('snap-balanced-video');
+  const snapToggle = document.getElementById('snap-toggle-video') || document.getElementById('btn-collapse-player');
+
+  // Restore saved video pane height from localStorage
+  const savedVideoHeight = localStorage.getItem('lms_video_pane_height');
+  if (savedVideoHeight && playerWrapper) {
+    playerWrapper.style.setProperty('--video-pane-height', savedVideoHeight);
+    playerWrapper.style.height = savedVideoHeight;
+  }
+
+  const setVideoHeight = (val) => {
+    if (!playerWrapper) return;
+    playerWrapper.style.setProperty('--video-pane-height', val);
+    playerWrapper.style.height = val;
+    localStorage.setItem('lms_video_pane_height', val);
+  };
+
+  if (snapCompact) {
+    snapCompact.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setVideoHeight('25vh');
+    });
+  }
+  if (snapBalanced) {
+    snapBalanced.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setVideoHeight('38vh');
+    });
+  }
+  if (snapToggle && snapToggle.id === 'snap-toggle-video') {
+    snapToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePlayerCollapse();
+    });
+  }
+
+  if (videoNotesSplitter && playerWrapper) {
+    let isDragging = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    videoNotesSplitter.addEventListener('mousedown', (e) => {
+      if (e.target.closest('button')) return;
+      isDragging = true;
+      startY = e.clientY;
+      startHeight = playerWrapper.getBoundingClientRect().height;
+      const iframe = getIframe();
+      if (iframe) iframe.style.pointerEvents = 'none';
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    videoNotesSplitter.addEventListener('dblclick', (e) => {
+      if (e.target.closest('button')) return;
+      setVideoHeight('34vh');
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const deltaY = e.clientY - startY;
+      const newHeight = startHeight + deltaY;
+      const vh55 = window.innerHeight * 0.55;
+      const clamped = Math.max(180, Math.min(vh55, newHeight));
+      const heightVal = `${Math.round(clamped)}px`;
+      playerWrapper.style.setProperty('--video-pane-height', heightVal);
+      playerWrapper.style.height = heightVal;
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        const iframe = getIframe();
+        if (iframe) iframe.style.pointerEvents = 'auto';
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        if (playerWrapper.style.height) {
+          localStorage.setItem('lms_video_pane_height', playerWrapper.style.height);
+        }
+      }
+    });
+  }
+
+  // 2. Vertical Splitter (Center Study Column vs Right Studio Panel)
+  const studioSplitter = document.getElementById('studio-splitter');
+  const paneRightStudio = document.getElementById('pane-right-studio');
+  const btnToggleStudio = document.getElementById('btn-toggle-studio');
+
+  // Restore saved right studio width and collapsed state
+  const savedStudioWidth = localStorage.getItem('lms_studio_panel_width');
+  if (savedStudioWidth && paneRightStudio) {
+    paneRightStudio.style.width = savedStudioWidth;
+  }
+  const savedStudioCollapsed = localStorage.getItem('lms_studio_collapsed');
+  if (savedStudioCollapsed === 'true' && paneRightStudio) {
+    paneRightStudio.classList.add('hidden');
+    if (studioSplitter) studioSplitter.classList.add('hidden');
+  }
+
+  const toggleStudio = () => {
+    if (!paneRightStudio) return;
+    const isHidden = paneRightStudio.classList.toggle('hidden');
+    if (studioSplitter) {
+      if (isHidden) studioSplitter.classList.add('hidden');
+      else studioSplitter.classList.remove('hidden');
+    }
+    localStorage.setItem('lms_studio_collapsed', isHidden ? 'true' : 'false');
+  };
+
+  if (btnToggleStudio) {
+    btnToggleStudio.addEventListener('click', toggleStudio);
+  }
+
+  if (studioSplitter && paneRightStudio) {
+    let isDraggingStudio = false;
+    let startX = 0;
+    let startW = 0;
+
+    studioSplitter.addEventListener('mousedown', (e) => {
+      isDraggingStudio = true;
+      startX = e.clientX;
+      startW = paneRightStudio.getBoundingClientRect().width;
+      const iframe = getIframe();
+      if (iframe) iframe.style.pointerEvents = 'none';
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    studioSplitter.addEventListener('dblclick', () => {
+      paneRightStudio.style.width = '380px';
+      localStorage.setItem('lms_studio_panel_width', '380px');
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDraggingStudio) return;
+      const deltaX = startX - e.clientX;
+      const newWidth = startW + deltaX;
+      const maxW = window.innerWidth * 0.55;
+      const clamped = Math.max(300, Math.min(maxW, newWidth));
+      const widthVal = `${Math.round(clamped)}px`;
+      paneRightStudio.style.width = widthVal;
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isDraggingStudio) {
+        isDraggingStudio = false;
+        const iframe = getIframe();
+        if (iframe) iframe.style.pointerEvents = 'auto';
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        if (paneRightStudio.style.width) {
+          localStorage.setItem('lms_studio_panel_width', paneRightStudio.style.width);
+        }
+      }
+    });
+  }
+
+  // 3. Left Rail Collapsed State Persistence
+  const savedRailCollapsed = localStorage.getItem('lms_rail_collapsed');
+  if (savedRailCollapsed === 'true' && paneSchedule) {
+    paneSchedule.classList.add('rail-collapsed');
+  }
+}
+
 // --- Layout Collapsing ---
 function togglePlayerCollapse() {
   const isHidden = document.getElementById('player-wrapper').classList.toggle('hidden');
@@ -875,13 +1109,44 @@ function togglePlayerCollapse() {
 }
 
 function toggleScheduleCollapse() {
-  if (paneSchedule.classList.contains('hidden')) {
-    paneSchedule.classList.remove('hidden');
-    paneStudio.classList.replace('md:w-full', 'md:w-7/12');
-  } else {
-    paneSchedule.classList.add('hidden');
-    paneStudio.classList.replace('md:w-7/12', 'md:w-full');
-  }
+  if (!paneSchedule) return;
+  const isCollapsed = paneSchedule.classList.toggle('rail-collapsed');
+  localStorage.setItem('lms_rail_collapsed', isCollapsed ? 'true' : 'false');
+  Logger.layout('Toggle Schedule Rail Collapse', { isCollapsed });
+}
+
+function renderCollapsedRailBadges(days) {
+  const container = document.getElementById('collapsed-rail-badges');
+  if (!container || !days) return;
+  container.innerHTML = '';
+  days.forEach((day, idx) => {
+    const dayNum = idx + 1;
+    const allDone = day.allocations && day.allocations.length > 0 && day.allocations.every(a => a.is_completed);
+    const hasToday = (day.date === new Date().toISOString().split('T')[0]);
+
+    const badge = document.createElement('button');
+    badge.type = 'button';
+    badge.className = `w-9 h-9 rounded-xl flex flex-col items-center justify-center text-xs font-mono font-bold transition shadow-sm active:scale-95 ${
+      hasToday 
+        ? 'bg-accent text-white ring-2 ring-accent/40' 
+        : allDone 
+        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+        : 'bg-bg-canvas hover:bg-bg-card text-text-primary border border-border-subtle'
+    }`;
+    badge.title = `${day.day_name}, ${day.date} • ${Math.round(day.total_effective_minutes)}m`;
+    badge.innerHTML = allDone 
+      ? `<span>D${dayNum}</span><span class="text-[9px] leading-none">✓</span>`
+      : `<span>D${dayNum}</span>`;
+
+    badge.addEventListener('click', () => {
+      toggleScheduleCollapse();
+      setTimeout(() => {
+        const el = document.querySelector(`[data-day-date="${day.date}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 50);
+    });
+    container.appendChild(badge);
+  });
 }
 
 function toggleCollapseAllDays() {
@@ -915,10 +1180,10 @@ function showToast(message, type = 'info') {
   if (!toastContainer) return;
   const toast = document.createElement('div');
   const bg = type === 'success' 
-    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-500/20' 
+    ? 'bg-emerald-600 text-white shadow-emerald-500/20' 
     : type === 'error' 
-    ? 'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-rose-500/20' 
-    : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-indigo-500/20';
+    ? 'bg-red-600 text-white shadow-red-500/20' 
+    : 'bg-accent text-white shadow-blue-500/20';
   toast.className = `px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-semibold ${bg} transition-all duration-300 transform translate-y-4 opacity-0 pointer-events-auto border border-white/20`;
   toast.innerHTML = `
     <span>${type === 'success' ? '✓' : type === 'error' ? '✕' : '⚡'}</span>
@@ -942,6 +1207,10 @@ function openEditCourseModal() {
   document.getElementById('edit-course-minutes').value = currentCourse.minutes_per_day || 90;
   document.getElementById('edit-course-speed').value = currentCourse.playback_speed || 1.25;
   document.getElementById('edit-course-buffer').value = currentCourse.revision_buffer_days ?? 2;
+  const daysInput = document.getElementById('edit-course-days');
+  if (daysInput) daysInput.value = currentCourse.num_study_days || '';
+  const prefMinInput = document.getElementById('edit-course-pref-minutes');
+  if (prefMinInput) prefMinInput.value = currentCourse.preferred_daily_minutes || 60;
   
   const strat = currentCourse.schedule_strategy || 'paced';
   const pacedRadio = document.getElementById('edit-strat-paced');
@@ -975,21 +1244,43 @@ async function handleSaveCourse(e) {
     restDays.push(cb.value);
   });
 
+  const daysVal = document.getElementById('edit-course-days')?.value;
+  const numDays = daysVal ? parseInt(daysVal, 10) : null;
+  const prefMinVal = document.getElementById('edit-course-pref-minutes')?.value;
+  const prefMinutes = prefMinVal ? parseInt(prefMinVal, 10) : (minutes || 60);
+
   try {
-    const res = await fetch(`/api/courses/${currentCourseId}`, {
+    const payload = {
+      title,
+      target_date: targetDate,
+      minutes_per_day: minutes,
+      playback_speed: speed,
+      revision_buffer_days: buffer,
+      schedule_strategy: strategy,
+      rest_days: restDays,
+      num_study_days: numDays,
+      preferred_daily_minutes: prefMinutes,
+    };
+
+    let res = await fetch(`/api/courses/${currentCourseId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title,
-        target_date: targetDate,
-        minutes_per_day: minutes,
-        playback_speed: speed,
-        revision_buffer_days: buffer,
-        schedule_strategy: strategy,
-        rest_days: restDays,
-      }),
+      body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error('Failed to update course');
+
+    // Fallback to PUT if PATCH returns 405 (Method Not Allowed)
+    if (res.status === 405) {
+      res = await fetch(`/api/courses/${currentCourseId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    }
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.detail || 'Failed to update course');
+    }
 
     editCourseModal.classList.add('hidden');
     showToast('Course settings updated! Replanning schedule...', 'success');
@@ -1002,6 +1293,8 @@ async function handleSaveCourse(e) {
       revision_buffer_days: buffer,
       schedule_strategy: strategy,
       rest_days: restDays,
+      num_study_days: numDays,
+      preferred_daily_minutes: prefMinutes,
     });
     await refreshCourseList();
   } catch (err) {
@@ -1352,6 +1645,7 @@ async function loadCourse(courseId) {
     await loadLessons(courseId);
     await loadCourseSources(courseId);
     await loadSchedule(courseId);
+    updateFilterButtonsUI(window.currentLessonFilterMode || 'all');
     showWorkspaceView();
   } catch (err) {
     Logger.error('Failed to load course', err);
@@ -1383,6 +1677,7 @@ async function loadSchedule(courseId) {
 
 function renderSchedule(sched) {
   scheduleDaysContainer.innerHTML = '';
+  renderCollapsedRailBadges(sched.days);
 
   // Stats
   const pct = Math.round((sched.completed_effective_minutes / (sched.total_effective_minutes || 1)) * 100);
@@ -1441,9 +1736,11 @@ function renderSchedule(sched) {
   }
 
   // Behind Schedule Alert
-  if (sched.is_behind_schedule) {
+  if (sched.is_behind_schedule || sched.exceeds_budget) {
     behindScheduleBanner.classList.remove('hidden');
-    behindScheduleMsg.textContent = `Projected finish (${sched.projected_finish_date}) encroaches on your ${sched.revision_buffer_days}-day revision buffer before ${sched.target_date}.`;
+    behindScheduleMsg.textContent = sched.pace_notice
+      ? sched.pace_notice
+      : `Projected finish (${sched.projected_finish_date}) encroaches on your ${sched.revision_buffer_days}-day revision buffer before ${sched.target_date}.`;
   } else {
     behindScheduleBanner.classList.add('hidden');
   }
@@ -1528,8 +1825,8 @@ function renderSchedule(sched) {
                   ⋮⋮
                 </div>
                 <input type="checkbox" class="btn-complete-allocation rounded text-blue-600 focus:ring-0 alloc-checkbox cursor-pointer w-3.5 h-3.5 shrink-0" data-alloc-id="${alloc.id}" ${isCompleted ? 'checked' : ''} onclick="event.stopPropagation()">
-                <h4 class="text-xs text-alabaster-text dark:text-charcoal-text truncate font-normal group-hover:text-blue-600 dark:group-hover:text-blue-400 transition flex items-center gap-1 min-w-0 ${isCompleted ? 'line-through text-alabaster-muted dark:text-charcoal-muted' : ''}">
-                  <span class="truncate">${alloc.lesson_title}</span>
+                <h4 class="text-[13.5px] leading-snug text-text-primary font-normal group-hover:text-accent transition flex items-start gap-1 min-w-0 line-clamp-2 break-words ${isCompleted ? 'line-through text-text-secondary' : ''}">
+                  <span class="line-clamp-2 break-words">${alloc.lesson_title}</span>
                   ${splitBadge}
                   ${pyqBadge}
                 </h4>
@@ -1593,34 +1890,34 @@ window.handleCardDragStart = function(event, allocId, sourceDate) {
     event.dataTransfer.effectAllowed = 'move';
   } catch (e) {}
   const target = event.currentTarget || event.target;
-  target.classList.add('opacity-40', 'scale-95', 'ring-2', 'ring-indigo-500');
+  target.classList.add('opacity-40', 'scale-95', 'ring-2', 'ring-accent');
 };
 
 window.handleCardDragEnd = function(event, cardEl) {
   if (cardEl) {
-    cardEl.classList.remove('opacity-40', 'scale-95', 'ring-2', 'ring-indigo-500');
+    cardEl.classList.remove('opacity-40', 'scale-95', 'ring-2', 'ring-accent');
   }
   window.draggedAllocInfo = null;
   document.querySelectorAll('.day-group-card').forEach(d => {
-    d.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/40', 'dark:bg-indigo-950/40');
+    d.classList.remove('ring-2', 'ring-accent', 'bg-accent-soft/40');
   });
 };
 
 window.handleDayDragOver = function(event, dayEl) {
   event.preventDefault();
   try { event.dataTransfer.dropEffect = 'move'; } catch (e) {}
-  dayEl.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50/40', 'dark:bg-indigo-950/40');
+  dayEl.classList.add('ring-2', 'ring-accent', 'bg-accent-soft/40');
 };
 
 window.handleDayDragLeave = function(event, dayEl) {
   if (!dayEl.contains(event.relatedTarget)) {
-    dayEl.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/40', 'dark:bg-indigo-950/40');
+    dayEl.classList.remove('ring-2', 'ring-accent', 'bg-accent-soft/40');
   }
 };
 
 window.handleDayDrop = async function(event, dayEl, targetDate) {
   event.preventDefault();
-  dayEl.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/40', 'dark:bg-indigo-950/40');
+  dayEl.classList.remove('ring-2', 'ring-accent', 'bg-accent-soft/40');
 
   let data = window.draggedAllocInfo;
   if (!data) {
@@ -1767,11 +2064,16 @@ async function replanCourse(mode, params = {}) {
 
       const diff = data.diff;
       let diffMsg = `Finish: ${diff.old_finish_date || '--'} → ${diff.new_finish_date || '--'}`;
+      if (diff.pace_change) {
+        diffMsg += ` • ${diff.pace_change}`;
+      }
       if (diff.dropped_deep_dive_count > 0) {
         diffMsg += ` • Dropped ${diff.dropped_deep_dive_count} deep-dive topics to compress schedule.`;
       }
-      if (diff.deficit_message) {
-        diffMsg += ` • ⚠️ ${diff.deficit_message}`;
+      if (diff.deficit_message || diff.pace_notice) {
+        diffMsg += ` • ⚠️ ${diff.deficit_message || diff.pace_notice}`;
+      } else if (data.schedule && data.schedule.pace_notice) {
+        diffMsg += ` • ⚠️ ${data.schedule.pace_notice}`;
       }
       diffText.textContent = diffMsg;
       diffBanner.classList.remove('hidden');
@@ -1798,30 +2100,90 @@ async function handleUndo() {
 }
 
 // --- Smart Filtering & Curriculum Drawer ---
-async function handleFilterLessons(includeExamples) {
-  const t0 = performance.now();
-  try {
-    const payload = {};
-    if (includeExamples !== null) {
-      payload.include_examples = includeExamples;
+function updateFilterButtonsUI(mode) {
+  const normalizedMode = (mode === 'concepts' || mode === false)
+    ? 'concepts'
+    : (mode === 'examples' || mode === true)
+      ? 'examples'
+      : 'all';
+  window.currentLessonFilterMode = normalizedMode;
+
+  const btnAll = document.getElementById('btn-filter-all');
+  const btnConcepts = document.getElementById('btn-filter-concepts');
+  const btnExamples = document.getElementById('btn-filter-examples');
+
+  const activeClasses = ['bg-accent', 'text-white', 'shadow-sm', 'font-semibold'];
+  const inactiveClasses = ['text-text-secondary', 'hover:text-text-primary', 'hover:bg-bg-card', 'font-medium'];
+
+  const setBtnState = (btn, isActive) => {
+    if (!btn) return;
+    if (isActive) {
+      btn.classList.add(...activeClasses);
+      btn.classList.remove(...inactiveClasses);
+    } else {
+      btn.classList.remove(...activeClasses);
+      btn.classList.add(...inactiveClasses);
     }
+  };
+
+  setBtnState(btnAll, normalizedMode === 'all');
+  setBtnState(btnConcepts, normalizedMode === 'concepts');
+  setBtnState(btnExamples, normalizedMode === 'examples');
+}
+
+async function handleFilterLessons(modeOrFlag) {
+  const t0 = performance.now();
+  let mode = 'all';
+  if (typeof modeOrFlag === 'string') {
+    mode = modeOrFlag.toLowerCase();
+  } else if (modeOrFlag === true) {
+    mode = 'examples';
+  } else if (modeOrFlag === false) {
+    mode = 'concepts';
+  }
+
+  // Update UI pill immediately for instantaneous response
+  updateFilterButtonsUI(mode);
+
+  try {
+    const payload = {
+      filter_mode: mode,
+    };
     const res = await fetch(`/api/courses/${currentCourseId}/lessons/filter`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || `Filter failed (status ${res.status})`);
+    }
     const updatedLessons = await res.json();
     Logger.api('POST', `/api/courses/.../lessons/filter`, res.status, Math.round(performance.now() - t0), updatedLessons);
     currentLessons = updatedLessons;
     renderCurriculumDrawer(currentLessons);
 
     // Regenerate schedule to reflect included/excluded lessons
-    await fetch(`/api/courses/${currentCourseId}/schedule/generate`, { method: 'POST' });
+    const schedRes = await fetch(`/api/courses/${currentCourseId}/schedule/generate`, { method: 'POST' });
+    if (!schedRes.ok) {
+      const errSched = await schedRes.json().catch(() => ({}));
+      throw new Error(errSched.detail || 'Failed to regenerate schedule');
+    }
     await loadSchedule(currentCourseId);
+
+    const modeLabels = {
+      'all': 'All lessons included (theory & examples)',
+      'concepts': 'Concepts & theory view (examples skipped)',
+      'examples': 'Examples, questions & practicals view'
+    };
+    showToast(modeLabels[mode] || `Filter applied: ${mode}`);
   } catch (err) {
     Logger.error('Failed to filter lessons', err);
+    showToast(err.message, 'warning');
   }
 }
+window.updateFilterButtonsUI = updateFilterButtonsUI;
+window.handleFilterLessons = handleFilterLessons;
 
 window.toggleLessonExclude = async function(lessonId) {
   const t0 = performance.now();
@@ -1851,11 +2213,11 @@ function renderCurriculumDrawer(lessons) {
     const item = document.createElement('div');
     item.className = `p-2.5 rounded-xl flex items-start gap-2.5 text-xs hover:bg-slate-100 dark:hover:bg-slate-800/60 transition ${l.is_excluded ? 'opacity-40' : ''}`;
     const priorityPill = l.priority === 'core'
-      ? '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-mono font-bold">Core</span>'
-      : '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-mono font-bold">Deep-Dive</span>';
+      ? '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded-full bg-accent-soft text-accent-soft-text border border-border-subtle font-mono font-bold">Core</span>'
+      : '<span class="text-[9px] uppercase px-1.5 py-0.2 rounded-full bg-bg-card text-text-secondary border border-border-subtle font-mono font-bold">Deep-Dive</span>';
 
     item.innerHTML = `
-      <input type="checkbox" class="mt-1 rounded text-indigo-600 focus:ring-0 cursor-pointer" ${!l.is_excluded ? 'checked' : ''} onchange="window.toggleLessonExclude('${l.id}')">
+      <input type="checkbox" class="mt-1 rounded text-accent focus:ring-0 cursor-pointer" ${!l.is_excluded ? 'checked' : ''} onchange="window.toggleLessonExclude('${l.id}')">
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-1.5 mb-1">
           ${priorityPill}
@@ -2022,7 +2384,7 @@ function renderApprovalGate(discovery) {
       const item = document.createElement('label');
       item.className = 'flex items-start gap-2.5 p-2 rounded-xl bg-surface-900 border border-slate-700/60 cursor-pointer hover:bg-surface-850 text-xs';
       item.innerHTML = `
-        <input type="checkbox" name="approved_source" value="${pl.source_id}" checked class="mt-0.5 text-violet-600 rounded">
+        <input type="checkbox" name="approved_source" value="${pl.source_id}" checked class="mt-0.5 text-accent rounded">
         <div>
           <div class="font-semibold text-slate-200">${pl.title}</div>
           <div class="text-[11px] text-slate-400">${pl.channel || 'YouTube'} • ${pl.item_count || 'Playlist'}</div>
@@ -2039,7 +2401,7 @@ function renderApprovalGate(discovery) {
       const item = document.createElement('label');
       item.className = 'flex items-start gap-2.5 p-2 rounded-xl bg-surface-900 border border-slate-700/60 cursor-pointer hover:bg-surface-850 text-xs';
       item.innerHTML = `
-        <input type="checkbox" name="approved_source" value="${v.source_id}" checked class="mt-0.5 text-violet-600 rounded">
+        <input type="checkbox" name="approved_source" value="${v.source_id}" checked class="mt-0.5 text-accent rounded">
         <div>
           <div class="font-medium text-slate-200 line-clamp-1">${v.title}</div>
           <div class="text-[11px] text-slate-400">${v.channel || 'YouTube'} • ${v.duration_str || ''}</div>
@@ -2460,7 +2822,10 @@ async function loadLessonNotesAndArtifacts(lessonId, forceRegen = false) {
       const noteData = await resNotes.json();
       renderMarkdownNotes(noteData.content_markdown);
       if (inputPersonalNotes) {
-        inputPersonalNotes.value = noteData.personal_notes || '';
+        if (currentLoadedLessonNotesId !== lessonId || noteData.personal_notes) {
+          inputPersonalNotes.value = noteData.personal_notes || '';
+          currentLoadedLessonNotesId = lessonId;
+        }
       }
       Logger.api(method, endpoint, resNotes.status, Math.round(performance.now() - t0), noteData);
     }
@@ -2472,7 +2837,12 @@ async function loadLessonNotesAndArtifacts(lessonId, forceRegen = false) {
   }
 }
 
+let currentLessonShots = [];
+let currentLoadedLessonMarkdown = '';
+let currentLoadedLessonNotesId = null;
+
 function renderKeyframesStrip(shots) {
+  currentLessonShots = shots || [];
   if (!shots || shots.length === 0) {
     keyframesStrip.classList.add('hidden');
     keyframesStrip.innerHTML = '';
@@ -2480,48 +2850,242 @@ function renderKeyframesStrip(shots) {
   }
 
   keyframesStrip.classList.remove('hidden');
-  keyframesStrip.innerHTML = shots.map(s => `
-    <div class="relative shrink-0 group cursor-pointer rounded-lg overflow-hidden border border-slate-700 hover:border-violet-500 transition shadow" onclick="window.seekToSeconds(${s.timestamp_sec})" title="Jump to ${s.formatted_time}">
-      <img src="${s.url}" alt="${s.caption}" class="w-24 h-14 object-cover">
-      <span class="absolute bottom-1 right-1 bg-black/80 text-white font-mono text-[9px] px-1 py-0.2 rounded font-semibold">${s.formatted_time}</span>
-      <div class="absolute inset-0 bg-violet-600/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-        <svg class="w-5 h-5 text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+  keyframesStrip.innerHTML = shots.map((s, idx) => `
+    <div class="relative shrink-0 group rounded-lg overflow-hidden border border-border-subtle hover:border-accent transition shadow bg-bg-card flex flex-col">
+      <div class="relative cursor-pointer" onclick="window.seekToSeconds(${s.timestamp_sec})" title="Jump to ${s.formatted_time}">
+        <img src="${s.url}" alt="${s.caption}" class="w-28 h-16 object-cover">
+        <span class="absolute bottom-1 right-1 bg-black/80 text-white font-mono text-[9px] px-1 py-0.2 rounded font-semibold">${s.formatted_time}</span>
+        <div class="absolute inset-0 bg-accent/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+          <svg class="w-5 h-5 text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        </div>
       </div>
+      <button type="button" class="btn-add-shot-to-notes w-full text-center py-1 bg-bg-card hover:bg-accent hover:text-white text-text-primary text-[10px] font-medium border-t border-border-subtle transition flex items-center justify-center gap-1 active:scale-95" data-idx="${idx}" title="Save screenshot & timestamp into My Notes">
+        <span>+ Add to Notes</span>
+      </button>
     </div>
   `).join('');
+
+  // Attach event listeners to Add to Notes buttons
+  keyframesStrip.querySelectorAll('.btn-add-shot-to-notes').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.getAttribute('data-idx'), 10);
+      const shot = shots[idx];
+      if (shot) {
+        insertScreenshotToNotes(shot.url, shot.formatted_time, shot.caption);
+      }
+    });
+  });
+}
+
+function insertScreenshotToNotes(imageUrl, formattedTime, caption = '') {
+  if (!inputPersonalNotes) return;
+  const timeTag = formattedTime || '00:00';
+  const imgTag = imageUrl ? `![${caption || 'Lecture Frame'}](${imageUrl})\n\n` : '';
+  const noteTemplate = `\n\n### 📸 Frame [${timeTag}]\n${imgTag}**[${timeTag}] My Note:** `;
+
+  // Append to personal notes
+  const existing = inputPersonalNotes.value;
+  inputPersonalNotes.value = existing + noteTemplate;
+
+  // Switch to personal notes tab so user sees it immediately
+  switchNotesTab('personal');
+
+  // Focus at the end of the text
+  inputPersonalNotes.focus();
+  inputPersonalNotes.setSelectionRange(inputPersonalNotes.value.length, inputPersonalNotes.value.length);
+  inputPersonalNotes.scrollTop = inputPersonalNotes.scrollHeight;
+
+  // Autosave
+  handlePersonalNotesInput();
+  showToast(`Screenshot at [${timeTag}] saved to Notes! Type your notes below it.`, 'success');
+}
+window.insertScreenshotToNotes = insertScreenshotToNotes;
+
+async function insertCurrentFrameToNotes() {
+  const alloc = activeAllocation || (currentSchedule && currentSchedule.days && currentSchedule.days[0] && currentSchedule.days[0].allocations && currentSchedule.days[0].allocations[0]);
+  if (!alloc) {
+    showToast('Please select a lesson first to capture notes.', 'error');
+    return;
+  }
+  if (!activeAllocation) {
+    activeAllocation = alloc;
+  }
+
+  let curSec = 0;
+  if (ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
+    try {
+      curSec = Math.floor(ytPlayer.getCurrentTime() || 0);
+    } catch (_) {}
+  }
+  const m = Math.floor(curSec / 60);
+  const s = curSec % 60;
+  const timeStr = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+
+  // Find closest captured keyframe
+  let imageUrl = '';
+  if (currentLessonShots && currentLessonShots.length > 0) {
+    let closest = currentLessonShots[0];
+    let minDiff = Math.abs(closest.timestamp_sec - curSec);
+    for (const shot of currentLessonShots) {
+      const diff = Math.abs(shot.timestamp_sec - curSec);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = shot;
+      }
+    }
+    imageUrl = closest.url;
+  } else if (activeAllocation.video_id) {
+    imageUrl = `https://img.youtube.com/vi/${activeAllocation.video_id}/hqdefault.jpg`;
+  }
+
+  insertScreenshotToNotes(imageUrl, timeStr, `Lecture frame at ${timeStr}`);
+}
+window.insertCurrentFrameToNotes = insertCurrentFrameToNotes;
+
+function printGroundedNotes() {
+  const container = document.getElementById('grounded-notes-print-container');
+  if (!container) return;
+  const lessonTitle = activeAllocation ? activeAllocation.lesson_title : (currentCourse ? currentCourse.title : 'Lecture Study Notes');
+  const courseTitle = currentCourse ? currentCourse.title : 'Course';
+  const dateStr = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  const rawHtml = notesContent ? notesContent.innerHTML : '';
+
+  container.innerHTML = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.65; color: #111;">
+      <div style="border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 24px;">
+        <div style="font-size: 11px; color: #4b5563; text-transform: uppercase; letter-spacing: 0.08em; font-weight: bold;">
+          ${escapeHtml(courseTitle)} • Grounded Lecture Notes
+        </div>
+        <h1 style="font-size: 22pt; font-weight: 800; margin: 6px 0 8px 0; color: #181a1f; line-height: 1.25;">
+          ${escapeHtml(lessonTitle)}
+        </h1>
+        <div style="font-size: 10pt; color: #6b7280;">
+          Generated from AI Subtitles Grounding • Printed on ${dateStr}
+        </div>
+      </div>
+      <div class="print-notes-body" style="font-size: 11pt; color: #1f2937;">
+        ${rawHtml}
+      </div>
+    </div>
+  `;
+
+  document.body.classList.add('printing-grounded-notes');
+  window.print();
+  setTimeout(() => {
+    document.body.classList.remove('printing-grounded-notes');
+  }, 1000);
+}
+window.printGroundedNotes = printGroundedNotes;
+
+function downloadGroundedNotesMarkdown() {
+  if (!currentLoadedLessonMarkdown) {
+    showToast('No notes content available to download.', 'error');
+    return;
+  }
+  const lessonTitle = activeAllocation ? activeAllocation.lesson_title : 'Lesson_Notes';
+  const courseTitle = currentCourse ? currentCourse.title : 'Course';
+  const safeTitle = lessonTitle.replace(/[^a-zA-Z0-9_\-]/g, '_');
+
+  const header = `# ${lessonTitle}\n\n**Course:** ${courseTitle}\n**Date:** ${new Date().toLocaleDateString()}\n\n---\n\n`;
+  const fullContent = header + currentLoadedLessonMarkdown;
+
+  const blob = new Blob([fullContent], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${safeTitle}_Grounded_Notes.md`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Notes downloaded as Markdown (.md)!', 'success');
+}
+window.downloadGroundedNotesMarkdown = downloadGroundedNotesMarkdown;
+
+function copyGroundedToPersonalNotes() {
+  if (!currentLoadedLessonMarkdown) {
+    showToast('No notes content available to copy.', 'error');
+    return;
+  }
+  if (!inputPersonalNotes) return;
+  const existing = inputPersonalNotes.value.trim();
+  const separator = existing ? '\n\n---\n\n' : '';
+  inputPersonalNotes.value = existing + separator + currentLoadedLessonMarkdown;
+  switchNotesTab('personal');
+  handlePersonalNotesInput();
+  showToast('Grounded notes copied to Personal Notes space! You can now edit & annotate them.', 'success');
+}
+window.copyGroundedToPersonalNotes = copyGroundedToPersonalNotes;
+
+// Clean conversational intros from LLM output
+function stripConversationalIntro(text) {
+  if (!text) return '';
+  return text
+    .replace(/^(?:As an? (?:expert )?(?:college )?(?:professor|educator|teacher|tutor|instructor)[^.\n]*[.:]\s*)+/i, '')
+    .replace(/^(?:Alright,? let'?s break down[^.\n]*[.:]\s*)+/i, '')
+    .replace(/^(?:Here is a (?:comprehensive )?(?:breakdown|summary|overview)[^.\n]*[.:]\s*)+/i, '')
+    .replace(/^(?:Sure,? (?:here is|let's)[^.\n]*[.:]\s*)+/i, '')
+    .trim();
+}
+
+// Strip raw chunk IDs and normalize timestamps
+function cleanCitationsAndTimestamps(text) {
+  if (!text) return '';
+  // Convert [ref:chk_..., 00:00] or [ref:..., MM:SS] into [MM:SS]
+  let cleaned = text.replace(/\[ref:[^,\]]+,\s*(\d{1,2}:\d{2})\]/g, '[$1]');
+  // Convert [ref:chk_...][MM:SS] into [MM:SS]
+  cleaned = cleaned.replace(/\[ref:[^\]]+\]\s*\[(\d{1,2}:\d{2})\]/g, '[$1]');
+  // Strip orphan chunk IDs like [ref:chk_576623c69961; 00:00] -> [00:00]
+  cleaned = cleaned.replace(/\[ref:[^;\]]+;\s*(\d{1,2}:\d{2})\]/g, '[$1]');
+  // Strip raw chunk references without timestamp
+  cleaned = cleaned.replace(/\[ref:[a-zA-Z0-9_\-]+\]/g, '');
+  return cleaned;
 }
 
 function renderMarkdownNotes(markdownText) {
+  currentLoadedLessonMarkdown = markdownText || '';
+  const toolbar = document.getElementById('grounded-notes-toolbar');
+  if (toolbar) toolbar.classList.remove('hidden');
+
   if (!markdownText) {
-    notesContent.innerHTML = '<p class="text-alabaster-muted dark:text-charcoal-muted italic text-xs">No notes generated for this lesson yet. Click "Transcribe" above.</p>';
+    notesContent.innerHTML = '<p class="text-text-secondary italic text-xs">No notes generated for this lesson yet. Click "Transcribe" above.</p>';
     return;
   }
 
+  let text = stripConversationalIntro(markdownText);
+  text = cleanCitationsAndTimestamps(text);
+
   // Escape basic HTML tags to prevent XSS
-  let html = markdownText
+  let html = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+
+  // Monospace code blocks ```lang ... ```
+  html = html.replace(/```([a-zA-Z0-9_\-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
+    return `<pre class="my-3 p-3.5 rounded-xl bg-bg-canvas border border-border-subtle overflow-x-auto text-[14px] font-mono leading-relaxed text-text-primary"><code>${code.trim()}</code></pre>`;
+  });
 
   // Markdown tables: lines with pipes
   html = html.replace(/((?:^\|[^\n]+\|\r?\n)+)/gm, (tableBlock) => {
     const rows = tableBlock.trim().split(/\r?\n/).map(r => r.trim()).filter(Boolean);
     if (rows.length < 2) return tableBlock;
     const isSeparator = /^\|(?:\s*:?-+:?\s*\|)+$/.test(rows[1]);
-    let out = '<div class="overflow-x-auto my-3 rounded-xl border border-alabaster-border dark:border-charcoal-border shadow-sm"><table class="w-full text-left text-xs border-collapse">';
+    let out = '<div class="overflow-x-auto my-3 rounded-xl border border-border-subtle shadow-sm"><table class="w-full text-left text-xs sm:text-sm border-collapse">';
     let bodyStarted = false;
     rows.forEach((row, idx) => {
       if (idx === 1 && isSeparator) return;
       const cells = row.split('|').slice(1, -1).map(c => c.trim());
       if (idx === 0) {
-        out += '<thead class="bg-alabaster-subcard dark:bg-charcoal-subcard text-alabaster-text dark:text-charcoal-text font-bold border-b border-alabaster-border dark:border-charcoal-border"><tr>';
-        cells.forEach(c => { out += `<th class="p-2 sm:p-2.5 font-bold text-zinc-900 dark:text-zinc-100">${c}</th>`; });
+        out += '<thead class="bg-bg-sidebar text-text-primary font-bold border-b border-border-subtle"><tr>';
+        cells.forEach(c => { out += `<th class="p-2 sm:p-2.5 font-bold text-text-primary">${c}</th>`; });
         out += '</tr></thead><tbody>';
         bodyStarted = true;
       } else {
         if (!bodyStarted) { out += '<tbody>'; bodyStarted = true; }
-        out += '<tr class="border-b border-alabaster-border/50 dark:border-charcoal-border/50 hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition">';
-        cells.forEach(c => { out += `<td class="p-2 sm:p-2.5 text-alabaster-text dark:text-charcoal-text">${c}</td>`; });
+        out += '<tr class="border-b border-border-subtle/50 hover:bg-bg-sidebar/50 transition">';
+        cells.forEach(c => { out += `<td class="p-2 sm:p-2.5 text-text-primary">${c}</td>`; });
         out += '</tr>';
       }
     });
@@ -2534,42 +3098,45 @@ function renderMarkdownNotes(markdownText) {
   html = html.replace(/&gt; \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n((?:&gt; .*\n?)+)/gi, (match, p1, p2) => {
     const alertType = p1.toUpperCase();
     const alertBody = p2.replace(/&gt; ?/g, '');
-    let colorClass = 'border-blue-500/60 bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200';
-    if (alertType === 'IMPORTANT') colorClass = 'border-amber-500/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200';
-    if (alertType === 'WARNING') colorClass = 'border-red-500/60 bg-red-50 dark:bg-red-950/40 text-red-900 dark:text-red-200';
-    if (alertType === 'TIP') colorClass = 'border-emerald-500/60 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200';
-    return `<div class="p-3 my-2 border-l-4 rounded-r-lg ${colorClass} text-xs leading-relaxed">
+    let colorClass = 'border-accent bg-accent-soft/40 text-accent-soft-text';
+    if (alertType === 'IMPORTANT') colorClass = 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200';
+    if (alertType === 'WARNING') colorClass = 'border-red-500 bg-red-50 dark:bg-red-950/40 text-red-900 dark:text-red-200';
+    if (alertType === 'TIP') colorClass = 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200';
+    return `<div class="p-3.5 my-3 border-l-4 rounded-r-xl ${colorClass} text-xs sm:text-sm leading-relaxed">
       <div class="font-bold uppercase tracking-wider mb-1">${alertType}</div>
       <div>${alertBody}</div>
     </div>`;
   });
 
   // Images ![caption](url)
-  html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<div class="my-3"><img src="$2" alt="$1" class="rounded-xl border border-alabaster-border dark:border-charcoal-border max-h-60 object-cover shadow-sm mx-auto"><div class="text-[11px] text-center text-alabaster-muted dark:text-charcoal-muted mt-1 italic">$1</div></div>');
+  html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<div class="my-3"><img src="$2" alt="$1" class="rounded-xl border border-border-subtle max-h-60 object-cover shadow-sm mx-auto"><div class="text-[11px] text-center text-text-secondary mt-1 italic">$1</div></div>');
 
-  // Headings
-  html = html.replace(/^### (.*$)/gim, '<h3 class="text-xs sm:text-sm font-semibold text-alabaster-text dark:text-charcoal-text mt-3 mb-1">$1</h3>');
-  html = html.replace(/^## (.*$)/gim, '<h2 class="text-sm sm:text-base font-semibold text-alabaster-text dark:text-charcoal-text mt-4 mb-1.5 pb-1 border-b border-alabaster-border dark:border-charcoal-border">$1</h2>');
-  html = html.replace(/^# (.*$)/gim, '<h1 class="text-base sm:text-lg font-bold text-alabaster-text dark:text-charcoal-text mt-4 mb-2 pb-1 border-b border-alabaster-border dark:border-charcoal-border">$1</h1>');
+  // Headings (H1 through H6)
+  html = html.replace(/^###### (.*$)/gim, '<h6 class="text-xs sm:text-sm font-semibold text-text-primary mt-3 mb-1">$1</h6>');
+  html = html.replace(/^##### (.*$)/gim, '<h5 class="text-xs sm:text-sm font-bold text-text-primary mt-3.5 mb-1">$1</h5>');
+  html = html.replace(/^#### (.*$)/gim, '<h4 class="text-sm sm:text-base font-bold text-text-primary mt-4 mb-1.5">$1</h4>');
+  html = html.replace(/^### (.*$)/gim, '<h3 class="text-base sm:text-[18px] font-bold text-text-primary mt-5 mb-2">$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2 class="text-lg sm:text-[22px] font-bold text-text-primary mt-6 mb-2.5 pb-1 border-b border-border-subtle">$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1 class="text-xl sm:text-2xl font-extrabold text-text-primary mt-6 mb-3 pb-1 border-b border-border-subtle">$1</h1>');
+
+  // Bullets (support both - and * lists)
+  html = html.replace(/^[-*]\s+(.*$)/gim, '<div class="flex items-start gap-2 my-1 text-[15px] sm:text-[16px] text-text-primary leading-[1.65]"><span class="text-accent mt-0.5">•</span><span>$1</span></div>');
 
   // Bold & Italic
-  html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-alabaster-text dark:text-charcoal-text font-semibold">$1</strong>');
-  html = html.replace(/\*(.*?)\*/g, '<em class="text-alabaster-muted dark:text-charcoal-muted italic">$1</em>');
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-text-primary font-bold">$1</strong>');
+  html = html.replace(/\*(.*?)\*/g, '<em class="text-text-secondary italic">$1</em>');
 
   // Code spans
-  html = html.replace(/`([^`]+)`/g, '<code class="bg-alabaster-subcard dark:bg-charcoal-subcard text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded text-[11px] font-mono border border-alabaster-border dark:border-charcoal-border">$1</code>');
-
-  // Bullets
-  html = html.replace(/^- (.*$)/gim, '<div class="flex items-start gap-2 my-1 text-xs text-alabaster-text dark:text-charcoal-text leading-relaxed"><span class="text-blue-600 dark:text-blue-400 mt-0.5">•</span><span>$1</span></div>');
+  html = html.replace(/`([^`]+)`/g, '<code class="bg-accent-soft text-accent-soft-text px-1.5 py-0.5 rounded text-[13px] font-mono border border-border-subtle">$1</code>');
 
   // Markdown seek links [text](seek://seconds) or [[04:12]](seek://252)
   html = html.replace(/\[(?:\[)?([^\]]+?)(?:\])?\]\(seek:\/\/(\d+)\)/g, (match, label, sec) => {
     const totalSec = parseInt(sec, 10);
-    return `<button type="button" data-timestamp-sec="${totalSec}" onclick="window.seekToSeconds(${totalSec})" class="timestamp-link inline-flex items-center gap-1 font-mono text-[11px] font-medium bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/80 rounded px-1.5 py-0.2 cursor-pointer transition shadow-sm active:scale-95" title="Jump to ${label}"><span>▶</span> ${label}</button>`;
+    return `<button type="button" data-timestamp-sec="${totalSec}" onclick="window.seekToSeconds(${totalSec})" class="timestamp-link inline-flex items-center gap-1 font-mono text-[11px] font-semibold bg-accent-soft hover:bg-blue-200 dark:hover:bg-blue-900 text-accent-soft-text border border-border-subtle rounded px-1.5 py-0.5 cursor-pointer transition shadow-sm active:scale-95" title="Jump to ${label}"><span>▶</span> ${label}</button>`;
   });
 
   // Standard markdown links [label](url)
-  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">$1</a>');
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-accent hover:underline font-medium">$1</a>');
 
   // Clickable Timestamps [MM:SS] or [HH:MM:SS]
   html = html.replace(/\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]/g, (match, p1, p2, p3) => {
@@ -2579,7 +3146,7 @@ function renderMarkdownNotes(markdownText) {
     } else {
       totalSec = parseInt(p1, 10) * 60 + parseInt(p2, 10);
     }
-    return `<button type="button" data-timestamp-sec="${totalSec}" onclick="window.seekToSeconds(${totalSec})" class="timestamp-link inline-flex items-center gap-1 font-mono text-[11px] font-medium bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/80 rounded px-1.5 py-0.2 cursor-pointer transition shadow-sm active:scale-95" title="Jump video to ${match}"><span>▶</span> ${match}</button>`;
+    return `<button type="button" data-timestamp-sec="${totalSec}" onclick="window.seekToSeconds(${totalSec})" class="timestamp-link inline-flex items-center gap-1 font-mono text-[11px] font-semibold bg-accent-soft hover:bg-blue-200 dark:hover:bg-blue-900 text-accent-soft-text border border-border-subtle rounded px-1.5 py-0.5 cursor-pointer transition shadow-sm active:scale-95" title="Jump video to ${match}"><span>▶</span> ${match}</button>`;
   });
 
   // High-yield PYQ notice banner
@@ -2798,7 +3365,7 @@ function renderSourcesPills(sources) {
       icon = '🌐';
       pill.className += 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60';
     } else {
-      pill.className += 'bg-violet-950/80 text-violet-300 border border-violet-800/60';
+      pill.className += 'bg-accent-soft text-accent-soft-text border border-border-subtle';
     }
     const chunkInfo = s.metadata && s.metadata.chunk_count ? ` (${s.metadata.chunk_count} chk)` : '';
     pill.innerHTML = `<span>${icon}</span> <span class="max-w-[120px] truncate" title="${s.title}">${s.title}</span><span class="text-slate-400 text-[9px]">${chunkInfo}</span>`;
@@ -3069,32 +3636,40 @@ window.openAddSourceModalWithTab = openAddSourceModalWithTab;
 
 // --- Last-Night Cram Sheet Generator ---
 function renderCramSheetMarkdown(markdownText) {
-  if (!markdownText) return '<div class="text-center p-6 text-alabaster-muted dark:text-charcoal-muted">No cram sheet content generated yet.</div>';
+  if (!markdownText) return '<div class="text-center p-6 text-text-secondary">No cram sheet content generated yet.</div>';
 
-  let html = markdownText
+  let text = stripConversationalIntro(markdownText);
+  text = cleanCitationsAndTimestamps(text);
+
+  let html = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+
+  // Monospace code blocks
+  html = html.replace(/```([a-zA-Z0-9_\-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
+    return `<pre class="my-3 p-3.5 rounded-xl bg-bg-canvas border border-border-subtle overflow-x-auto text-[14px] font-mono leading-relaxed text-text-primary print-break-inside-avoid"><code>${code.trim()}</code></pre>`;
+  });
 
   // Markdown tables: lines with pipes
   html = html.replace(/((?:^\|[^\n]+\|\r?\n)+)/gm, (tableBlock) => {
     const rows = tableBlock.trim().split(/\r?\n/).map(r => r.trim()).filter(Boolean);
     if (rows.length < 2) return tableBlock;
     const isSeparator = /^\|(?:\s*:?-+:?\s*\|)+$/.test(rows[1]);
-    let out = '<div class="overflow-x-auto my-3 rounded-xl border border-alabaster-border dark:border-charcoal-border shadow-sm print-break-inside-avoid"><table class="w-full text-left text-xs border-collapse">';
+    let out = '<div class="overflow-x-auto my-3 rounded-xl border border-border-subtle shadow-sm print-break-inside-avoid"><table class="w-full text-left text-xs sm:text-sm border-collapse">';
     let bodyStarted = false;
     rows.forEach((row, idx) => {
       if (idx === 1 && isSeparator) return;
       const cells = row.split('|').slice(1, -1).map(c => c.trim());
       if (idx === 0) {
-        out += '<thead class="bg-alabaster-subcard dark:bg-charcoal-subcard text-alabaster-text dark:text-charcoal-text font-bold border-b border-alabaster-border dark:border-charcoal-border"><tr>';
-        cells.forEach(c => { out += `<th class="p-2 sm:p-2.5 font-bold text-zinc-900 dark:text-zinc-100">${c}</th>`; });
+        out += '<thead class="bg-bg-sidebar text-text-primary font-bold border-b border-border-subtle"><tr>';
+        cells.forEach(c => { out += `<th class="p-2 sm:p-2.5 font-bold text-text-primary">${c}</th>`; });
         out += '</tr></thead><tbody>';
         bodyStarted = true;
       } else {
         if (!bodyStarted) { out += '<tbody>'; bodyStarted = true; }
-        out += '<tr class="border-b border-alabaster-border/50 dark:border-charcoal-border/50 hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition">';
-        cells.forEach(c => { out += `<td class="p-2 sm:p-2.5 text-alabaster-text dark:text-charcoal-text">${c}</td>`; });
+        out += '<tr class="border-b border-border-subtle/50 hover:bg-bg-sidebar/50 transition">';
+        cells.forEach(c => { out += `<td class="p-2 sm:p-2.5 text-text-primary">${c}</td>`; });
         out += '</tr>';
       }
     });
@@ -3107,32 +3682,55 @@ function renderCramSheetMarkdown(markdownText) {
   html = html.replace(/&gt; \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n((?:&gt; .*\n?)+)/gi, (match, p1, p2) => {
     const alertType = p1.toUpperCase();
     const alertBody = p2.replace(/&gt; ?/g, '');
-    let colorClass = 'border-amber-500/60 bg-amber-50/50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200';
-    return `<div class="p-3 my-2 border-l-4 rounded-r-xl ${colorClass} text-xs leading-relaxed print-break-inside-avoid">
+    let colorClass = 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200';
+    return `<div class="p-3.5 my-2.5 border-l-4 rounded-r-xl ${colorClass} text-xs sm:text-sm leading-relaxed print-break-inside-avoid">
       <div class="font-bold uppercase tracking-wider mb-0.5">${alertType}</div>
       <div>${alertBody}</div>
     </div>`;
   });
 
   // Headings
-  html = html.replace(/^### (.*$)/gim, '<h3 class="text-xs sm:text-sm font-bold text-alabaster-text dark:text-charcoal-text mt-3 mb-1 print-break-inside-avoid">$1</h3>');
-  html = html.replace(/^## (.*$)/gim, '<h2 class="text-sm sm:text-base font-bold text-alabaster-text dark:text-charcoal-text mt-4 mb-2 pb-1 border-b border-alabaster-border dark:border-charcoal-border print-break-inside-avoid flex items-center gap-1.5">$1</h2>');
-  html = html.replace(/^# (.*$)/gim, '<h1 class="text-base sm:text-lg font-extrabold text-alabaster-text dark:text-charcoal-text mt-4 mb-2 pb-1 border-b-2 border-alabaster-border dark:border-charcoal-border print-break-inside-avoid">$1</h1>');
+  html = html.replace(/^###### (.*$)/gim, '<h6 class="text-xs sm:text-sm font-semibold text-text-primary mt-3 mb-1 print-break-inside-avoid">$1</h6>');
+  html = html.replace(/^##### (.*$)/gim, '<h5 class="text-xs sm:text-sm font-bold text-text-primary mt-3.5 mb-1 print-break-inside-avoid">$1</h5>');
+  html = html.replace(/^#### (.*$)/gim, '<h4 class="text-sm sm:text-base font-bold text-text-primary mt-4 mb-1.5 print-break-inside-avoid">$1</h4>');
+  html = html.replace(/^### (.*$)/gim, '<h3 class="text-base sm:text-[18px] font-bold text-text-primary mt-5 mb-2 print-break-inside-avoid">$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2 class="text-lg sm:text-[22px] font-bold text-text-primary mt-6 mb-2.5 pb-1 border-b border-border-subtle print-break-inside-avoid flex items-center gap-1.5">$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1 class="text-xl sm:text-2xl font-extrabold text-text-primary mt-6 mb-3 pb-1 border-b-2 border-border-subtle print-break-inside-avoid">$1</h1>');
+
+  // Bullets (support both - and * lists)
+  html = html.replace(/^[-*]\s+(.*$)/gim, '<div class="flex items-start gap-2 my-1 text-[15px] sm:text-[16px] text-text-primary leading-[1.65]"><span class="text-accent font-bold mt-0.5">•</span><span>$1</span></div>');
 
   // Bold & Italic
-  html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-alabaster-text dark:text-charcoal-text font-bold">$1</strong>');
-  html = html.replace(/\*(.*?)\*/g, '<em class="italic text-alabaster-muted dark:text-charcoal-muted">$1</em>');
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-text-primary font-bold">$1</strong>');
+  html = html.replace(/\*(.*?)\*/g, '<em class="italic text-text-secondary">$1</em>');
 
   // Code spans
-  html = html.replace(/`([^`]+)`/g, '<code class="bg-alabaster-subcard dark:bg-charcoal-subcard text-blue-600 dark:text-blue-400 px-1 py-0.5 rounded text-[11px] font-mono border border-alabaster-border dark:border-charcoal-border">$1</code>');
+  html = html.replace(/`([^`]+)`/g, '<code class="bg-accent-soft text-accent-soft-text px-1 py-0.5 rounded text-[13px] font-mono border border-border-subtle">$1</code>');
 
-  // Bullets
-  html = html.replace(/^- (.*$)/gim, '<div class="flex items-start gap-2 my-1 text-xs text-alabaster-text dark:text-charcoal-text leading-relaxed"><span class="text-amber-600 dark:text-amber-400 font-bold mt-0.5">•</span><span>$1</span></div>');
+  // Markdown seek links [text](seek://seconds) or [[04:12]](seek://252)
+  html = html.replace(/\[(?:\[)?([^\]]+?)(?:\])?\]\(seek:\/\/(\d+)\)/g, (match, label, sec) => {
+    const totalSec = parseInt(sec, 10);
+    return `<button type="button" data-timestamp-sec="${totalSec}" onclick="window.seekToSeconds(${totalSec})" class="timestamp-link inline-flex items-center gap-1 font-mono text-[11px] font-semibold bg-accent-soft hover:bg-blue-200 dark:hover:bg-blue-900 text-accent-soft-text border border-border-subtle rounded px-1.5 py-0.5 cursor-pointer transition shadow-sm active:scale-95" title="Jump to ${label}"><span>▶</span> ${label}</button>`;
+  });
+
+  // Standard markdown links [label](url)
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-accent hover:underline font-medium">$1</a>');
+
+  // Clickable Timestamps [MM:SS] or [HH:MM:SS]
+  html = html.replace(/\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]/g, (match, p1, p2, p3) => {
+    let totalSec = 0;
+    if (p3 !== undefined) {
+      totalSec = parseInt(p1, 10) * 3600 + parseInt(p2, 10) * 60 + parseInt(p3, 10);
+    } else {
+      totalSec = parseInt(p1, 10) * 60 + parseInt(p2, 10);
+    }
+    return `<button type="button" data-timestamp-sec="${totalSec}" onclick="window.seekToSeconds(${totalSec})" class="timestamp-link inline-flex items-center gap-1 font-mono text-[11px] font-semibold bg-accent-soft hover:bg-blue-200 dark:hover:bg-blue-900 text-accent-soft-text border border-border-subtle rounded px-1.5 py-0.5 cursor-pointer transition shadow-sm active:scale-95" title="Jump video to ${match}"><span>▶</span> ${match}</button>`;
+  });
 
   return html;
 }
 
-async function loadCramSheet(forceRefresh = false) {
+async function loadCramSheet(forceRefresh = false, fullSyllabus = false) {
   if (!currentCourseId) {
     alert('Please select or create a course first.');
     return;
@@ -3142,32 +3740,43 @@ async function loadCramSheet(forceRefresh = false) {
   const container = document.getElementById('cram-sheet-content');
   const badgeCache = document.getElementById('badge-cram-cache');
   const btnRefresh = document.getElementById('btn-refresh-cram-sheet');
+  const btnFull = document.getElementById('btn-full-cram-sheet');
 
   if (modal) modal.classList.remove('hidden');
   if (container) {
+    let msg = 'Retrieving high-density exam revision sheet...';
+    if (fullSyllabus) {
+      msg = '⚡ Progressively processing entire syllabus in batches of 3-5 lessons... Synthesizing full-course cheat sheet.';
+    } else if (forceRefresh) {
+      msg = 'Re-synthesizing Last-Night Cram Sheet from latest notes & past papers...';
+    }
     container.innerHTML = `
       <div class="py-12 flex flex-col items-center justify-center space-y-3">
-        <div class="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-        <p class="text-xs font-semibold text-alabaster-muted dark:text-charcoal-muted">
-          ${forceRefresh ? 'Re-synthesizing Last-Night Cram Sheet from latest notes & past papers...' : 'Retrieving high-density exam revision sheet...'}
+        <div class="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
+        <p class="text-xs font-semibold text-text-secondary text-center max-w-md">
+          ${msg}
         </p>
       </div>
     `;
   }
   if (btnRefresh) btnRefresh.disabled = true;
+  if (btnFull) btnFull.disabled = true;
 
   const t0 = performance.now();
   try {
-    const res = await fetch(`/api/courses/${currentCourseId}/cram-sheet/generate`, {
+    const endpoint = fullSyllabus
+      ? `/api/courses/${currentCourseId}/cram-sheet/generate-full`
+      : `/api/courses/${currentCourseId}/cram-sheet/generate`;
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ force_refresh: forceRefresh })
+      body: JSON.stringify({ force_refresh: forceRefresh, full_syllabus: fullSyllabus })
     });
     if (!res.ok) {
       throw new Error(`Failed to generate cram sheet (status ${res.status})`);
     }
     const data = await res.json();
-    Logger.api('POST', `/api/courses/${currentCourseId}/cram-sheet/generate`, res.status, Math.round(performance.now() - t0), data);
+    Logger.api('POST', endpoint, res.status, Math.round(performance.now() - t0), data);
 
     if (badgeCache) {
       const shortHash = (data.notes_hash || '').slice(0, 8);
@@ -3184,15 +3793,305 @@ async function loadCramSheet(forceRefresh = false) {
       container.innerHTML = `
         <div class="p-6 text-center text-xs text-red-500 bg-red-50 dark:bg-red-950/30 rounded-xl border border-red-200 dark:border-red-900">
           <p class="font-bold mb-1">Failed to generate Last-Night Cram Sheet</p>
-          <p>${err.message}</p>
+          <p>${escapeHtml(err.message)}</p>
         </div>
       `;
     }
   } finally {
     if (btnRefresh) btnRefresh.disabled = false;
+    if (btnFull) btnFull.disabled = false;
   }
 }
 window.loadCramSheet = loadCramSheet;
+
+// --- Syllabus Alignment & Auto-Curator ---
+window.syllabusStrictness = 'balanced';
+window.currentSyllabusMatch = null;
+window.selectedSyllabusLessonIds = new Set();
+
+async function openSyllabusModal() {
+  if (!currentCourseId) {
+    showToast('Please select or create a course first.', 'warning');
+    return;
+  }
+  const modal = document.getElementById('modal-syllabus-match');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+
+  // Show Step 1, hide Step 2
+  const stepInput = document.getElementById('syllabus-step-input');
+  const stepReview = document.getElementById('syllabus-step-review');
+  if (stepInput) stepInput.classList.remove('hidden');
+  if (stepReview) stepReview.classList.add('hidden');
+
+  // Attempt to pre-fill with existing saved syllabus text
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/syllabus`);
+    if (res.ok) {
+      const data = await res.json();
+      const textarea = document.getElementById('input-syllabus-text');
+      if (textarea && data.syllabus_text && !textarea.value.trim()) {
+        textarea.value = data.syllabus_text;
+      }
+    }
+  } catch (err) {
+    Logger.warn('Could not load course syllabus', err);
+  }
+}
+
+function closeSyllabusModal() {
+  const modal = document.getElementById('modal-syllabus-match');
+  if (modal) modal.classList.add('hidden');
+}
+
+function setSyllabusStrictness(strictness) {
+  window.syllabusStrictness = strictness;
+  const pills = {
+    'balanced': document.getElementById('pill-syl-balanced'),
+    'strict': document.getElementById('pill-syl-strict'),
+    'comprehensive': document.getElementById('pill-syl-comprehensive'),
+  };
+  const activeClass = ['bg-accent', 'text-white', 'shadow-sm', 'font-semibold'];
+  const inactiveClass = ['text-text-secondary', 'hover:text-text-primary', 'font-medium'];
+
+  Object.entries(pills).forEach(([key, el]) => {
+    if (!el) return;
+    if (key === strictness) {
+      el.classList.add(...activeClass);
+      el.classList.remove(...inactiveClass);
+    } else {
+      el.classList.remove(...activeClass);
+      el.classList.add(...inactiveClass);
+    }
+  });
+}
+
+async function handleAnalyzeSyllabus() {
+  const textarea = document.getElementById('input-syllabus-text');
+  const text = textarea ? textarea.value.trim() : '';
+  if (!text || text.length < 5) {
+    showToast('Please paste your syllabus text first (at least a few topics).', 'warning');
+    if (textarea) textarea.focus();
+    return;
+  }
+
+  const btn = document.getElementById('btn-analyze-syllabus');
+  const btnText = document.getElementById('btn-analyze-syllabus-text');
+  if (btn) btn.disabled = true;
+  if (btnText) btnText.textContent = 'Analyzing & Matching...';
+
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/syllabus/match`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        syllabus_text: text,
+        strictness: window.syllabusStrictness || 'balanced',
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Matching failed (status ${res.status})`);
+    }
+
+    const data = await res.json();
+    window.currentSyllabusMatch = data;
+
+    // Pre-populate selected lesson IDs with all matched lessons
+    window.selectedSyllabusLessonIds = new Set(
+      data.lessons.filter(l => l.is_matched).map(l => l.id)
+    );
+
+    renderSyllabusReviewScreen(data);
+
+    // Switch view to Step 2
+    document.getElementById('syllabus-step-input')?.classList.add('hidden');
+    document.getElementById('syllabus-step-review')?.classList.remove('hidden');
+  } catch (err) {
+    Logger.error('Syllabus analysis failed', err);
+    showToast(err.message || 'Syllabus analysis failed', 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.textContent = 'Analyze & Match Videos';
+  }
+}
+
+function renderSyllabusReviewScreen(data) {
+  // 1. Stats Bar
+  const matchedStat = document.getElementById('stat-syl-matched-count');
+  if (matchedStat) matchedStat.textContent = `${data.matched_lessons_count} / ${data.total_lessons}`;
+
+  const savedStat = document.getElementById('stat-syl-saved-time');
+  if (savedStat) {
+    const hours = Math.floor(data.saved_minutes / 60);
+    const mins = data.saved_minutes % 60;
+    savedStat.textContent = `${hours}h ${mins}m saved`;
+  }
+
+  const coverageStat = document.getElementById('stat-syl-coverage');
+  if (coverageStat) coverageStat.textContent = `${data.matched_percentage}%`;
+
+  // 2. View A: By Syllabus Topic
+  const topicsContainer = document.getElementById('syllabus-view-topics');
+  if (topicsContainer) {
+    const lessonMap = new Map(data.lessons.map(l => [l.id, l]));
+    topicsContainer.innerHTML = data.topics.map(t => {
+      const matchedLessons = t.matched_lesson_ids.map(id => lessonMap.get(id)).filter(Boolean);
+      return `
+        <div class="p-3 rounded-xl border border-border-subtle bg-bg-card space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <span class="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-accent-soft text-accent-soft-text font-bold">${escapeHtml(t.unit || 'Topic')}</span>
+              <span class="text-xs font-bold text-text-primary ml-1.5">${escapeHtml(t.topic)}</span>
+            </div>
+            <span class="text-[11px] font-semibold text-text-secondary">${matchedLessons.length} video${matchedLessons.length === 1 ? '' : 's'}</span>
+          </div>
+          ${matchedLessons.length > 0 ? `
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+              ${matchedLessons.map(l => `
+                <div class="p-1.5 rounded-lg bg-bg-canvas border border-border-subtle flex items-center justify-between text-[11px] gap-2">
+                  <span class="font-medium text-text-primary truncate" title="${escapeHtml(l.title)}">${escapeHtml(l.title)}</span>
+                  <span class="text-[10px] font-mono text-cyan-600 dark:text-cyan-400 shrink-0 font-medium">${formatDurationSec(l.raw_duration_sec)}</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : `
+            <p class="text-[11px] text-text-secondary italic">No playlist videos matched this specific topic directly.</p>
+          `}
+        </div>
+      `;
+    }).join('');
+  }
+
+  // 3. View B: All Videos Checklist
+  renderSyllabusChecklistView(data);
+  updateSyllabusSelectedCount();
+}
+
+function renderSyllabusChecklistView(data) {
+  const listContainer = document.getElementById('syllabus-view-checklist');
+  if (!listContainer) return;
+
+  listContainer.innerHTML = data.lessons.map(l => {
+    const isChecked = window.selectedSyllabusLessonIds.has(l.id);
+    const badge = l.is_matched
+      ? `<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 truncate" title="${escapeHtml(l.match_reason)}">✓ ${escapeHtml(l.match_reason)}</span>`
+      : `<span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-bg-canvas text-text-secondary border border-border-subtle">Out of Syllabus</span>`;
+
+    return `
+      <div class="py-2 px-2.5 rounded-lg flex items-center gap-3 hover:bg-bg-card transition cursor-pointer ${isChecked ? '' : 'opacity-50'}" onclick="window.toggleSyllabusLessonSelect('${l.id}')">
+        <input type="checkbox" class="rounded text-accent focus:ring-0 cursor-pointer" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); window.toggleSyllabusLessonSelect('${l.id}')">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-0.5">
+            <span class="font-semibold text-xs text-text-primary truncate ${isChecked ? '' : 'line-through text-text-secondary'}">${escapeHtml(l.title)}</span>
+            <span class="text-[10px] font-mono text-cyan-600 dark:text-cyan-400 shrink-0">${formatDurationSec(l.raw_duration_sec)}</span>
+          </div>
+          <div>${badge}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.toggleSyllabusLessonSelect = function(lessonId) {
+  if (window.selectedSyllabusLessonIds.has(lessonId)) {
+    window.selectedSyllabusLessonIds.delete(lessonId);
+  } else {
+    window.selectedSyllabusLessonIds.add(lessonId);
+  }
+  if (window.currentSyllabusMatch) {
+    renderSyllabusChecklistView(window.currentSyllabusMatch);
+  }
+  updateSyllabusSelectedCount();
+};
+
+function updateSyllabusSelectedCount() {
+  const count = window.selectedSyllabusLessonIds.size;
+  const label = document.getElementById('syllabus-selected-label');
+  if (label) label.textContent = `${count} video${count === 1 ? '' : 's'} selected`;
+}
+
+function switchSyllabusReviewTab(tab) {
+  const tabTopics = document.getElementById('tab-syl-topics');
+  const tabChecklist = document.getElementById('tab-syl-checklist');
+  const viewTopics = document.getElementById('syllabus-view-topics');
+  const viewChecklist = document.getElementById('syllabus-view-checklist');
+
+  const activeClasses = ['bg-accent', 'text-white', 'font-semibold'];
+  const inactiveClasses = ['text-text-secondary', 'hover:text-text-primary', 'font-medium'];
+
+  if (tab === 'topics') {
+    tabTopics?.classList.add(...activeClasses);
+    tabTopics?.classList.remove(...inactiveClasses);
+    tabChecklist?.classList.remove(...activeClasses);
+    tabChecklist?.classList.add(...inactiveClasses);
+    viewTopics?.classList.remove('hidden');
+    viewChecklist?.classList.add('hidden');
+  } else {
+    tabChecklist?.classList.add(...activeClasses);
+    tabChecklist?.classList.remove(...inactiveClasses);
+    tabTopics?.classList.remove(...activeClasses);
+    tabTopics?.classList.add(...inactiveClasses);
+    viewTopics?.classList.add('hidden');
+    viewChecklist?.classList.remove('hidden');
+  }
+}
+
+async function handleApplySyllabus() {
+  if (!currentCourseId) return;
+  const textarea = document.getElementById('input-syllabus-text');
+  const text = textarea ? textarea.value.trim() : '';
+
+  const selectedIds = Array.from(window.selectedSyllabusLessonIds);
+  if (selectedIds.length === 0) {
+    showToast('Please select at least 1 video to include in your study schedule.', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('btn-apply-syllabus');
+  const btnText = document.getElementById('btn-apply-syllabus-text');
+  if (btn) btn.disabled = true;
+  if (btnText) btnText.textContent = 'Applying & Rescheduling...';
+
+  try {
+    const res = await fetch(`/api/courses/${currentCourseId}/syllabus/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        syllabus_text: text,
+        included_lesson_ids: selectedIds,
+        strictness: window.syllabusStrictness || 'balanced',
+        regenerate_schedule: true,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to apply syllabus (status ${res.status})`);
+    }
+
+    const data = await res.json();
+    closeSyllabusModal();
+
+    // Reload course curriculum, drawer, and schedule
+    await loadLessons(currentCourseId);
+    await loadSchedule(currentCourseId);
+
+    showToast(`🎉 ${data.message || 'Syllabus aligned and schedule reflowed!'}`);
+  } catch (err) {
+    Logger.error('Failed to apply syllabus alignment', err);
+    showToast(err.message || 'Failed to apply syllabus alignment', 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.textContent = 'Apply & Auto-Reschedule Course';
+  }
+}
+
+window.openSyllabusModal = openSyllabusModal;
+window.closeSyllabusModal = closeSyllabusModal;
+window.handleAnalyzeSyllabus = handleAnalyzeSyllabus;
+window.handleApplySyllabus = handleApplySyllabus;
 
 async function loadQAHistory(courseId) {
   if (!courseId) return;
@@ -3296,9 +4195,9 @@ function renderQAThreads(threads) {
   if (!qaMessagesList) return;
   if (!threads || threads.length === 0) {
     qaMessagesList.innerHTML = `
-      <div class="p-3 bg-surface-900/80 rounded-xl border border-slate-800 text-xs text-slate-300">
-        <p class="font-bold text-white mb-1">Grounded Q&A Workspace</p>
-        <p class="text-slate-400 leading-relaxed">Ask any conceptual question, request a summary, or verify exam formulas. All answers cite exact verbatim source passages from YouTube transcripts, uploaded PDFs, and web articles.</p>
+      <div class="p-4 bg-bg-card rounded-2xl border border-dashed border-border-subtle text-xs text-text-secondary">
+        <p class="font-bold text-text-primary mb-1">Grounded Q&A Workspace</p>
+        <p class="text-text-secondary leading-relaxed">Ask any conceptual question, request a summary, or verify exam formulas. All answers cite exact verbatim source passages from YouTube transcripts, uploaded PDFs, and web articles.</p>
       </div>
     `;
     return;
@@ -3313,7 +4212,7 @@ function renderQAThreads(threads) {
     const qDiv = document.createElement('div');
     qDiv.className = 'flex items-start gap-2 justify-end';
     qDiv.innerHTML = `
-      <div class="bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-xs px-3.5 py-2 rounded-2xl rounded-tr-sm max-w-[85%] shadow-md">
+      <div class="bg-accent text-white text-xs sm:text-sm px-4 py-2.5 rounded-2xl rounded-tr-sm max-w-[85%] shadow-sm font-medium leading-relaxed">
         ${escapeHtml(t.query)}
       </div>
     `;
@@ -3327,11 +4226,11 @@ function renderQAThreads(threads) {
     let citationsHtml = '';
     if (t.citations && t.citations.length > 0) {
       citationsHtml = `
-        <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex flex-wrap gap-1.5">
-          <span class="text-[10px] text-slate-500 font-semibold uppercase shrink-0">Citations:</span>
+        <div class="mt-2.5 pt-2 border-t border-border-subtle flex flex-wrap gap-1.5">
+          <span class="text-[10px] text-text-secondary font-semibold uppercase shrink-0">Citations:</span>
           ${t.citations.map(c => {
             const timeTag = c.start_sec !== null && c.start_sec !== undefined ? ` [${formatDurationSec(c.start_sec)}]` : '';
-            return `<button type="button" data-timestamp-sec="${c.start_sec !== null && c.start_sec !== undefined ? c.start_sec : ''}" onclick="${c.start_sec !== null && c.start_sec !== undefined ? `window.seekToSeconds(${c.start_sec})` : ''}" class="qa-citation-badge inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-950 text-violet-300 border border-violet-800/50 font-mono text-[10px] hover:bg-violet-900 transition" title="${escapeHtml(c.excerpt)}">
+            return `<button type="button" data-timestamp-sec="${c.start_sec !== null && c.start_sec !== undefined ? c.start_sec : ''}" onclick="${c.start_sec !== null && c.start_sec !== undefined ? `window.seekToSeconds(${c.start_sec})` : ''}" class="qa-citation-badge inline-flex items-center gap-1 px-2 py-0.5 rounded bg-accent-soft text-accent-soft-text border border-border-subtle font-mono text-[10px] hover:bg-blue-200 dark:hover:bg-blue-900 transition" title="${escapeHtml(c.excerpt)}">
               <span>📌</span> ${escapeHtml(c.source_title)}${timeTag}
             </button>`;
           }).join('')}
@@ -3340,12 +4239,12 @@ function renderQAThreads(threads) {
     }
 
     aDiv.innerHTML = `
-      <div class="w-6 h-6 rounded-full bg-violet-950 border border-violet-700/60 text-violet-300 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">LM</div>
-      <div class="bg-surface-900 border border-slate-800 text-slate-200 text-xs px-3.5 py-2.5 rounded-2xl rounded-tl-sm max-w-[90%] shadow-lg space-y-1.5 leading-relaxed">
+      <div class="w-7 h-7 rounded-full bg-accent-soft border border-border-subtle text-accent-soft-text flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5">LM</div>
+      <div class="bg-bg-card border border-border-subtle text-text-primary text-[15px] sm:text-[16px] px-4 py-3 rounded-2xl rounded-tl-sm max-w-[92%] shadow-sm space-y-2 leading-[1.65]">
         ${answerHtml}
         ${citationsHtml}
-        <div class="mt-2 pt-2 border-t border-slate-800/80 flex justify-end">
-          <button type="button" class="btn-save-ai-reply inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-violet-300 hover:text-white text-[11px] font-medium transition active:scale-95 shadow-sm cursor-pointer" title="Save this AI answer into your personal notes">
+        <div class="mt-2 pt-2 border-t border-border-subtle flex justify-end">
+          <button type="button" class="btn-save-ai-reply inline-flex items-center gap-1 px-2.5 py-1 rounded bg-bg-canvas hover:bg-bg-sidebar text-text-secondary hover:text-text-primary border border-border-subtle text-[11px] font-medium transition active:scale-95 shadow-sm cursor-pointer" title="Save this AI answer into your personal notes">
             <span>📌</span>
             <span>Save to My Notes</span>
           </button>
@@ -3369,25 +4268,25 @@ function renderQAThreads(threads) {
 
 function formatGroundedAnswerHtml(markdown) {
   if (!markdown) return '';
-  let html = markdown
+  let text = stripConversationalIntro(markdown);
+  text = cleanCitationsAndTimestamps(text);
+
+  let html = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  // Citations [ref:chk_...] or UUID
-  html = html.replace(/\[ref:([a-zA-Z0-9_\-]+)\]/g, '<span class="text-violet-400 font-mono text-[10px] bg-surface-950 px-1 py-0.2 rounded border border-violet-900/60 font-semibold">[ref:$1]</span>');
-
   // Timestamps [MM:SS]
   html = html.replace(/\[(\d{1,2}):(\d{2})\]/g, (match, p1, p2) => {
     const s = parseInt(p1, 10) * 60 + parseInt(p2, 10);
-    return `<button type="button" data-timestamp-sec="${s}" onclick="window.seekToSeconds(${s})" class="inline-flex items-center font-mono text-[10px] font-bold text-violet-300 hover:text-white bg-violet-950/80 px-1 rounded border border-violet-700/50 cursor-pointer">▶ ${match}</button>`;
+    return `<button type="button" data-timestamp-sec="${s}" onclick="window.seekToSeconds(${s})" class="inline-flex items-center font-mono text-[11px] font-bold text-accent-soft-text hover:text-accent bg-accent-soft px-1.5 py-0.5 rounded border border-border-subtle cursor-pointer transition active:scale-95">▶ ${match}</button>`;
   });
 
   // Bullets
-  html = html.replace(/^- (.*$)/gim, '<div class="ml-2 flex items-start gap-1.5"><span class="text-violet-400 mt-0.5">•</span><span>$1</span></div>');
+  html = html.replace(/^- (.*$)/gim, '<div class="ml-2 flex items-start gap-1.5 my-1 text-[15px] sm:text-[16px] leading-[1.65]"><span class="text-accent mt-0.5">•</span><span>$1</span></div>');
 
   // Bold
-  html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-text-primary font-bold">$1</strong>');
   return html.replace(/\n\n/g, '<br>');
 }
 
@@ -3411,14 +4310,14 @@ async function handleAskQuestion(e) {
   tempMsg.className = 'space-y-2';
   tempMsg.innerHTML = `
     <div class="flex items-start gap-2 justify-end">
-      <div class="bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-xs px-3.5 py-2 rounded-2xl rounded-tr-sm max-w-[85%] shadow-md">
+      <div class="bg-accent text-white text-xs sm:text-sm px-4 py-2.5 rounded-2xl rounded-tr-sm max-w-[85%] shadow-sm font-medium leading-relaxed">
         ${escapeHtml(q)}
       </div>
     </div>
     <div class="flex items-start gap-2">
-      <div class="w-6 h-6 rounded-full bg-violet-950 border border-violet-700/60 text-violet-300 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">LM</div>
-      <div class="bg-surface-900 border border-slate-800 text-slate-400 text-xs px-3.5 py-2 rounded-2xl rounded-tl-sm flex items-center gap-2">
-        <div class="w-3.5 h-3.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin"></div>
+      <div class="w-7 h-7 rounded-full bg-accent-soft border border-border-subtle text-accent-soft-text flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5">LM</div>
+      <div class="bg-bg-card border border-border-subtle text-text-secondary text-xs px-3.5 py-2.5 rounded-2xl rounded-tl-sm flex items-center gap-2">
+        <div class="w-3.5 h-3.5 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
         <span>Searching FTS5 evidence chunks & synthesizing answer...</span>
       </div>
     </div>
@@ -3627,7 +4526,7 @@ function renderQuiz(quiz) {
               </span>
             ` : ''}
           </div>
-          <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-violet-950/80 text-violet-300 border border-violet-800/60 shrink-0">
+          <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-accent-soft text-accent-soft-text border border-border-subtle shrink-0">
             [${escapeHtml(q.chunk_id)}]
           </span>
         </div>
@@ -3674,14 +4573,17 @@ function renderQuiz(quiz) {
           <div class="space-y-1.5 pt-1">
             ${(q.options || []).map((opt, optIdx) => {
               let optClass = 'bg-surface-850 hover:bg-surface-800 border-slate-700/60 text-slate-300';
+              const isUserChoice = (q.user_answer !== undefined && q.user_answer !== null && parseInt(q.user_answer, 10) === optIdx);
               if (isCompleted) {
                 if (optIdx === q.correct_index) {
                   optClass = 'bg-emerald-950/70 border-emerald-700 text-emerald-200 font-semibold';
+                } else if (isUserChoice) {
+                  optClass = 'bg-rose-950/70 border-rose-700 text-rose-200 font-semibold';
                 }
               }
               return `
                 <label class="quiz-option-label flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition ${optClass}">
-                  <input type="radio" name="quiz_q_${q.id}" value="${optIdx}" ${isCompleted ? 'disabled' : ''} class="quiz-option-input text-amber-500 focus:ring-0">
+                  <input type="radio" name="quiz_q_${q.id}" value="${optIdx}" ${isUserChoice ? 'checked' : ''} ${isCompleted ? 'disabled' : ''} class="quiz-option-input text-amber-500 focus:ring-0">
                   <span class="leading-relaxed">${escapeHtml(opt)}</span>
                 </label>
               `;
@@ -3689,8 +4591,13 @@ function renderQuiz(quiz) {
           </div>
 
           ${isCompleted ? `
-            <div class="mt-2 pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 font-mono">
-              💡 ${escapeHtml(q.explanation)}
+            <div class="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
+              <div class="text-[11px] text-slate-400 font-mono flex-1 min-w-[200px]">
+                💡 ${escapeHtml(q.explanation)}
+              </div>
+              <button type="button" onclick="window.seekToSeconds(${q.timestamp_sec !== undefined && q.timestamp_sec !== null ? q.timestamp_sec : (q.start_sec || 0)})" class="replay-explanation-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-accent-soft text-accent-soft-text hover:bg-blue-200 dark:hover:bg-blue-900 border border-border-subtle font-mono text-[11px] font-semibold cursor-pointer transition active:scale-95 shadow-sm shrink-0" title="Replay Explanation in video">
+                <span>▶</span> Replay Explanation [${q.timestamp_str || (q.timestamp_sec ? formatSeconds(q.timestamp_sec) : '00:00')}]
+              </button>
             </div>
           ` : ''}
         `}
@@ -3766,6 +4673,7 @@ async function handleLessonQuizSubmit(e) {
       const checked = document.querySelector(`input[name="quiz_q_${q.id}"]:checked`);
       if (checked) {
         answers[q.id] = parseInt(checked.value, 10);
+        q.user_answer = parseInt(checked.value, 10);
       }
     }
   }
@@ -4010,7 +4918,7 @@ function updateDiagnosticTimerBadge() {
   const s = diagnosticSecondsLeft % 60;
   badge.textContent = `⏱️ ${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   if (diagnosticSecondsLeft <= 30) {
-    badge.className = 'text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-400/40 animate-pulse';
+    badge.className = 'text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 border border-red-400/40 animate-pulse';
   } else {
     badge.className = 'text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-400/40';
   }
@@ -4058,15 +4966,15 @@ async function openDiagnosticPreTest() {
     }
 
     diagnosticContentContainer.innerHTML = diagnosticQuiz.questions.map((q, idx) => `
-      <div class="p-4 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-3 transition hover:border-slate-300 dark:hover:border-slate-600">
+      <div class="p-4 bg-bg-card rounded-2xl border border-border-subtle space-y-3 transition hover:border-accent">
         <div class="flex items-start justify-between gap-3">
-          <span class="text-xs font-bold text-slate-900 dark:text-white leading-relaxed">${idx + 1}. ${escapeHtml(q.question)}</span>
-          <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 shrink-0">Topic ${idx + 1}</span>
+          <span class="text-xs font-bold text-text-primary leading-relaxed">${idx + 1}. ${escapeHtml(q.question)}</span>
+          <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-text border border-border-subtle shrink-0 max-w-[220px] truncate" title="${escapeHtml(q.topic_name || ('Topic ' + (idx + 1)))}">Topic ${idx + 1}: ${escapeHtml(q.topic_name || ('Topic ' + (idx + 1)))}</span>
         </div>
         <div class="space-y-2 pt-1">
           ${q.options.map((opt, optIdx) => `
-            <label class="diagnostic-option-card flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 hover:border-amber-400 dark:hover:border-amber-500 cursor-pointer transition active:scale-[0.99] select-none" onclick="window.selectDiagOption(this)">
-              <input type="radio" name="diag_q_${q.id}" value="${optIdx}" class="text-amber-500 focus:ring-0 cursor-pointer">
+            <label class="diagnostic-option-card flex items-center gap-3 p-3 rounded-xl border border-border-subtle bg-bg-canvas text-xs text-text-primary hover:border-accent cursor-pointer transition active:scale-[0.99] select-none" onclick="window.selectDiagOption(this)">
+              <input type="radio" name="diag_q_${q.id}" value="${optIdx}" class="text-accent focus:ring-0 cursor-pointer">
               <span class="flex-1">${escapeHtml(opt)}</span>
             </label>
           `).join('')}
@@ -4087,7 +4995,7 @@ async function openDiagnosticPreTest() {
 
   } catch (err) {
     Logger.error('Diagnostic generation failed', err);
-    diagnosticContentContainer.innerHTML = `<div class="p-6 text-xs text-rose-500 font-medium">Failed to load diagnostic test: ${escapeHtml(err.message)}</div>`;
+    diagnosticContentContainer.innerHTML = `<div class="p-6 text-xs text-red-500 font-medium">Failed to load diagnostic test: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -4130,23 +5038,36 @@ async function handleSubmitDiagnostic() {
     Logger.api('POST', `/api/courses/${currentCourseId}/quizzes/${diagnosticQuiz.id}/submit`, res.status, Math.round(performance.now() - t0), result);
 
     const testedOutCount = (result.tested_out_lessons || []).length;
+    const testedOutLessons = result.tested_out_lessons || [];
+    const testedOutTitles = (diagnosticQuiz.questions || [])
+      .filter(q => testedOutLessons.includes(q.lesson_id))
+      .map(q => q.topic_name)
+      .filter(Boolean);
 
     // Celebratory Results Screen
     diagnosticContentContainer.innerHTML = `
       <div class="py-8 px-4 text-center space-y-4">
-        <div class="w-16 h-16 mx-auto rounded-full bg-gradient-to-tr from-amber-500 to-emerald-500 flex items-center justify-center text-white text-2xl shadow-lg shadow-emerald-500/20">
+        <div class="w-16 h-16 mx-auto rounded-full bg-gradient-to-tr from-accent to-emerald-500 flex items-center justify-center text-white text-2xl shadow-lg shadow-emerald-500/20">
           ✓
         </div>
         <div>
-          <h3 class="text-lg font-bold text-slate-900 dark:text-white">Diagnostic Assessment Complete!</h3>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Score: <strong class="text-amber-600 dark:text-amber-400 text-sm font-mono">${result.score}%</strong> (${result.correct_count} of ${result.total_questions} questions correct)</p>
+          <h3 class="text-lg font-bold text-text-primary">Diagnostic Assessment Complete!</h3>
+          <p class="text-xs text-text-secondary mt-1">Score: <strong class="text-accent text-sm font-mono">${result.score}%</strong> (${result.correct_count} of ${result.total_questions} topics answered correctly)</p>
         </div>
         <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/80 max-w-md mx-auto text-xs text-emerald-800 dark:text-emerald-300">
           <div class="font-bold text-sm mb-1">🎉 ${testedOutCount} Topics Mastered & Tested Out!</div>
-          <p>These lessons have been removed from your active schedule, reclaiming effective study hours before your exam!</p>
+          <p>These lessons have been removed from your active study plan, shrinking your schedule and saving study time!</p>
+          ${testedOutTitles.length > 0 ? `
+            <div class="mt-2.5 pt-2 border-t border-emerald-200 dark:border-emerald-800 text-left">
+              <div class="font-semibold text-[11px] mb-1 text-emerald-900 dark:text-emerald-200">Tested-Out Syllabus Topics:</div>
+              <ul class="space-y-1 text-[11px]">
+                ${testedOutTitles.map(t => `<li class="flex items-center gap-1.5"><span class="text-emerald-600 dark:text-emerald-400 font-bold">✓</span><span>${escapeHtml(t)}</span></li>`).join('')}
+              </ul>
+            </div>
+          ` : ''}
         </div>
         <div class="pt-2">
-          <button id="btn-finish-diagnostic" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-emerald-500/20 transition active:scale-95">
+          <button id="btn-finish-diagnostic" class="bg-accent hover:bg-blue-600 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-md transition active:scale-95">
             Return to Updated Schedule
           </button>
         </div>

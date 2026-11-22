@@ -37,7 +37,7 @@ from backend.routers import (
 app = FastAPI(
     title="Learn LMS & Exam Prep API",
     description="Local-first autonomous personal LMS and exam-prep platform.",
-    version="0.6.0",
+    version="0.6.1",
 )
 
 # Enable CORS for local client development (restricted to local origins, no invalid wildcard+credentials)
@@ -120,7 +120,7 @@ def index_page(request: Request):
 
 @app.get("/healthz")
 def health_check():
-    return {"status": "ok", "version": "0.6.0"}
+    return {"status": "ok", "version": "0.6.1"}
 
 def export_openapi_spec(output_path: Path = BASE_DIR / "openapi.json"):
     """Dumps locked OpenAPI specification to openapi.json."""

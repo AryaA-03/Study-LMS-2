@@ -302,19 +302,25 @@ def test_ui_collapsible_studio_and_days(ui_test_server):
         btn_collapse_player.click()
         assert "hidden" not in (player_wrapper.get_attribute("class") or "").split()
 
-        # 2. Schedule Sidebar Collapse (Full-Width Studio)
+        # 2. Schedule Sidebar Collapse (Slim Chrome Rail)
         pane_schedule = page.locator("#pane-schedule")
-        pane_studio = page.locator("#pane-studio")
+        expanded_content = page.locator("#schedule-expanded-content")
+        collapsed_rail = page.locator("#schedule-collapsed-rail")
         assert pane_schedule.is_visible()
+        assert expanded_content.is_visible()
 
         btn_collapse_schedule = page.locator("#btn-collapse-schedule")
         btn_collapse_schedule.click()
-        assert not pane_schedule.is_visible()
-        assert "md:w-full" in (pane_studio.get_attribute("class") or "")
+        # When collapsed, pane-schedule is a slim 52px rail
+        assert "rail-collapsed" in (pane_schedule.get_attribute("class") or "")
+        assert collapsed_rail.is_visible()
+        assert not expanded_content.is_visible()
 
-        btn_collapse_schedule.click()
-        assert pane_schedule.is_visible()
-        assert "md:w-7/12" in (pane_studio.get_attribute("class") or "")
+        btn_expand_rail_top = page.locator("#btn-expand-rail-top")
+        btn_expand_rail_top.click()
+        assert "rail-collapsed" not in (pane_schedule.get_attribute("class") or "")
+        assert expanded_content.is_visible()
+        assert not collapsed_rail.is_visible()
 
         # 3. Collapse All Days
         btn_collapse_all = page.locator("#btn-toggle-collapse-all")
@@ -509,6 +515,7 @@ def test_ui_diagnostic_pre_test_3m_flow(ui_test_server):
         page = browser.new_page(viewport={"width": 1440, "height": 900})
 
         page.goto(ui_test_server)
+        page.wait_for_selector(".day-group-card")
         page.wait_for_selector("#btn-diagnostic-test")
 
         # 1. Click Diagnostic button
@@ -709,5 +716,244 @@ def test_ui_pyq_upload_and_cram_sheet_print(ui_test_server):
         # 8. Filter harmless network / favicon console errors and verify zero app errors
         critical_errors = [e for e in console_errors if "favicon" not in e and "video" not in e]
         assert len(critical_errors) == 0, f"Unexpected console errors: {critical_errors}"
+
+        browser.close()
+
+
+def test_ui_notes_pane_height_retention_on_rail_collapse(ui_test_server):
+    """Verifies notes pane retains >= 55% of viewport height when left rail collapses in both Day and Dark modes."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        page.goto(ui_test_server)
+        page.wait_for_selector(".day-group-card")
+
+        # Test both Day (Light) and Dark modes
+        for mode in ["light", "dark"]:
+            is_dark = (mode == "dark")
+            page.evaluate(f"() => window.learnLMS.toggleTheme ? (document.documentElement.classList.toggle('dark', {str(is_dark).lower()}), document.documentElement.classList.toggle('light', {str(not is_dark).lower()})) : null")
+
+            # 1. Expanded rail check
+            notes_height_expanded = page.evaluate("() => document.getElementById('pane-grounded-notes').getBoundingClientRect().height")
+            viewport_height = page.evaluate("() => window.innerHeight")
+            ratio_expanded = notes_height_expanded / viewport_height
+            assert ratio_expanded >= 0.50, f"Notes pane ratio in {mode} (expanded) too small: {ratio_expanded:.2%}"
+
+            # 2. Collapse left rail
+            page.click("#btn-collapse-schedule")
+            page.wait_for_selector("#pane-schedule.rail-collapsed")
+
+            # Verify notes pane retains >= 55% of viewport height
+            notes_height_collapsed = page.evaluate("() => document.getElementById('pane-grounded-notes').getBoundingClientRect().height")
+            ratio_collapsed = notes_height_collapsed / viewport_height
+            assert ratio_collapsed >= 0.55, f"Notes pane ratio in {mode} (collapsed) must be >= 55%, got {ratio_collapsed:.2%}"
+
+            # 3. Expand rail back
+            page.click("#btn-expand-rail-top")
+            page.wait_for_selector("#pane-schedule:not(.rail-collapsed)")
+
+        browser.close()
+
+
+def test_ui_dual_splitters_resize_and_persistence(ui_test_server):
+    """Verifies dragging horizontal & vertical splitters resizes panes and persists across page reloads."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        page.goto(ui_test_server)
+        page.wait_for_selector(".day-group-card")
+        page.wait_for_selector("#video-notes-splitter")
+
+        # --- A. Horizontal Splitter (Video vs Notes) ---
+        splitter_h = page.locator("#video-notes-splitter")
+        box_h = splitter_h.bounding_box()
+        assert box_h is not None
+
+        # Drag horizontal splitter down by 60px
+        page.mouse.move(box_h["x"] + box_h["width"] / 2, box_h["y"] + box_h["height"] / 2)
+        page.mouse.down()
+        page.mouse.move(box_h["x"] + box_h["width"] / 2, box_h["y"] + box_h["height"] / 2 + 60, steps=5)
+        page.mouse.up()
+
+        # Check saved height in localStorage
+        saved_h = page.evaluate("() => localStorage.getItem('lms_video_pane_height')")
+        assert saved_h is not None and "px" in saved_h
+
+        # Quick Snap Compact Button (25vh)
+        page.click("#snap-compact-video")
+        height_compact = page.evaluate("() => localStorage.getItem('lms_video_pane_height')")
+        assert height_compact == "25vh"
+
+        # Double-click to reset to 34vh
+        splitter_h.dblclick()
+        height_reset = page.evaluate("() => localStorage.getItem('lms_video_pane_height')")
+        assert height_reset == "34vh"
+
+        # --- B. Vertical Splitter (Center Column vs Right Studio Panel) ---
+        splitter_v = page.locator("#studio-splitter")
+        box_v = splitter_v.bounding_box()
+        assert box_v is not None
+
+        # Drag vertical splitter left by 50px (increasing right studio width)
+        initial_w = page.evaluate("() => document.getElementById('pane-right-studio').getBoundingClientRect().width")
+        page.mouse.move(box_v["x"] + box_v["width"] / 2, box_v["y"] + box_v["height"] / 2)
+        page.mouse.down()
+        page.mouse.move(box_v["x"] + box_v["width"] / 2 - 50, box_v["y"] + box_v["height"] / 2, steps=5)
+        page.mouse.up()
+
+        new_w = page.evaluate("() => document.getElementById('pane-right-studio').getBoundingClientRect().width")
+        assert new_w > initial_w
+
+        saved_w = page.evaluate("() => localStorage.getItem('lms_studio_panel_width')")
+        assert saved_w is not None and "px" in saved_w
+
+        # Reload page and verify width persists
+        page.reload()
+        page.wait_for_selector(".day-group-card")
+        page.wait_for_selector("#pane-right-studio")
+
+        restored_w = page.evaluate("() => document.getElementById('pane-right-studio').style.width")
+        assert restored_w == saved_w
+
+        # Double-click vertical splitter to reset to 380px
+        page.locator("#studio-splitter").dblclick()
+        assert page.evaluate("() => localStorage.getItem('lms_studio_panel_width')") == "380px"
+
+        # --- C. Studio Collapse Toggle in Top Bar ---
+        btn_toggle_studio = page.locator("#btn-toggle-studio")
+        btn_toggle_studio.click()
+        assert page.evaluate("() => document.getElementById('pane-right-studio').classList.contains('hidden')")
+        assert page.evaluate("() => localStorage.getItem('lms_studio_collapsed')") == "true"
+
+        # Reload and verify collapsed persists
+        page.reload()
+        page.wait_for_selector(".day-group-card")
+        assert page.evaluate("() => document.getElementById('pane-right-studio').classList.contains('hidden')")
+
+        # Expand studio back
+        page.locator("#btn-toggle-studio").click()
+        assert not page.evaluate("() => document.getElementById('pane-right-studio').classList.contains('hidden')")
+
+        browser.close()
+
+
+def test_ui_wcag_contrast_and_zero_purple_palette(ui_test_server):
+    """Verifies WCAG contrast >= 4.5:1 on AI chat bubbles and citations in Day Mode, and zero purple/pink colors in DOM."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        page.goto(ui_test_server)
+        page.wait_for_selector(".day-group-card")
+
+        # Switch to Day Mode
+        page.evaluate("() => { document.documentElement.classList.remove('dark'); document.documentElement.classList.add('light'); localStorage.setItem('learn_lms_theme', 'light'); }")
+
+        # 1. Switch to Q&A tab and render sample threads
+        page.click("#tab-qa-notebook")
+        page.wait_for_selector("#pane-qa-notebook:not(.hidden)")
+
+        sample_qa_script = """
+        () => {
+            window.renderQAThreads([
+                {
+                    query: "What is the difference between DFA and NFA?",
+                    answer_markdown: "A **Deterministic Finite Automaton (DFA)** has exactly one transition per symbol. [00:00]\\n\\n- Each state transitions deterministically.\\n- Requires no backtracking.",
+                    citations: [
+                        { source_title: "TOC Lecture 1", start_sec: 0, excerpt: "DFA formal definition." }
+                    ]
+                }
+            ]);
+        }
+        """
+        page.evaluate(sample_qa_script)
+        page.wait_for_selector(".qa-answer-bubble")
+
+        # 2. Check WCAG 2.1 Contrast (>= 4.5:1) in Day Mode
+        contrast_check_script = """
+        () => {
+            function parseRgb(colorStr) {
+                const match = colorStr.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);
+                if (!match) return [0, 0, 0];
+                return [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])];
+            }
+            function luminance(r, g, b) {
+                const a = [r, g, b].map(v => {
+                    v /= 255;
+                    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+                });
+                return a[0] * 0.2126 + a[1] * 0.7152 + a[2] * 0.0722;
+            }
+            function getContrast(rgb1, rgb2) {
+                const lum1 = luminance(rgb1[0], rgb1[1], rgb1[2]);
+                const lum2 = luminance(rgb2[0], rgb2[1], rgb2[2]);
+                const brightest = Math.max(lum1, lum2);
+                const darkest = Math.min(lum1, lum2);
+                return (brightest + 0.05) / (darkest + 0.05);
+            }
+
+            const bubble = document.querySelector('.qa-answer-bubble > div:nth-child(2)');
+            const bubbleStyle = window.getComputedStyle(bubble);
+            const bgRgb = parseRgb(bubbleStyle.backgroundColor);
+            const textRgb = parseRgb(bubbleStyle.color);
+            const textContrast = getContrast(bgRgb, textRgb);
+
+            const strongEl = bubble.querySelector('strong');
+            const strongStyle = window.getComputedStyle(strongEl);
+            const strongRgb = parseRgb(strongStyle.color);
+            const strongContrast = getContrast(bgRgb, strongRgb);
+
+            const badgeEl = bubble.querySelector('.qa-citation-badge');
+            const badgeStyle = window.getComputedStyle(badgeEl);
+            const badgeBg = parseRgb(badgeStyle.backgroundColor);
+            const badgeText = parseRgb(badgeStyle.color);
+            const badgeContrast = getContrast(badgeBg, badgeText);
+
+            return {
+                textContrast,
+                strongContrast,
+                badgeContrast,
+                bubbleBg: bubbleStyle.backgroundColor,
+                bubbleText: bubbleStyle.color,
+                strongColor: strongStyle.color
+            };
+        }
+        """
+        contrast_result = page.evaluate(contrast_check_script)
+        assert contrast_result["textContrast"] >= 4.5, f"Normal text contrast {contrast_result['textContrast']:.2f} < 4.5:1 (bg: {contrast_result['bubbleBg']}, text: {contrast_result['bubbleText']})"
+        assert contrast_result["strongContrast"] >= 4.5, f"Bold text contrast {contrast_result['strongContrast']:.2f} < 4.5:1 (bg: {contrast_result['bubbleBg']}, strong: {contrast_result['strongColor']})"
+        assert contrast_result["badgeContrast"] >= 4.5, f"Citation badge contrast {contrast_result['badgeContrast']:.2f} < 4.5:1"
+
+        # 3. Verify Zero Purple / Pink in the Entire DOM
+        zero_purple_check_script = """
+        () => {
+            const elements = document.querySelectorAll('*');
+            const violations = [];
+            const purpleHues = [
+                '#6366f1', '#7c3aed', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e',
+                'rgb(99, 102, 241)', 'rgb(124, 58, 237)', 'rgb(139, 92, 246)'
+            ];
+
+            for (const el of elements) {
+                // Check class names
+                const cls = (el.className && typeof el.className === 'string') ? el.className.toLowerCase() : '';
+                if (cls.includes('indigo') || cls.includes('purple') || cls.includes('violet')) {
+                    violations.push({ tag: el.tagName, id: el.id, class: cls });
+                }
+
+                // Check computed colors
+                const cs = window.getComputedStyle(el);
+                const bg = cs.backgroundColor.toLowerCase();
+                const col = cs.color.toLowerCase();
+                for (const ph of purpleHues) {
+                    if (bg.includes(ph) || col.includes(ph)) {
+                        violations.push({ tag: el.tagName, id: el.id, colorMatch: ph });
+                    }
+                }
+            }
+            return violations;
+        }
+        """
+        violations = page.evaluate(zero_purple_check_script)
+        assert len(violations) == 0, f"Found purple/pink color violations in DOM: {violations[:10]}"
 
         browser.close()

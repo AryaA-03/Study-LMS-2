@@ -155,18 +155,35 @@ async def capture_lesson_keyframes(
         if captured:
             # Relative web URL for serving
             relative_url = f"/api/screenshots/{course_id}/{lesson_id}/{file_name}"
-            shot_id = f"kf_{uuid.uuid4().hex[:10]}"
             m, s = divmod(ts, 60)
             caption = f"Keyframe at {m:02d}:{s:02d}"
 
-            # Persist in DB
-            db_conn.execute(
-                """
-                INSERT OR REPLACE INTO screenshots (id, course_id, lesson_id, timestamp_sec, file_path, caption)
-                VALUES (?, ?, ?, ?, ?, ?);
-                """,
-                (shot_id, course_id, lesson_id, ts, str(file_path), caption)
+            # Persist in DB idempotently (prevent duplicate records for same timestamp)
+            cur = db_conn.cursor()
+            cur.execute(
+                "SELECT id FROM screenshots WHERE lesson_id = ? AND timestamp_sec = ?;",
+                (lesson_id, ts)
             )
+            existing_shot = cur.fetchone()
+            if existing_shot:
+                shot_id = existing_shot[0]
+                db_conn.execute(
+                    """
+                    UPDATE screenshots
+                    SET file_path = ?, caption = ?
+                    WHERE id = ?;
+                    """,
+                    (str(file_path), caption, shot_id)
+                )
+            else:
+                shot_id = f"kf_{uuid.uuid4().hex[:10]}"
+                db_conn.execute(
+                    """
+                    INSERT INTO screenshots (id, course_id, lesson_id, timestamp_sec, file_path, caption)
+                    VALUES (?, ?, ?, ?, ?, ?);
+                    """,
+                    (shot_id, course_id, lesson_id, ts, str(file_path), caption)
+                )
             results.append({
                 "id": shot_id,
                 "timestamp_sec": ts,

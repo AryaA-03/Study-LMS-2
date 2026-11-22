@@ -21,14 +21,22 @@ from backend.models.schemas import (
     CandidateDiscoveryResponse,
     LessonFilterRequest,
     ManualTranscriptRequest,
+    SyllabusMatchRequest,
+    SyllabusMatchResponse,
+    SyllabusApplyRequest,
+    SyllabusApplyResponse,
+    SyllabusInfoResponse,
 )
 from backend.services.youtube import (
     discover_candidates,
     extract_metadata,
     split_video_into_lessons,
 )
-from backend.scheduler.engine import calculate_effective_minutes, get_study_dates, is_rest_day, default_clock
+from backend.services.concept_partitioner import partition_video
+from backend.services.study_bundle import generate_initial_concept_bundles
+from backend.scheduler.engine import calculate_effective_minutes, get_study_dates, is_rest_day, default_clock, generate_schedule
 from backend.services.notes import get_or_generate_lesson_notes
+from backend.services.syllabus_matcher import match_syllabus_to_course
 
 logger = logging.getLogger("learn_lms.courses")
 router = APIRouter(prefix="/api/courses", tags=["courses"])
@@ -37,15 +45,30 @@ router = APIRouter(prefix="/api/courses", tags=["courses"])
 def _get_background_db(db: Optional[sqlite3.Connection] = None):
     """Context manager providing an active SQLite connection for background tasks.
     
-    Uses the dependency_overrides if set (for tests), otherwise opens a fresh
-    connection via get_db_context. Avoids circular import of backend.main.
+    Uses dependency_overrides if set (for tests), otherwise opens a fresh
+    connection via get_db_context.
     """
     if db is not None:
         yield db
         return
 
-    with get_db_context() as conn:
-        yield conn
+    import sys
+    main_mod = sys.modules.get("backend.main")
+    app = getattr(main_mod, "app", None) if main_mod else None
+    if app and get_db in getattr(app, "dependency_overrides", {}):
+        override_fn = app.dependency_overrides[get_db]
+        gen = override_fn()
+        conn = next(gen)
+        try:
+            yield conn
+        finally:
+            try:
+                next(gen)
+            except StopIteration:
+                pass
+    else:
+        with get_db_context() as conn:
+            yield conn
 
 async def pregenerate_initial_notes(course_id: str, db: Optional[sqlite3.Connection] = None) -> None:
     """Pre-generates structured notes for the first 3 lessons in order (by order_index ASC)
@@ -97,12 +120,14 @@ def create_course(
     strategy = req.schedule_strategy or "paced"
     logger.info(f"[Courses] Creating new course '{req.title}' (Strategy: {strategy}, Target: {req.target_date})")
 
+    preferred_mins = req.preferred_daily_minutes or req.minutes_per_day or 60
     db.execute(
         """
         INSERT INTO courses (
             id, title, goal_query, source_preferences, target_date,
-            minutes_per_day, playback_speed, rest_days, revision_buffer_days, schedule_strategy
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            minutes_per_day, playback_speed, rest_days, revision_buffer_days, schedule_strategy,
+            num_study_days, preferred_daily_minutes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """,
         (
             course_id,
@@ -115,6 +140,8 @@ def create_course(
             rest_days_json,
             req.revision_buffer_days,
             strategy,
+            req.num_study_days,
+            preferred_mins,
         ),
     )
     return get_course(course_id, db)
@@ -155,6 +182,7 @@ def get_course(course_id: str, db: sqlite3.Connection = Depends(get_db)):
     return compute_course_stats(row, db)
 
 @router.patch("/{course_id}", response_model=CourseResponse)
+@router.put("/{course_id}", response_model=CourseResponse)
 def update_course(
     course_id: str,
     req: CourseUpdateRequest,
@@ -187,10 +215,17 @@ def update_course(
     if req.schedule_strategy is not None:
         updates.append("schedule_strategy = ?")
         params.append(req.schedule_strategy)
+    if req.num_study_days is not None:
+        updates.append("num_study_days = ?")
+        params.append(req.num_study_days)
+    if req.preferred_daily_minutes is not None:
+        updates.append("preferred_daily_minutes = ?")
+        params.append(req.preferred_daily_minutes)
 
     if updates:
         params.append(course_id)
         db.execute(f"UPDATE courses SET {', '.join(updates)} WHERE id = ?;", params)
+        db.commit()
 
     return get_course(course_id, db)
 
@@ -267,6 +302,8 @@ def compute_course_stats(
         projected_finish_date=projected,
         is_behind_schedule=is_behind,
         effective_daily_target_minutes=daily_target,
+        num_study_days=course_row["num_study_days"] if "num_study_days" in course_row.keys() else None,
+        preferred_daily_minutes=course_row["preferred_daily_minutes"] if "preferred_daily_minutes" in course_row.keys() else 60,
         created_at=str(course_row["created_at"]),
     )
 
@@ -397,20 +434,19 @@ def create_lessons_from_meta(
         for idx, entry in enumerate(entries):
             if not entry:
                 continue
-            lessons = split_video_into_lessons(entry, db_conn=db)
-            for l in lessons:
-                lid = str(uuid.uuid4())
-                # Auto-detect if title sounds like an example or exercise
-                t_lower = l["title"].lower()
-                is_example = any(kw in t_lower for kw in ["example", "problem", "question", "gate", "exercise", "practice"])
-                priority = "deep-dive" if is_example else l.get("priority", "core")
+            entry_copy = dict(entry)
+            entry_copy["source_id"] = source_id
+            clips = partition_video(entry_copy, transcript_data=None, mode="auto", db_conn=db)
+            for l in clips:
+                lid = l.get("id") or str(uuid.uuid4())
+                priority_tag = l.get("priority_tag") or l.get("priority", "core")
 
                 db.execute(
                     """
                     INSERT INTO lessons (
                         id, course_id, source_id, title, summary, video_id, video_url,
-                        start_sec, end_sec, raw_duration_sec, priority, order_index, chapter_title, is_excluded
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);
+                        start_sec, end_sec, raw_duration_sec, priority, priority_tag, status, order_index, chapter_title, is_excluded
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'not_started', ?, ?, 0);
                     """,
                     (
                         lid,
@@ -423,27 +459,46 @@ def create_lessons_from_meta(
                         l["start_sec"],
                         l["end_sec"],
                         l["raw_duration_sec"],
-                        priority,
+                        priority_tag,
+                        priority_tag,
                         len(created_lesson_ids),
                         l.get("chapter_title", ""),
+                    ),
+                )
+                db.execute(
+                    """
+                    INSERT OR REPLACE INTO concept_clips (
+                        id, course_id, source_id, order_index, title, start_sec, end_sec, raw_duration_sec, priority_tag, status
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'not_started');
+                    """,
+                    (
+                        lid,
+                        course_id,
+                        source_id,
+                        len(created_lesson_ids),
+                        l["title"],
+                        l["start_sec"],
+                        l["end_sec"],
+                        l["raw_duration_sec"],
+                        priority_tag,
                     ),
                 )
                 created_lesson_ids.append(lid)
     else:
         # Single video
-        lessons = split_video_into_lessons(meta, db_conn=db)
-        for l in lessons:
-            lid = str(uuid.uuid4())
-            t_lower = l["title"].lower()
-            is_example = any(kw in t_lower for kw in ["example", "problem", "question", "gate", "exercise", "practice"])
-            priority = "deep-dive" if is_example else l.get("priority", "core")
+        meta_copy = dict(meta)
+        meta_copy["source_id"] = source_id
+        clips = partition_video(meta_copy, transcript_data=None, mode="auto", db_conn=db)
+        for l in clips:
+            lid = l.get("id") or str(uuid.uuid4())
+            priority_tag = l.get("priority_tag") or l.get("priority", "core")
 
             db.execute(
                 """
                 INSERT INTO lessons (
                     id, course_id, source_id, title, summary, video_id, video_url,
-                    start_sec, end_sec, raw_duration_sec, priority, order_index, chapter_title, is_excluded
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);
+                    start_sec, end_sec, raw_duration_sec, priority, priority_tag, status, order_index, chapter_title, is_excluded
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'not_started', ?, ?, 0);
                 """,
                 (
                     lid,
@@ -456,9 +511,28 @@ def create_lessons_from_meta(
                     l["start_sec"],
                     l["end_sec"],
                     l["raw_duration_sec"],
-                    priority,
+                    priority_tag,
+                    priority_tag,
                     len(created_lesson_ids),
                     l.get("chapter_title", ""),
+                ),
+            )
+            db.execute(
+                """
+                INSERT OR REPLACE INTO concept_clips (
+                    id, course_id, source_id, order_index, title, start_sec, end_sec, raw_duration_sec, priority_tag, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'not_started');
+                """,
+                (
+                    lid,
+                    course_id,
+                    source_id,
+                    len(created_lesson_ids),
+                    l["title"],
+                    l["start_sec"],
+                    l["end_sec"],
+                    l["raw_duration_sec"],
+                    priority_tag,
                 ),
             )
             created_lesson_ids.append(lid)
@@ -517,7 +591,7 @@ def approve_sources(
         approved_sources.append(get_source_by_id(sid, db))
 
     if req.source_ids_to_approve:
-        background_tasks.add_task(pregenerate_initial_notes, course_id)
+        background_tasks.add_task(generate_initial_concept_bundles, course_id)
 
     return approved_sources
 
@@ -528,21 +602,74 @@ def filter_course_lessons(
     req: LessonFilterRequest,
     db: sqlite3.Connection = Depends(get_db),
 ):
-    """Smart filtering to include/exclude question & example videos or specific lessons."""
+    """Smart filtering to include/exclude question & example videos, concepts, or specific lessons."""
     course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
 
-    # If include_examples is explicitly given
-    if req.include_examples is not None:
-        kw_patterns = ["%example%", "%problem%", "%question%", "%exercise%", "%practice%"]
-        where_clause = " OR ".join(["LOWER(title) LIKE ?" for _ in kw_patterns])
-        exclude_val = 0 if req.include_examples else 1
+    kw_patterns = [
+        "%example%", "%examples%",
+        "%problem%", "%problems%",
+        "%question%", "%questions%",
+        "%exercise%", "%exercises%",
+        "%practice%",
+        "%project%", "%projects%",
+        "%practical%", "%practicals%",
+        "%application%", "%applications%",
+        "%code%", "%coding%", "%implementation%",
+        "%lab%", "%hands-on%", "%walkthrough%",
+        "%solved%", "%solution%", "%solutions%",
+        "%numerical%", "%numericals%",
+        "%pyq%", "%gate%",
+        "%demo%", "%demonstration%",
+        "%assignment%",
+    ]
+    where_clause = " OR ".join(["LOWER(title) LIKE ?" for _ in kw_patterns])
+
+    mode = req.filter_mode
+    if mode is None and req.include_examples is not None:
+        mode = "all" if req.include_examples is True else "concepts"
+
+    if mode == "all":
         db.execute(
-            f"UPDATE lessons SET is_excluded = ? WHERE course_id = ? AND ({where_clause});",
-            [exclude_val, course_id] + kw_patterns,
+            "UPDATE lessons SET is_excluded = 0 WHERE course_id = ?;",
+            (course_id,)
         )
-        logger.info(f"[Courses] Filtered example videos in course {course_id} (include_examples={req.include_examples})")
+        logger.info(f"[Courses] Filtered course {course_id} to 'all' (every video included)")
+    elif mode == "concepts":
+        c_concepts = db.execute(
+            f"SELECT COUNT(*) FROM lessons WHERE course_id = ? AND NOT ({where_clause});",
+            [course_id] + kw_patterns,
+        ).fetchone()[0]
+        if c_concepts == 0:
+            raise HTTPException(status_code=400, detail="No theory or concept lessons found in this course.")
+        # Include pure concepts/theory, exclude examples/applications
+        db.execute(
+            f"UPDATE lessons SET is_excluded = 0 WHERE course_id = ? AND NOT ({where_clause});",
+            [course_id] + kw_patterns,
+        )
+        db.execute(
+            f"UPDATE lessons SET is_excluded = 1 WHERE course_id = ? AND ({where_clause});",
+            [course_id] + kw_patterns,
+        )
+        logger.info(f"[Courses] Filtered course {course_id} to 'concepts' only (examples/applications excluded)")
+    elif mode == "examples":
+        c_examples = db.execute(
+            f"SELECT COUNT(*) FROM lessons WHERE course_id = ? AND ({where_clause});",
+            [course_id] + kw_patterns,
+        ).fetchone()[0]
+        if c_examples == 0:
+            raise HTTPException(status_code=400, detail="No practical examples or application lessons found in this course.")
+        # Include examples/applications, exclude pure concepts/theory
+        db.execute(
+            f"UPDATE lessons SET is_excluded = 0 WHERE course_id = ? AND ({where_clause});",
+            [course_id] + kw_patterns,
+        )
+        db.execute(
+            f"UPDATE lessons SET is_excluded = 1 WHERE course_id = ? AND NOT ({where_clause});",
+            [course_id] + kw_patterns,
+        )
+        logger.info(f"[Courses] Filtered course {course_id} to 'examples' only (theory/concepts excluded)")
 
     if req.lesson_ids_to_include:
         placeholders = ",".join("?" * len(req.lesson_ids_to_include))
@@ -593,7 +720,143 @@ def toggle_lesson_exclusion(
         is_excluded=bool(updated["is_excluded"]),
     )
 
+# --- Syllabus Alignment Endpoints ---
+@router.post("/{course_id}/syllabus/match", response_model=SyllabusMatchResponse)
+def match_course_syllabus(
+    course_id: str,
+    req: SyllabusMatchRequest,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Parses pasted syllabus text and automatically identifies matching course videos."""
+    course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    try:
+        match_data = match_syllabus_to_course(
+            course_id=course_id,
+            syllabus_text=req.syllabus_text,
+            strictness=req.strictness or "balanced",
+            db=db,
+        )
+        return SyllabusMatchResponse(**match_data)
+    except Exception as e:
+        logger.error(f"[Courses] Syllabus matching error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/{course_id}/syllabus/apply", response_model=SyllabusApplyResponse)
+def apply_syllabus_alignment(
+    course_id: str,
+    req: SyllabusApplyRequest,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Applies the selected syllabus-matched lessons, excluding out-of-syllabus videos and reflowing schedule."""
+    course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    if not req.included_lesson_ids:
+        raise HTTPException(status_code=400, detail="Cannot apply empty selection. At least 1 matching video must be selected.")
+
+    # 1. Update lesson exclusion states
+    placeholders = ",".join(["?"] * len(req.included_lesson_ids))
+    db.execute(
+        f"UPDATE lessons SET is_excluded = 0 WHERE course_id = ? AND id IN ({placeholders});",
+        [course_id] + req.included_lesson_ids,
+    )
+    db.execute(
+        f"UPDATE lessons SET is_excluded = 1 WHERE course_id = ? AND id NOT IN ({placeholders});",
+        [course_id] + req.included_lesson_ids,
+    )
+
+    # 2. Persist syllabus text and alignment metadata
+    meta = json.dumps({
+        "matched_count": len(req.included_lesson_ids),
+        "strictness": req.strictness,
+        "applied_at": datetime.now().isoformat(),
+    })
+    try:
+        db.execute(
+            "UPDATE courses SET syllabus_text = ?, syllabus_metadata = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;",
+            (req.syllabus_text, meta, course_id),
+        )
+    except Exception as e:
+        logger.warning(f"[Courses] Could not save syllabus text to course row: {e}")
+
+    # 3. Auto-regenerate schedule
+    schedule_reflowed = False
+    if req.regenerate_schedule:
+        try:
+            active_lessons = db.execute(
+                "SELECT * FROM lessons WHERE course_id = ? AND is_excluded = 0 ORDER BY order_index ASC;",
+                (course_id,),
+            ).fetchall()
+            if active_lessons:
+                lesson_dicts = [dict(l) for l in active_lessons]
+                rest_days = json.loads(course["rest_days"]) if course["rest_days"] else []
+                target_d = datetime.strptime(course["target_date"], "%Y-%m-%d").date()
+                today = default_clock()
+                strategy = course["schedule_strategy"] if "schedule_strategy" in course.keys() else "paced"
+
+                sched_result = generate_schedule(
+                    course_id=course_id,
+                    lessons=lesson_dicts,
+                    start_date=today,
+                    target_date=target_d,
+                    minutes_per_day=course["minutes_per_day"],
+                    playback_speed=course["playback_speed"],
+                    rest_days=rest_days,
+                    revision_buffer_days=course["revision_buffer_days"],
+                    schedule_strategy=strategy,
+                )
+                db.execute("DELETE FROM schedule_allocations WHERE course_id = ?;", (course_id,))
+                for a in sched_result["allocations"]:
+                    db.execute(
+                        """
+                        INSERT INTO schedule_allocations (
+                            id, course_id, lesson_id, scheduled_date, split_index, split_count,
+                            allocated_start_sec, allocated_end_sec, effective_minutes, is_completed, is_skipped
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0);
+                        """,
+                        (a.id, course_id, a.lesson_id, a.scheduled_date, a.split_index, a.split_count, a.allocated_start_sec, a.allocated_end_sec, a.effective_minutes)
+                    )
+                schedule_reflowed = True
+        except Exception as e:
+            logger.warning(f"[Courses] Could not regenerate schedule during syllabus apply: {e}")
+
+    inc_count = db.execute("SELECT COUNT(*) FROM lessons WHERE course_id = ? AND is_excluded = 0;", (course_id,)).fetchone()[0]
+    exc_count = db.execute("SELECT COUNT(*) FROM lessons WHERE course_id = ? AND is_excluded = 1;", (course_id,)).fetchone()[0]
+
+    return SyllabusApplyResponse(
+        course_id=course_id,
+        included_count=inc_count,
+        excluded_count=exc_count,
+        schedule_reflowed=schedule_reflowed,
+        message=f"Syllabus successfully applied! {inc_count} videos matched & scheduled ({exc_count} out-of-syllabus videos excluded)."
+    )
+
+@router.get("/{course_id}/syllabus", response_model=SyllabusInfoResponse)
+def get_course_syllabus(course_id: str, db: sqlite3.Connection = Depends(get_db)):
+    """Retrieves previously saved syllabus text and metadata for a course."""
+    course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    meta = None
+    if "syllabus_metadata" in course.keys() and course["syllabus_metadata"]:
+        try:
+            meta = json.loads(course["syllabus_metadata"])
+        except Exception:
+            pass
+
+    return SyllabusInfoResponse(
+        course_id=course_id,
+        syllabus_text=course["syllabus_text"] if "syllabus_text" in course.keys() else None,
+        syllabus_metadata=meta,
+    )
+
 @router.patch("/{course_id}/lessons/{lesson_id}", response_model=LessonResponse)
+@router.put("/{course_id}/lessons/{lesson_id}", response_model=LessonResponse)
 def update_lesson(
     course_id: str,
     lesson_id: str,
@@ -624,6 +887,7 @@ def update_lesson(
             f"UPDATE lessons SET {', '.join(updates)} WHERE id = ? AND course_id = ?;",
             params,
         )
+        db.commit()
 
     updated = db.execute(
         "SELECT * FROM lessons WHERE id = ? AND course_id = ?;", (lesson_id, course_id)

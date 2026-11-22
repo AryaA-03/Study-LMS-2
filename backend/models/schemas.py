@@ -14,6 +14,8 @@ class CourseCreateRequest(BaseModel):
     rest_days: List[str] = Field(default_factory=lambda: ["Sunday"], description="Weekly rest days")
     revision_buffer_days: int = Field(2, ge=0, le=14, description="Days reserved before exam strictly for revision")
     schedule_strategy: str = Field("paced", description="'paced' (Spread to Exam Date) or 'fixed' (Fixed Daily Goal)")
+    num_study_days: Optional[int] = Field(None, ge=1, le=365, description="Number of study days (alternative to target_date)")
+    preferred_daily_minutes: Optional[int] = Field(60, ge=10, le=720, description="Preferred daily study budget in minutes")
 
 class CourseUpdateRequest(BaseModel):
     title: Optional[str] = None
@@ -23,6 +25,8 @@ class CourseUpdateRequest(BaseModel):
     rest_days: Optional[List[str]] = None
     revision_buffer_days: Optional[int] = Field(None, ge=0, le=14)
     schedule_strategy: Optional[str] = None
+    num_study_days: Optional[int] = Field(None, ge=1, le=365)
+    preferred_daily_minutes: Optional[int] = Field(None, ge=10, le=720)
 
 class CourseResponse(BaseModel):
     id: str
@@ -35,6 +39,8 @@ class CourseResponse(BaseModel):
     rest_days: List[str]
     revision_buffer_days: int
     schedule_strategy: str = "paced"
+    num_study_days: Optional[int] = None
+    preferred_daily_minutes: Optional[int] = 60
     status: str
     total_effective_minutes: float = 0.0
     completed_effective_minutes: float = 0.0
@@ -93,8 +99,13 @@ class LessonResponse(BaseModel):
     is_excluded: bool = False
     pyq_hit_count: int = 0
     pyq_total_marks: int = 0
+    priority_tag: Optional[str] = "core"
+    status: Optional[str] = "pending"
+    completed_at: Optional[str] = None
+    skipped_at: Optional[str] = None
 
 class LessonFilterRequest(BaseModel):
+    filter_mode: Optional[str] = Field(None, description="'all', 'concepts', or 'examples'")
     include_examples: Optional[bool] = Field(None, description="Set True to include, False to exclude questions/examples videos")
     lesson_ids_to_include: Optional[List[str]] = None
     lesson_ids_to_exclude: Optional[List[str]] = None
@@ -117,6 +128,7 @@ class AllocationResponse(BaseModel):
     is_completed: bool
     is_skipped: bool
     priority: str
+    clip_id: Optional[str] = None
     pyq_hit_count: int = 0
     pyq_total_marks: int = 0
 
@@ -145,6 +157,11 @@ class ScheduleResponse(BaseModel):
     effective_daily_target_minutes: float = 0.0
     minutes_per_day: int = 90
     playback_speed: float = 1.25
+    num_study_days: Optional[int] = None
+    preferred_daily_minutes: Optional[float] = None
+    required_daily_minutes: Optional[float] = None
+    pace_notice: Optional[str] = None
+    exceeds_budget: Optional[bool] = False
 
 # --- Replan, Diff & Undo Schemas ---
 class ReplanRequest(BaseModel):
@@ -155,6 +172,8 @@ class ReplanRequest(BaseModel):
     rest_days: Optional[List[str]] = None
     target_date: Optional[str] = None
     revision_buffer_days: Optional[int] = None
+    num_study_days: Optional[int] = Field(None, ge=1, le=365)
+    preferred_daily_minutes: Optional[int] = Field(None, ge=10, le=720)
 
 class DiffSummary(BaseModel):
     old_finish_date: Optional[str] = None
@@ -164,6 +183,8 @@ class DiffSummary(BaseModel):
     dropped_deep_dive_count: int = 0
     deficit_minutes: float = 0.0
     deficit_message: Optional[str] = None
+    pace_change: Optional[str] = None
+    pace_notice: Optional[str] = None
 
 class ReplanResponse(BaseModel):
     success: bool
@@ -391,6 +412,7 @@ class PYQUploadResponse(BaseModel):
 # --- Cram Sheet Schemas ---
 class CramSheetGenerateRequest(BaseModel):
     force_refresh: bool = False
+    full_syllabus: bool = False
 
 class CramSheetResponse(BaseModel):
     id: str
@@ -401,6 +423,55 @@ class CramSheetResponse(BaseModel):
     cached: bool = False
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+# --- Syllabus Alignment Schemas ---
+class SyllabusMatchRequest(BaseModel):
+    syllabus_text: str = Field(..., min_length=5, max_length=500000)
+    strictness: Optional[str] = Field("balanced", description="'strict', 'balanced', or 'comprehensive'")
+
+class SyllabusTopicMatch(BaseModel):
+    topic: str
+    unit: Optional[str] = "General"
+    matched_lesson_count: int = 0
+    matched_lesson_ids: List[str] = Field(default_factory=list)
+
+class SyllabusLessonMatch(BaseModel):
+    id: str
+    title: str
+    raw_duration_sec: int
+    order_index: int = 0
+    is_matched: bool
+    match_score: float
+    matched_topics: List[str] = Field(default_factory=list)
+    match_reason: str = ""
+
+class SyllabusMatchResponse(BaseModel):
+    course_id: str
+    total_lessons: int
+    matched_lessons_count: int
+    matched_percentage: float
+    saved_minutes: int
+    topics: List[SyllabusTopicMatch] = Field(default_factory=list)
+    lessons: List[SyllabusLessonMatch] = Field(default_factory=list)
+
+class SyllabusApplyRequest(BaseModel):
+    syllabus_text: str = Field(..., min_length=1)
+    included_lesson_ids: List[str] = Field(default_factory=list)
+    strictness: Optional[str] = "balanced"
+    regenerate_schedule: bool = True
+
+class SyllabusApplyResponse(BaseModel):
+    course_id: str
+    included_count: int
+    excluded_count: int
+    schedule_reflowed: bool = True
+    message: str
+
+class SyllabusInfoResponse(BaseModel):
+    course_id: str
+    syllabus_text: Optional[str] = None
+    syllabus_metadata: Optional[Dict[str, Any]] = None
 
 
 

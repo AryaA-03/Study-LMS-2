@@ -19,6 +19,7 @@ from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional, Tuple, Callable
 import json
 import math
+import uuid
 import logging
 from zoneinfo import ZoneInfo
 
@@ -48,6 +49,7 @@ class ScheduleAllocation:
         priority: str = "core",
         video_id: Optional[str] = None,
         video_url: Optional[str] = None,
+        clip_id: Optional[str] = None,
     ):
         self.id = id
         self.course_id = course_id
@@ -64,6 +66,7 @@ class ScheduleAllocation:
         self.priority = priority
         self.video_id = video_id
         self.video_url = video_url
+        self.clip_id = clip_id or lesson_id
 
     @property
     def raw_minutes(self) -> float:
@@ -74,6 +77,7 @@ class ScheduleAllocation:
             "id": self.id,
             "course_id": self.course_id,
             "lesson_id": self.lesson_id,
+            "clip_id": self.clip_id,
             "lesson_title": self.lesson_title,
             "scheduled_date": self.scheduled_date,
             "allocated_start_sec": self.allocated_start_sec,
@@ -95,6 +99,7 @@ class ScheduleAllocation:
             id=data["id"],
             course_id=data["course_id"],
             lesson_id=data["lesson_id"],
+            clip_id=data.get("clip_id") or data["lesson_id"],
             lesson_title=data.get("lesson_title", "Lesson"),
             scheduled_date=data["scheduled_date"],
             allocated_start_sec=data["allocated_start_sec"],
@@ -524,6 +529,309 @@ def compute_schedule_diff(
         "deficit_minutes": deficit_minutes,
         "deficit_message": deficit_message,
     }
+
+
+def repack_schedule(
+    clips: List[Dict[str, Any]],
+    config: Dict[str, Any],
+    clock: Optional[Callable[[], date]] = None,
+) -> Dict[str, Any]:
+    """Pure, unit-tested deterministic day-wise repacker (Layer 2: Mutable Schedule).
+
+    Maps incomplete Concept Clips onto calendar days (Asia/Kolkata) in < 10ms.
+    Zero LLM calls. Never splits a ~10–15 min Concept Clip mid-topic.
+
+    Supports two clean scheduling modes:
+    1. Fit to Exam Date / Number of Days ('paced'):
+       Calculates required_daily_minutes = remaining_effective_minutes / available_study_days
+       and distributes Concept Clips evenly up to the revision buffer (surfaces pace notice
+       if required pace exceeds preferred daily budget).
+    2. Fixed Daily Budget ('fixed'):
+       Packs sequential Concept Clips greedily into each study day (soft ±15% tolerance)
+       and recalculates the projected finish date.
+    """
+    if clock is None:
+        clock = default_clock
+    today = clock()
+
+    course_id = config.get("course_id", "")
+    playback_speed = max(0.5, float(config.get("playback_speed", 1.25)))
+    rest_days = list(config.get("rest_days", ["Sunday"]))
+    revision_buffer_days = max(0, int(config.get("revision_buffer_days", 2)))
+    strategy = config.get("schedule_strategy") or config.get("mode") or "paced"
+    if strategy in ("fit_to_date", "fit"):
+        strategy = "paced"
+    elif strategy in ("fixed_budget", "budget"):
+        strategy = "fixed"
+
+    minutes_per_day = int(config.get("minutes_per_day", 90))
+    preferred_daily_minutes = float(config.get("preferred_daily_minutes") or minutes_per_day)
+
+    # 1. Determine target date and study days
+    num_study_days = config.get("num_study_days") or config.get("study_days")
+    if num_study_days is not None and int(num_study_days) > 0:
+        num_days = int(num_study_days)
+        study_dates = []
+        d = today
+        while len(study_dates) < num_days:
+            if not is_rest_day(d, rest_days):
+                study_dates.append(d)
+            d += timedelta(days=1)
+        target_date = (study_dates[-1] + timedelta(days=revision_buffer_days)) if study_dates else today
+        deadline_effective = study_dates[-1] if study_dates else today
+    else:
+        raw_target = config.get("target_date") or config.get("exam_date")
+        if isinstance(raw_target, str):
+            target_date = datetime.strptime(raw_target, "%Y-%m-%d").date()
+        elif isinstance(raw_target, date):
+            target_date = raw_target
+        else:
+            target_date = today + timedelta(days=14)
+
+        deadline_effective = target_date - timedelta(days=revision_buffer_days)
+        study_dates, _, _ = get_study_dates(today, deadline_effective, rest_days, revision_buffer_days=0)
+
+    # 2. Filter clips: active, completed, and incomplete
+    active_clips = [c for c in clips if not c.get("is_excluded", False)]
+
+    completed_clips = []
+    incomplete_clips = []
+
+    for c in active_clips:
+        status = c.get("status", "not_started")
+        is_comp = c.get("is_completed", False) or status == "completed"
+        is_tested = c.get("is_tested_out", False) or status == "tested_out"
+        is_skip = c.get("is_skipped", False) or status == "skipped"
+
+        if is_comp:
+            completed_clips.append(c)
+        elif not is_tested and not is_skip:
+            incomplete_clips.append(c)
+
+    dropped_count = 0
+    if config.get("mode") == "compress":
+        kept_incomplete = []
+        for c in incomplete_clips:
+            prio = c.get("priority_tag") or c.get("priority", "core")
+            if prio == "deep-dive":
+                dropped_count += 1
+            else:
+                kept_incomplete.append(c)
+        incomplete_clips = kept_incomplete
+
+    # 3. Calculate remaining and completed effective minutes
+    total_remaining_eff_min = sum(
+        calculate_effective_minutes(c.get("raw_duration_sec") or (c.get("end_sec", 0) - c.get("start_sec", 0)), playback_speed)
+        for c in incomplete_clips
+    )
+    total_completed_eff_min = sum(
+        calculate_effective_minutes(c.get("raw_duration_sec") or (c.get("end_sec", 0) - c.get("start_sec", 0)), playback_speed)
+        for c in completed_clips
+    )
+
+    if config.get("mode") == "extend" and strategy == "paced":
+        eff_budget = max(10.0, preferred_daily_minutes)
+        needed_days = max(1, int(math.ceil(total_remaining_eff_min / eff_budget))) if total_remaining_eff_min > 0 else len(study_dates)
+        if needed_days > len(study_dates):
+            study_dates = []
+            d = today
+            while len(study_dates) < needed_days:
+                if not is_rest_day(d, rest_days):
+                    study_dates.append(d)
+                d += timedelta(days=1)
+            target_date = study_dates[-1] + timedelta(days=revision_buffer_days)
+            deadline_effective = study_dates[-1]
+
+    allocations: List[ScheduleAllocation] = []
+    pace_notice: Optional[str] = None
+    exceeds_budget: bool = False
+
+    def advance_to_study_day(curr: date) -> date:
+        while is_rest_day(curr, rest_days):
+            curr += timedelta(days=1)
+        return curr
+
+    # 4. Schedule incomplete clips onto study days without splitting any ~10-15 min clip
+    if strategy == "paced":
+        avail_days = max(1, len(study_dates))
+        required_daily_minutes = round(total_remaining_eff_min / avail_days, 1) if (total_remaining_eff_min > 0 and avail_days > 0) else 0.0
+        allocated_daily_target = required_daily_minutes
+
+        if preferred_daily_minutes > 0 and required_daily_minutes > preferred_daily_minutes:
+            exceeds_budget = True
+            pace_notice = (
+                f"Required pace ({required_daily_minutes}m/day) exceeds your preferred daily budget "
+                f"({round(preferred_daily_minutes, 1)}m/day). Use 1-click Compress to drop deep-dive topics or Extend deadline."
+            )
+
+        # Distribute clips sequentially across available study dates
+        if study_dates and incomplete_clips:
+            day_idx = 0
+            day_accum_min = 0.0
+
+            for clip_idx, clip in enumerate(incomplete_clips):
+                raw_sec = clip.get("raw_duration_sec") or (clip.get("end_sec", 0) - clip.get("start_sec", 0))
+                eff_min = calculate_effective_minutes(raw_sec, playback_speed)
+
+                # Advance to next day if adding this clip exceeds day's share (unless on last study day)
+                is_last_day = (day_idx >= len(study_dates) - 1)
+                # If current day already has at least one clip and adding this one exceeds target pace by > 15%
+                if not is_last_day and day_accum_min > 0 and (day_accum_min + eff_min) > (required_daily_minutes * 1.15):
+                    day_idx += 1
+                    day_accum_min = 0.0
+
+                alloc_date = study_dates[min(day_idx, len(study_dates) - 1)]
+                lid = clip.get("id") or str(uuid.uuid4())
+                allocations.append(
+                    ScheduleAllocation(
+                        id=str(uuid.uuid4()),
+                        course_id=course_id,
+                        lesson_id=lid,
+                        clip_id=lid,
+                        lesson_title=clip.get("title", f"Clip {lid}"),
+                        scheduled_date=alloc_date.strftime("%Y-%m-%d"),
+                        allocated_start_sec=clip.get("start_sec", 0),
+                        allocated_end_sec=clip.get("end_sec", raw_sec),
+                        effective_minutes=eff_min,
+                        split_index=0,
+                        split_count=1,
+                        is_completed=False,
+                        is_skipped=False,
+                        priority=clip.get("priority_tag") or clip.get("priority", "core"),
+                        video_id=clip.get("video_id"),
+                        video_url=clip.get("video_url"),
+                    )
+                )
+                day_accum_min += eff_min
+    else:
+        # Fixed Daily Budget mode: pack greedily with soft ±15% tolerance
+        budget = float(minutes_per_day)
+        allocated_daily_target = budget
+        max_daily_budget = budget * 1.15
+
+        required_daily_minutes = budget
+        curr_d = advance_to_study_day(today)
+        day_accum_min = 0.0
+
+        for clip in incomplete_clips:
+            raw_sec = clip.get("raw_duration_sec") or (clip.get("end_sec", 0) - clip.get("start_sec", 0))
+            eff_min = calculate_effective_minutes(raw_sec, playback_speed)
+
+            # Check if this clip fits into current day
+            if day_accum_min > 0 and (day_accum_min + eff_min) > max_daily_budget:
+                # Advance to next non-rest study day
+                curr_d = advance_to_study_day(curr_d + timedelta(days=1))
+                day_accum_min = 0.0
+
+            lid = clip.get("id") or str(uuid.uuid4())
+            allocations.append(
+                ScheduleAllocation(
+                    id=str(uuid.uuid4()),
+                    course_id=course_id,
+                    lesson_id=lid,
+                    clip_id=lid,
+                    lesson_title=clip.get("title", f"Clip {lid}"),
+                    scheduled_date=curr_d.strftime("%Y-%m-%d"),
+                    allocated_start_sec=clip.get("start_sec", 0),
+                    allocated_end_sec=clip.get("end_sec", raw_sec),
+                    effective_minutes=eff_min,
+                    split_index=0,
+                    split_count=1,
+                    is_completed=False,
+                    is_skipped=False,
+                    priority=clip.get("priority_tag") or clip.get("priority", "core"),
+                    video_id=clip.get("video_id"),
+                    video_url=clip.get("video_url"),
+                )
+            )
+            day_accum_min += eff_min
+
+    # 5. Projected finish date calculation
+    projected_finish_date = None
+    if allocations:
+        dates_used = [datetime.strptime(a.scheduled_date, "%Y-%m-%d").date() for a in allocations]
+        projected_finish_date = max(dates_used)
+    else:
+        projected_finish_date = today
+
+    is_behind = projected_finish_date > deadline_effective
+
+    # 6. Build day-wise responses matching DayScheduleResponse schema
+    calendar_end = max(target_date, projected_finish_date)
+    day_map: Dict[str, List[ScheduleAllocation]] = {}
+    for a in allocations:
+        day_map.setdefault(a.scheduled_date, []).append(a)
+
+    days_list = []
+    curr = today
+    while curr <= calendar_end:
+        d_str = curr.strftime("%Y-%m-%d")
+        d_name = curr.strftime("%A")
+        is_rest = is_rest_day(curr, rest_days)
+        is_rev = (curr > deadline_effective and curr <= target_date)
+        day_allocs = day_map.get(d_str, [])
+        day_eff_total = round(sum(a.effective_minutes for a in day_allocs), 2)
+
+        days_list.append({
+            "date": d_str,
+            "day_name": d_name,
+            "is_rest_day": is_rest,
+            "is_revision_day": is_rev,
+            "total_effective_minutes": day_eff_total,
+            "allocations": [a.to_dict() for a in day_allocs],
+        })
+        curr += timedelta(days=1)
+
+    # 7. Diff calculation if previous schedule provided
+    diff = None
+    prev = config.get("previous_schedule")
+    if prev and isinstance(prev, dict):
+        old_finish = prev.get("projected_finish_date")
+        new_finish = projected_finish_date.strftime("%Y-%m-%d") if projected_finish_date else None
+        days_diff = 0
+        if old_finish and new_finish:
+            try:
+                days_diff = (datetime.strptime(new_finish, "%Y-%m-%d").date() - datetime.strptime(old_finish, "%Y-%m-%d").date()).days
+            except Exception:
+                days_diff = 0
+
+        old_pace = prev.get("effective_daily_target_minutes") or prev.get("minutes_per_day", 0)
+        new_pace = allocated_daily_target
+        pace_change_str = f"Pace: {round(float(old_pace))}m -> {round(float(new_pace))}m/day" if old_pace else None
+
+        diff = {
+            "old_finish_date": old_finish,
+            "new_finish_date": new_finish,
+            "days_difference": days_diff,
+            "pace_change": pace_change_str,
+            "lessons_moved_count": len(allocations),
+            "dropped_deep_dive_count": dropped_count,
+            "deficit_minutes": 0.0,
+            "deficit_message": pace_notice,
+        }
+
+    return {
+        "allocations": allocations,
+        "days": days_list,
+        "projected_finish_date": projected_finish_date.strftime("%Y-%m-%d") if projected_finish_date else None,
+        "is_behind_schedule": is_behind,
+        "target_date": target_date.strftime("%Y-%m-%d"),
+        "minutes_per_day": minutes_per_day,
+        "preferred_daily_minutes": preferred_daily_minutes,
+        "playback_speed": playback_speed,
+        "rest_days": rest_days,
+        "revision_buffer_days": revision_buffer_days,
+        "schedule_strategy": strategy,
+        "effective_daily_target_minutes": allocated_daily_target,
+        "required_daily_minutes": required_daily_minutes,
+        "total_effective_minutes": round(total_completed_eff_min + total_remaining_eff_min, 2),
+        "completed_effective_minutes": round(total_completed_eff_min, 2),
+        "remaining_effective_minutes": round(total_remaining_eff_min, 2),
+        "pace_notice": pace_notice,
+        "exceeds_budget": exceeds_budget,
+        "diff": diff,
+    }
+
 
 
 # NOTE: trigger_course_reflow and replan_course_schedule are intentionally NOT

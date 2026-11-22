@@ -3,7 +3,7 @@
   "info": {
     "title": "Learn LMS & Exam Prep API",
     "description": "Local-first autonomous personal LMS and exam-prep platform.",
-    "version": "0.1.0"
+    "version": "0.6.1"
   },
   "paths": {
     "/api/courses": {
@@ -88,6 +88,56 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Update Course",
+        "operationId": "update_course_api_courses__course_id__put",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourseUpdateRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -272,6 +322,62 @@
         }
       }
     },
+    "/api/courses/{course_id}/sources/confirm": {
+      "post": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Approve Sources",
+        "operationId": "approve_sources_api_courses__course_id__sources_confirm_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceApprovalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SourceResponse"
+                  },
+                  "title": "Response Approve Sources Api Courses  Course Id  Sources Confirm Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/courses/{course_id}/sources/approve": {
       "post": {
         "tags": [
@@ -437,6 +543,65 @@
       }
     },
     "/api/courses/{course_id}/lessons/{lesson_id}": {
+      "put": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Update Lesson",
+        "operationId": "update_lesson_api_courses__course_id__lessons__lesson_id__put",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LessonUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LessonResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "courses"
@@ -497,14 +662,75 @@
         }
       }
     },
+    "/api/courses/{course_id}/lessons/{lesson_id}/notes": {
+      "put": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Update Course Lesson Notes",
+        "description": "Updates user personal notes or full notes for a lesson under a course.",
+        "operationId": "update_course_lesson_notes_api_courses__course_id__lessons__lesson_id__notes_put",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/courses/{course_id}/sources": {
       "get": {
         "tags": [
-          "sources"
+          "courses"
         ],
-        "summary": "List Course Sources",
-        "description": "Lists all approved and candidate sources for a course.",
-        "operationId": "list_course_sources_api_courses__course_id__sources_get",
+        "summary": "List Sources",
+        "operationId": "list_sources_api_courses__course_id__sources_get",
         "parameters": [
           {
             "name": "course_id",
@@ -526,7 +752,7 @@
                   "items": {
                     "$ref": "#/components/schemas/SourceResponse"
                   },
-                  "title": "Response List Course Sources Api Courses  Course Id  Sources Get"
+                  "title": "Response List Sources Api Courses  Course Id  Sources Get"
                 }
               }
             }
@@ -899,6 +1125,58 @@
         }
       }
     },
+    "/api/courses/{course_id}/schedule/allocations/{allocation_id}/complete": {
+      "post": {
+        "tags": [
+          "schedule"
+        ],
+        "summary": "Complete Allocation",
+        "description": "Explicitly marks an allocation as complete (e.g. video slice auto-advance) and returns updated schedule.",
+        "operationId": "complete_allocation_api_courses__course_id__schedule_allocations__allocation_id__complete_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "allocation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Allocation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/courses/{course_id}/schedule/allocations/{allocation_id}/skip": {
       "post": {
         "tags": [
@@ -1170,6 +1448,7 @@
           "settings"
         ],
         "summary": "Test Connection",
+        "description": "Tests real connectivity to the configured LLM provider by making a lightweight HTTP call.",
         "operationId": "test_connection_api_settings_test_connection_post",
         "requestBody": {
           "content": {
@@ -1295,7 +1574,7 @@
           "settings"
         ],
         "summary": "Download Sqlite Backup",
-        "description": "One-click download of the raw SQLite database for offline backup and portability.",
+        "description": "One-click download of the raw SQLite database for offline backup and portability.\n\nRestricted to localhost only to prevent unintentional LAN DB exfiltration.",
         "operationId": "download_sqlite_backup_api_settings_backup_get",
         "responses": {
           "200": {
@@ -2659,6 +2938,392 @@
         }
       }
     },
+    "/api/courses/{course_id}/pyq/upload-file": {
+      "post": {
+        "tags": [
+          "pyq"
+        ],
+        "summary": "Upload Pyq File",
+        "description": "Uploads and ingests a past exam paper (PDF or text file), matching against course lessons.",
+        "operationId": "upload_pyq_file_api_courses__course_id__pyq_upload_file_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_pyq_file_api_courses__course_id__pyq_upload_file_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PYQUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/pyq/upload-text": {
+      "post": {
+        "tags": [
+          "pyq"
+        ],
+        "summary": "Upload Pyq Text",
+        "description": "Ingests pasted past exam questions text, splitting and matching against course lessons.",
+        "operationId": "upload_pyq_text_api_courses__course_id__pyq_upload_text_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PYQUploadTextRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PYQUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/pyq": {
+      "get": {
+        "tags": [
+          "pyq"
+        ],
+        "summary": "Get Pyq Summary",
+        "description": "Retrieves all past papers and high-yield topic stats for a course.",
+        "operationId": "get_pyq_summary_api_courses__course_id__pyq_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/lessons/{lesson_id}/pyq": {
+      "get": {
+        "tags": [
+          "pyq"
+        ],
+        "summary": "Get Lesson Pyqs",
+        "description": "Retrieves all past paper questions matched to a specific lesson.",
+        "operationId": "get_lesson_pyqs_api_courses__course_id__lessons__lesson_id__pyq_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/pyq/papers/{paper_id}": {
+      "delete": {
+        "tags": [
+          "pyq"
+        ],
+        "summary": "Delete Pyq Paper",
+        "description": "Deletes a past paper and its questions, recalculating lesson hit counts.",
+        "operationId": "delete_pyq_paper_api_courses__course_id__pyq_papers__paper_id__delete",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/cram-sheet/generate": {
+      "post": {
+        "tags": [
+          "cram_sheet"
+        ],
+        "summary": "Generate Cram Sheet",
+        "description": "Synthesizes or retrieves cached 1-2 page Last-Night Exam Cram Sheet.",
+        "operationId": "generate_cram_sheet_api_courses__course_id__cram_sheet_generate_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CramSheetGenerateRequest",
+                "default": {
+                  "force_refresh": false
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CramSheetResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/cram-sheet": {
+      "get": {
+        "tags": [
+          "cram_sheet"
+        ],
+        "summary": "Get Cram Sheet",
+        "description": "Retrieves the current course Cram Sheet, generating one if not yet present.",
+        "operationId": "get_cram_sheet_api_courses__course_id__cram_sheet_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CramSheetResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/cram-sheet/download": {
+      "get": {
+        "tags": [
+          "cram_sheet"
+        ],
+        "summary": "Download Cram Sheet Markdown",
+        "description": "Downloads the cram sheet as a standalone Markdown document.",
+        "operationId": "download_cram_sheet_markdown_api_courses__course_id__cram_sheet_download_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Index Page",
@@ -2790,6 +3455,16 @@
           "priority": {
             "type": "string",
             "title": "Priority"
+          },
+          "pyq_hit_count": {
+            "type": "integer",
+            "title": "Pyq Hit Count",
+            "default": 0
+          },
+          "pyq_total_marks": {
+            "type": "integer",
+            "title": "Pyq Total Marks",
+            "default": 0
           }
         },
         "type": "object",
@@ -2837,6 +3512,31 @@
           "file"
         ],
         "title": "Body_upload_pdf_source_api_courses__course_id__sources_pdf_post"
+      },
+      "Body_upload_pyq_file_api_courses__course_id__pyq_upload_file_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_pyq_file_api_courses__course_id__pyq_upload_file_post"
       },
       "CandidateDiscoveryResponse": {
         "properties": {
@@ -3183,6 +3883,77 @@
         },
         "type": "object",
         "title": "CourseUpdateRequest"
+      },
+      "CramSheetGenerateRequest": {
+        "properties": {
+          "force_refresh": {
+            "type": "boolean",
+            "title": "Force Refresh",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "CramSheetGenerateRequest"
+      },
+      "CramSheetResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "course_id": {
+            "type": "string",
+            "title": "Course Id"
+          },
+          "content_markdown": {
+            "type": "string",
+            "title": "Content Markdown"
+          },
+          "notes_hash": {
+            "type": "string",
+            "title": "Notes Hash"
+          },
+          "is_generated_by_llm": {
+            "type": "boolean",
+            "title": "Is Generated By Llm",
+            "default": false
+          },
+          "cached": {
+            "type": "boolean",
+            "title": "Cached",
+            "default": false
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "course_id",
+          "content_markdown",
+          "notes_hash"
+        ],
+        "title": "CramSheetResponse"
       },
       "DayScheduleResponse": {
         "properties": {
@@ -3677,6 +4448,16 @@
             "type": "boolean",
             "title": "Is Excluded",
             "default": false
+          },
+          "pyq_hit_count": {
+            "type": "integer",
+            "title": "Pyq Hit Count",
+            "default": 0
+          },
+          "pyq_total_marks": {
+            "type": "integer",
+            "title": "Pyq Total Marks",
+            "default": 0
           }
         },
         "type": "object",
@@ -3822,10 +4603,151 @@
         ],
         "title": "NoteResponse"
       },
+      "PYQQuestionItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "question_number": {
+            "type": "string",
+            "title": "Question Number"
+          },
+          "question_text": {
+            "type": "string",
+            "title": "Question Text"
+          },
+          "marks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marks"
+          },
+          "matched_lesson_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Lesson Id"
+          },
+          "matched_chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Chunk Id"
+          },
+          "snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snippet",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "question_number",
+          "question_text"
+        ],
+        "title": "PYQQuestionItem"
+      },
+      "PYQUploadResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "paper_id": {
+            "type": "string",
+            "title": "Paper Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename",
+            "default": ""
+          },
+          "questions_count": {
+            "type": "integer",
+            "title": "Questions Count"
+          },
+          "matched_count": {
+            "type": "integer",
+            "title": "Matched Count"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/PYQQuestionItem"
+            },
+            "type": "array",
+            "title": "Questions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "title",
+          "questions_count",
+          "matched_count"
+        ],
+        "title": "PYQUploadResponse"
+      },
+      "PYQUploadTextRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Title"
+          },
+          "raw_text": {
+            "type": "string",
+            "minLength": 10,
+            "title": "Raw Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "raw_text"
+        ],
+        "title": "PYQUploadTextRequest"
+      },
       "PersonalNotesUpdate": {
         "properties": {
           "personal_notes": {
             "type": "string",
+            "maxLength": 200000,
             "title": "Personal Notes"
           }
         },
@@ -3839,7 +4761,19 @@
         "properties": {
           "query": {
             "type": "string",
+            "maxLength": 4000,
             "title": "Query"
+          },
+          "lesson_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lesson Id"
           }
         },
         "type": "object",
@@ -3962,11 +4896,47 @@
           },
           "correct_index": {
             "type": "integer",
-            "title": "Correct Index"
+            "title": "Correct Index",
+            "default": 0
           },
           "explanation": {
             "type": "string",
             "title": "Explanation"
+          },
+          "question_type": {
+            "type": "string",
+            "title": "Question Type",
+            "default": "mcq"
+          },
+          "max_marks": {
+            "type": "number",
+            "title": "Max Marks",
+            "default": 1.0
+          },
+          "rubric": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
+          "sample_solution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Solution"
           }
         },
         "type": "object",
@@ -3975,8 +4945,6 @@
           "chunk_id",
           "quote",
           "question",
-          "options",
-          "correct_index",
           "explanation"
         ],
         "title": "QuizQuestion"
@@ -4074,7 +5042,15 @@
             },
             "type": "object",
             "title": "Answers",
-            "description": "Mapping of question ID to chosen option index"
+            "description": "Mapping of MCQ question ID to chosen option index"
+          },
+          "short_answers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Short Answers",
+            "description": "Mapping of short-answer question ID to student answer text"
           },
           "time_taken_seconds": {
             "type": "integer",
@@ -4083,9 +5059,6 @@
           }
         },
         "type": "object",
-        "required": [
-          "answers"
-        ],
         "title": "QuizSubmitRequest"
       },
       "QuizSubmitResponse": {
@@ -4130,6 +5103,53 @@
             "type": "integer",
             "title": "Missed Count",
             "default": 0
+          },
+          "schedule_updated": {
+            "type": "boolean",
+            "title": "Schedule Updated",
+            "default": false
+          },
+          "diff_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diff Summary"
+          },
+          "short_answer_evaluations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Short Answer Evaluations"
+          },
+          "total_marks_obtained": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Marks Obtained"
+          },
+          "total_marks_possible": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Marks Possible"
           }
         },
         "type": "object",
@@ -4871,6 +5891,7 @@
         "properties": {
           "url": {
             "type": "string",
+            "maxLength": 2048,
             "title": "Url"
           },
           "title": {

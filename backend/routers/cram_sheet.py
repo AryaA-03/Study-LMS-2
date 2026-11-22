@@ -28,7 +28,28 @@ async def generate_cram_sheet(
     sheet = await get_or_create_cram_sheet(
         db,
         course_id=course_id,
-        force_refresh=payload.force_refresh
+        force_refresh=payload.force_refresh,
+        full_syllabus=payload.full_syllabus
+    )
+    return sheet
+
+
+@router.post("/{course_id}/cram-sheet/generate-full", response_model=CramSheetResponse)
+async def generate_full_cram_sheet(
+    course_id: str,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Sequentially processes and synthesizes notes across all playlist/syllabus videos in batches."""
+    cur = db.cursor()
+    cur.execute("SELECT id FROM courses WHERE id = ?;", (course_id,))
+    if not cur.fetchone():
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    sheet = await get_or_create_cram_sheet(
+        db,
+        course_id=course_id,
+        force_refresh=True,
+        full_syllabus=True
     )
     return sheet
 

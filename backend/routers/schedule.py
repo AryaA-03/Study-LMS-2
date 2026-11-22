@@ -96,17 +96,19 @@ def generate_course_schedule(
     # Replace allocations in DB
     db.execute("DELETE FROM schedule_allocations WHERE course_id = ?;", (course_id,))
     for a in sched_result["allocations"]:
+        clip_id = getattr(a, "clip_id", None) or a.lesson_id
         db.execute(
             """
             INSERT INTO schedule_allocations (
-                id, course_id, lesson_id, scheduled_date, split_index, split_count,
+                id, course_id, lesson_id, clip_id, scheduled_date, split_index, split_count,
                 allocated_start_sec, allocated_end_sec, effective_minutes, is_completed, is_skipped
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             (
                 a.id,
                 course_id,
                 a.lesson_id,
+                clip_id,
                 a.scheduled_date,
                 a.split_index,
                 a.split_count,
@@ -168,6 +170,7 @@ def get_course_schedule(course_id: str, db: sqlite3.Connection = Depends(get_db)
             is_completed=bool(r["is_completed"]),
             is_skipped=bool(r["is_skipped"]),
             priority=r["priority"],
+            clip_id=r["clip_id"] if "clip_id" in r.keys() else r["lesson_id"],
             pyq_hit_count=int(r["pyq_hit_count"]) if "pyq_hit_count" in r.keys() else 0,
             pyq_total_marks=int(r["pyq_total_marks"]) if "pyq_total_marks" in r.keys() else 0,
         )
@@ -239,6 +242,16 @@ def get_course_schedule(course_id: str, db: sqlite3.Connection = Depends(get_db)
         except Exception:
             pass
 
+    pref_mins = float(course["preferred_daily_minutes"]) if ("preferred_daily_minutes" in course.keys() and course["preferred_daily_minutes"] is not None) else float(course["minutes_per_day"])
+    pace_notice = None
+    exceeds_budget = False
+    if pref_mins > 0 and daily_target > pref_mins:
+        exceeds_budget = True
+        pace_notice = (
+            f"Required pace ({daily_target}m/day) exceeds your preferred daily budget "
+            f"({round(pref_mins, 1)}m/day). Use 1-click Compress to drop deep-dive topics or Extend deadline."
+        )
+
     return ScheduleResponse(
         course_id=course_id,
         days=days,
@@ -253,6 +266,11 @@ def get_course_schedule(course_id: str, db: sqlite3.Connection = Depends(get_db)
         effective_daily_target_minutes=daily_target,
         minutes_per_day=course["minutes_per_day"],
         playback_speed=course["playback_speed"],
+        num_study_days=course["num_study_days"] if "num_study_days" in course.keys() else None,
+        preferred_daily_minutes=pref_mins,
+        required_daily_minutes=daily_target,
+        pace_notice=pace_notice,
+        exceeds_budget=exceeds_budget,
     )
 
 @router.post("/allocations/{allocation_id}/toggle", response_model=AllocationResponse)
@@ -276,11 +294,21 @@ def toggle_allocation(
 
     new_completed = 0 if row["is_completed"] else 1
     completed_at = datetime.now().isoformat() if new_completed else None
+    new_status = "completed" if new_completed else "pending"
 
     db.execute(
         "UPDATE schedule_allocations SET is_completed = ?, completed_at = ? WHERE id = ?;",
         (new_completed, completed_at, allocation_id),
     )
+    db.execute(
+        "UPDATE lessons SET status = ?, completed_at = ? WHERE id = ?;",
+        (new_status, completed_at, row["lesson_id"]),
+    )
+    db.execute(
+        "UPDATE concept_clips SET status = ?, completed_at = ? WHERE id = ?;",
+        (new_status, completed_at, row["lesson_id"]),
+    )
+    db.commit()
     logger.info(f"[Schedule] Toggled allocation {allocation_id} completion: {bool(new_completed)}")
 
     updated = db.execute(
@@ -312,9 +340,45 @@ def toggle_allocation(
         is_completed=bool(updated["is_completed"]),
         is_skipped=bool(updated["is_skipped"]),
         priority=updated["priority"],
+        clip_id=updated["clip_id"] if "clip_id" in updated.keys() else updated["lesson_id"],
         pyq_hit_count=int(updated["pyq_hit_count"]) if "pyq_hit_count" in updated.keys() else 0,
         pyq_total_marks=int(updated["pyq_total_marks"]) if "pyq_total_marks" in updated.keys() else 0,
     )
+
+@router.post("/allocations/{allocation_id}/complete", response_model=ScheduleResponse)
+def complete_allocation(
+    course_id: str,
+    allocation_id: str,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Explicitly marks an allocation as complete (e.g. video slice auto-advance) and returns updated schedule."""
+    course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    target_alloc = db.execute(
+        "SELECT * FROM schedule_allocations WHERE id = ? AND course_id = ?;",
+        (allocation_id, course_id),
+    ).fetchone()
+    if not target_alloc:
+        raise HTTPException(status_code=404, detail="Allocation not found")
+
+    completed_at = datetime.now().isoformat()
+    db.execute(
+        "UPDATE schedule_allocations SET is_completed = 1, completed_at = ? WHERE id = ? AND course_id = ?;",
+        (completed_at, allocation_id, course_id),
+    )
+    db.execute(
+        "UPDATE lessons SET status = 'completed', completed_at = ? WHERE id = ?;",
+        (completed_at, target_alloc["lesson_id"]),
+    )
+    db.execute(
+        "UPDATE concept_clips SET status = 'completed', completed_at = ? WHERE id = ?;",
+        (completed_at, target_alloc["lesson_id"]),
+    )
+    db.commit()
+    logger.info(f"[Schedule] Marked allocation {allocation_id} complete for course {course_id}")
+    return get_course_schedule(course_id, db)
 
 @router.post("/allocations/{allocation_id}/skip", response_model=ScheduleResponse)
 def skip_allocation(
@@ -334,10 +398,20 @@ def skip_allocation(
         raise HTTPException(status_code=404, detail="Allocation not found")
 
     logger.info(f"[Schedule] Skipped allocation {allocation_id} - triggering automatic reflow")
+    skipped_at = datetime.now().isoformat()
     db.execute(
         "UPDATE schedule_allocations SET is_skipped = 1, skipped_at = ? WHERE id = ?;",
-        (datetime.now().isoformat(), allocation_id),
+        (skipped_at, allocation_id),
     )
+    db.execute(
+        "UPDATE lessons SET status = 'skipped', skipped_at = ? WHERE id = ?;",
+        (skipped_at, target_alloc["lesson_id"]),
+    )
+    db.execute(
+        "UPDATE concept_clips SET status = 'skipped', skipped_at = ? WHERE id = ?;",
+        (skipped_at, target_alloc["lesson_id"]),
+    )
+    db.commit()
 
     replan_req = ReplanRequest(mode="normal")
     replan_schedule(course_id, replan_req, db)
@@ -405,9 +479,21 @@ def replan_schedule(
     target_date_str = req.target_date or course["target_date"]
     rev_buffer = req.revision_buffer_days if req.revision_buffer_days is not None else course["revision_buffer_days"]
     strategy = req.schedule_strategy or (course["schedule_strategy"] if "schedule_strategy" in course.keys() else "paced")
+    num_study_days = req.num_study_days if req.num_study_days is not None else (course["num_study_days"] if "num_study_days" in course.keys() else None)
+    preferred_daily_minutes = req.preferred_daily_minutes if req.preferred_daily_minutes is not None else (course["preferred_daily_minutes"] if "preferred_daily_minutes" in course.keys() else 60)
 
-    target_d = datetime.strptime(target_date_str, "%Y-%m-%d").date()
     today = default_clock()
+    if req.num_study_days is not None and req.num_study_days > 0:
+        d = today
+        study_dates = []
+        while len(study_dates) < req.num_study_days:
+            if not is_rest_day(d, rest_days):
+                study_dates.append(d)
+            d += timedelta(days=1)
+        target_d = (study_dates[-1] + timedelta(days=rev_buffer)) if study_dates else today
+        target_date_str = target_d.strftime("%Y-%m-%d")
+    else:
+        target_d = datetime.strptime(target_date_str, "%Y-%m-%d").date()
 
     logger.info(f"[Schedule] Replanning course {course_id} | Mode: {req.mode} | Strategy: {strategy} | Speed: {playback_speed}x")
 
@@ -493,6 +579,11 @@ def replan_schedule(
         deficit_message=deficit_message,
     )
 
+    old_pace = float(course["minutes_per_day"])
+    new_pace = sched_res.get("effective_daily_target_minutes") or minutes_per_day
+    diff["pace_change"] = f"Pace: {round(old_pace)}m -> {round(new_pace)}m/day"
+    diff["pace_notice"] = deficit_message
+
     snapshot_id = save_snapshot(
         course_id=course_id,
         reason=f"replan_{req.mode}",
@@ -512,26 +603,30 @@ def replan_schedule(
             target_date = ?,
             revision_buffer_days = ?,
             schedule_strategy = ?,
+            num_study_days = ?,
+            preferred_daily_minutes = ?,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?;
         """,
-        (minutes_per_day, playback_speed, json.dumps(rest_days), target_date_str, rev_buffer, strategy, course_id),
+        (minutes_per_day, playback_speed, json.dumps(rest_days), target_date_str, rev_buffer, strategy, num_study_days, preferred_daily_minutes, course_id),
     )
 
     # Overwrite allocations with new plan
     db.execute("DELETE FROM schedule_allocations WHERE course_id = ?;", (course_id,))
     for a in new_allocs:
+        clip_id = getattr(a, "clip_id", None) or a.lesson_id
         db.execute(
             """
             INSERT INTO schedule_allocations (
-                id, course_id, lesson_id, scheduled_date, split_index, split_count,
+                id, course_id, lesson_id, clip_id, scheduled_date, split_index, split_count,
                 allocated_start_sec, allocated_end_sec, effective_minutes, is_completed, is_skipped
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             (
                 a.id,
                 course_id,
                 a.lesson_id,
+                clip_id,
                 a.scheduled_date,
                 a.split_index,
                 a.split_count,
@@ -592,17 +687,19 @@ def undo_last_replan(course_id: str, db: sqlite3.Connection = Depends(get_db)):
 
     db.execute("DELETE FROM schedule_allocations WHERE course_id = ?;", (course_id,))
     for a in allocations_state:
+        clip_id = a.get("clip_id") or a["lesson_id"]
         db.execute(
             """
             INSERT INTO schedule_allocations (
-                id, course_id, lesson_id, scheduled_date, split_index, split_count,
+                id, course_id, lesson_id, clip_id, scheduled_date, split_index, split_count,
                 allocated_start_sec, allocated_end_sec, effective_minutes, is_completed, is_skipped
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             (
                 a["id"],
                 course_id,
                 a["lesson_id"],
+                clip_id,
                 a["scheduled_date"],
                 a.get("split_index", 0),
                 a.get("split_count", 1),
@@ -714,17 +811,19 @@ def trigger_course_reflow(course_id: str, db: sqlite3.Connection) -> None:
     new_allocs = sched_res["allocations"]
     db.execute("DELETE FROM schedule_allocations WHERE course_id = ?;", (course_id,))
     for a in new_allocs:
+        clip_id = getattr(a, "clip_id", None) or a.lesson_id
         db.execute(
             """
             INSERT INTO schedule_allocations (
-                id, course_id, lesson_id, scheduled_date, split_index, split_count,
+                id, course_id, lesson_id, clip_id, scheduled_date, split_index, split_count,
                 allocated_start_sec, allocated_end_sec, effective_minutes, is_completed, is_skipped
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             (
                 a.id,
                 course_id,
                 a.lesson_id,
+                clip_id,
                 a.scheduled_date,
                 a.split_index,
                 a.split_count,

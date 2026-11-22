@@ -13,29 +13,40 @@
       theme: {
         extend: {
           colors: {
+            'bg-canvas': 'var(--bg-canvas)',
+            'bg-sidebar': 'var(--bg-sidebar)',
+            'bg-card': 'var(--bg-card)',
+            'border-subtle': 'var(--border-subtle)',
+            'text-primary': 'var(--text-primary)',
+            'text-secondary': 'var(--text-secondary)',
+            accent: {
+              DEFAULT: 'var(--accent)',
+              soft: 'var(--accent-soft)',
+              'soft-text': 'var(--accent-soft-text)',
+            },
             alabaster: {
               canvas: '#F5F3EE',
               card: '#ECE8DF',
-              subcard: '#E4DFD5',
-              border: '#DDD7CA',
+              subcard: '#FFFFFF',
+              border: '#D8D1C3',
               hover: '#E2DDD2',
-              text: '#1F2328',
-              muted: '#6B7280',
+              text: '#181A1F',
+              muted: '#4B5563',
             },
             charcoal: {
               canvas: '#141517',
-              card: '#1C1D20',
-              subcard: '#23252A',
-              border: '#2A2C32',
+              card: '#1B1C20',
+              subcard: '#22242A',
+              border: '#2E313A',
               hover: '#25272D',
-              text: '#E5E7EB',
+              text: '#F3F4F6',
               muted: '#9CA3AF',
             },
             calm: {
               blue: '#2563EB',
               blueDark: '#60A5FA',
-              blueSubtle: 'rgba(37, 99, 235, 0.08)',
-              blueDarkSubtle: 'rgba(96, 165, 250, 0.12)',
+              blueSubtle: '#DBEAFE',
+              blueDarkSubtle: '#1E3A5F',
             }
           },
           fontFamily: {
@@ -52,25 +63,99 @@
     :root {
       color-scheme: light dark;
       font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+
+      --bg-canvas: #F5F3EE;
+      --bg-sidebar: #ECE8DF;
+      --bg-card: #FFFFFF;
+      --border-subtle: #D8D1C3;
+      --text-primary: #181A1F;
+      --text-secondary: #4B5563;
+      --accent: #2563EB;
+      --accent-soft: #DBEAFE;
+      --accent-soft-text: #1E40AF;
+
+      --video-pane-height: 28vh;
+      --studio-panel-width: 380px;
     }
     * { box-sizing: border-box; }
     
     html.dark {
-      background-color: #141517;
-      color: #E5E7EB;
+      --bg-canvas: #141517;
+      --bg-sidebar: #1B1C20;
+      --bg-card: #22242A;
+      --border-subtle: #2E313A;
+      --text-primary: #F3F4F6;
+      --text-secondary: #9CA3AF;
+      --accent: #60A5FA;
+      --accent-soft: #1E3A5F;
+      --accent-soft-text: #DBEAFE;
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
     }
-    html:not(.dark) {
-      background-color: #F5F3EE;
-      color: #1F2328;
+    html:not(.dark), html.light {
+      --bg-canvas: #F5F3EE;
+      --bg-sidebar: #ECE8DF;
+      --bg-card: #FFFFFF;
+      --border-subtle: #D8D1C3;
+      --text-primary: #181A1F;
+      --text-secondary: #4B5563;
+      --accent: #2563EB;
+      --accent-soft: #DBEAFE;
+      --accent-soft-text: #1E40AF;
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
     }
 
     /* Subtle custom scrollbars */
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    html.dark ::-webkit-scrollbar-thumb { background: #2A2C32; border-radius: 9999px; }
-    html.dark ::-webkit-scrollbar-thumb:hover { background: #3A3D45; }
-    html:not(.dark) ::-webkit-scrollbar-thumb { background: #DDD7CA; border-radius: 9999px; }
+    html.dark ::-webkit-scrollbar-thumb { background: #2E313A; border-radius: 9999px; }
+    html.dark ::-webkit-scrollbar-thumb:hover { background: #3E424D; }
+    html:not(.dark) ::-webkit-scrollbar-thumb { background: #D8D1C3; border-radius: 9999px; }
     html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: #C5BFB0; }
+
+    /* Left rail collapse styling */
+    #pane-schedule.rail-collapsed {
+      width: 52px !important;
+      min-width: 52px !important;
+      max-width: 52px !important;
+    }
+    #pane-schedule.rail-collapsed #schedule-expanded-content {
+      display: none !important;
+    }
+    #pane-schedule.rail-collapsed #schedule-collapsed-rail {
+      display: flex !important;
+    }
+    #pane-schedule:not(.rail-collapsed) #schedule-collapsed-rail {
+      display: none !important;
+    }
+
+    /* Video player bounded height styling */
+    #player-wrapper {
+      height: var(--video-pane-height, 28vh);
+      min-height: 180px;
+      max-height: 55vh;
+      background-color: var(--bg-sidebar);
+    }
+
+    /* 16:9 stage cleanly centered inside subtle framed stage */
+    #yt-player-stage {
+      max-width: 100%;
+      max-height: 100%;
+      aspect-ratio: 16 / 9;
+    }
+
+    /* Right studio resizable panel styling */
+    #pane-right-studio {
+      width: var(--studio-panel-width, 380px);
+      min-width: 300px;
+      max-width: 55vw;
+    }
 
     /* 3D Flashcard Transitions */
     .perspective-1000 { perspective: 1000px; }
@@ -86,14 +171,19 @@
     }
 
     /* Print styling for Last-Night Cram Sheet */
+    /* Print styling for Last-Night Cram Sheet & Grounded Lecture Notes */
     @media print {
       body * {
         visibility: hidden !important;
       }
-      #modal-cram-sheet,
-      #modal-cram-sheet *,
-      #cram-sheet-print-container,
-      #cram-sheet-print-container * {
+      body:not(.printing-grounded-notes) #modal-cram-sheet,
+      body:not(.printing-grounded-notes) #modal-cram-sheet *,
+      body:not(.printing-grounded-notes) #cram-sheet-print-container,
+      body:not(.printing-grounded-notes) #cram-sheet-print-container * {
+        visibility: visible !important;
+      }
+      body.printing-grounded-notes #grounded-notes-print-container,
+      body.printing-grounded-notes #grounded-notes-print-container * {
         visibility: visible !important;
       }
       #modal-cram-sheet {
@@ -112,7 +202,8 @@
         max-width: 100% !important;
         background: white !important;
       }
-      #cram-sheet-print-container {
+      #cram-sheet-print-container,
+      #grounded-notes-print-container {
         position: absolute !important;
         left: 0 !important;
         top: 0 !important;
@@ -121,6 +212,7 @@
         padding: 12mm !important;
         color: #000 !important;
         background: #fff !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
       }
       .no-print {
         display: none !important;
@@ -132,127 +224,86 @@
     }
   </style>
 </head>
-<body class="bg-alabaster-canvas dark:bg-charcoal-canvas text-alabaster-text dark:text-charcoal-text h-full flex flex-col font-sans antialiased selection:bg-blue-600 selection:text-white dark:selection:bg-blue-500 dark:selection:text-black overflow-hidden transition-colors duration-150">
+<body class="bg-bg-canvas text-text-primary h-full flex flex-col font-sans antialiased selection:bg-blue-600 selection:text-white dark:selection:bg-blue-500 dark:selection:text-black overflow-hidden transition-colors duration-150">
 
-  <!-- Top Navigation Header (Minimalist & Calm) -->
-  <header class="border-b border-alabaster-border dark:border-charcoal-border bg-alabaster-card/90 dark:bg-charcoal-card/90 backdrop-blur-md z-40 px-4 py-2 flex items-center justify-between shrink-0 transition-colors">
-    <!-- Left: Window Dots & Course Title + Progress Underline -->
-    <div class="flex items-center space-x-3 shrink-0">
-      <div class="flex items-center gap-1.5 mr-1">
-        <span class="w-2.5 h-2.5 rounded-full bg-red-400/80 inline-block"></span>
-        <span class="w-2.5 h-2.5 rounded-full bg-amber-400/80 inline-block"></span>
-        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400/80 inline-block"></span>
-      </div>
-      <div class="flex flex-col">
-        <div class="flex items-center gap-2">
-          <span id="header-course-title" class="text-xs sm:text-sm font-semibold tracking-tight text-alabaster-text dark:text-charcoal-text truncate max-w-[160px] sm:max-w-xs">DBMS Exam Prep</span>
-          <span id="progress-pct" class="text-[11px] font-mono font-medium text-blue-600 dark:text-blue-400">0%</span>
-        </div>
-        <div class="w-24 sm:w-32 h-0.5 rounded-full bg-alabaster-border dark:bg-charcoal-border overflow-hidden mt-0.5">
-          <div id="progress-bar-fill" class="h-full bg-blue-600 dark:bg-blue-400 rounded-full transition-all duration-300" style="width: 0%"></div>
-        </div>
-      </div>
-    </div>
+  <!-- Top Navigation Header (Single 48px Top Bar) -->
+  <header class="h-12 border-b border-border-subtle bg-bg-sidebar/95 backdrop-blur-md z-40 px-3 sm:px-4 flex items-center justify-between shrink-0 select-none transition-colors">
+    <!-- Left Zone: Rail Toggle + Course Switcher + Compact Progress -->
+    <div class="flex items-center space-x-2 sm:space-x-3 shrink-0 min-w-0">
+      <!-- Left Rail Toggle Hamburger -->
+      <button id="btn-collapse-schedule" class="p-1.5 rounded-lg border border-border-subtle bg-bg-canvas hover:bg-bg-card text-text-primary transition shadow-sm active:scale-95 shrink-0" title="Toggle Lesson Syllabus Rail">
+        <svg class="w-4 h-4 text-text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
 
-    <!-- Center: Course Selector, Edit, New Goal & Diagnostics -->
-    <div class="flex items-center space-x-2 min-w-0">
-      <select id="course-selector" class="bg-alabaster-canvas dark:bg-charcoal-canvas text-xs font-medium border border-alabaster-border dark:border-charcoal-border text-alabaster-text dark:text-charcoal-text rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-xs truncate shadow-sm">
+      <!-- Course Switcher -->
+      <select id="course-selector" class="bg-bg-canvas text-xs font-semibold border border-border-subtle text-text-primary rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-accent max-w-[150px] sm:max-w-xs truncate shadow-sm">
         <option value="">Loading courses...</option>
       </select>
 
-      <button id="btn-edit-course" class="bg-alabaster-hover hover:bg-alabaster-subcard dark:bg-charcoal-hover dark:hover:bg-charcoal-subcard text-alabaster-text dark:text-charcoal-text text-xs font-medium px-2.5 py-1 rounded-lg border border-alabaster-border dark:border-charcoal-border transition flex items-center gap-1 shadow-sm active:scale-95 shrink-0" title="Edit course settings, title, exam date, pace & speed">
-        <svg class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-        <span>Edit Course</span>
-      </button>
+      <!-- Compact Progress Bar & Stats -->
+      <div class="flex items-center gap-2 text-xs shrink-0">
+        <div class="w-16 sm:w-24 h-1.5 rounded-full bg-border-subtle overflow-hidden">
+          <div id="progress-bar-fill" class="h-full bg-accent rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <div class="flex items-center gap-1 font-mono text-[11px]">
+          <span id="progress-pct" class="font-bold text-accent">0%</span>
+          <span class="text-text-secondary">•</span>
+          <span id="stat-effective-left" class="text-text-secondary font-medium">0h 00m left</span>
+        </div>
 
-      <button id="btn-new-course" class="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition flex items-center gap-1 shadow-sm active:scale-95 shrink-0">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        <span>New Goal</span>
-      </button>
-
-      <!-- Pacing Strategy Choice Pills -->
-      <div class="hidden lg:flex items-center bg-alabaster-canvas dark:bg-charcoal-canvas border border-alabaster-border dark:border-charcoal-border rounded-lg p-0.5 text-[11px] ml-1 shrink-0">
-        <button id="pill-strategy-paced" class="px-2 py-0.5 rounded font-medium transition strategy-btn bg-blue-600 text-white shadow-sm" title="Spread lessons evenly across all days until exam">
-          Finish on Exam Date
-        </button>
-        <button id="pill-strategy-fixed" class="px-2 py-0.5 rounded font-medium transition strategy-btn text-alabaster-muted dark:text-charcoal-muted hover:text-alabaster-text dark:hover:text-charcoal-text" title="Fixed daily minutes (Sprint mode)">
-          By Daily Spend
-        </button>
-      </div>
-
-      <!-- Diagnostic & Mock Exam Quick Buttons -->
-      <div class="flex items-center space-x-1.5 ml-1 shrink-0">
-        <button id="btn-diagnostic-test" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-[11px] font-medium text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/80 transition active:scale-95" title="Take a 3-min diagnostic pre-test to test out of known topics">
-          <svg class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          <span>Diagnostic (3m)</span>
-        </button>
-        <button id="btn-mock-exam" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-alabaster-hover hover:bg-alabaster-subcard dark:bg-charcoal-hover dark:hover:bg-charcoal-subcard text-[11px] font-medium text-alabaster-text dark:text-charcoal-text border border-alabaster-border dark:border-charcoal-border transition active:scale-95" title="Start a timed full mock exam">
-          <span>Mock Exam</span>
-        </button>
-        <button id="btn-open-cram-sheet" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 text-[11px] font-medium text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/80 transition active:scale-95 shadow-sm" title="Generate or view 1-2 page Last-Night Exam Cram Sheet">
-          <span>⚡ Cram Sheet</span>
-        </button>
+        <!-- Secondary status metrics rendered for desktop / tests -->
+        <div class="hidden xl:flex items-center gap-2 text-[11px] font-mono text-text-secondary ml-1 border-l border-border-subtle pl-2">
+          <span>Finish: <strong id="stat-projected-finish" class="text-emerald-600 dark:text-emerald-400 font-semibold">--</strong></span>
+          <span>•</span>
+          <div id="kpi-card-exam-date" class="cursor-pointer hover:text-accent transition" title="Click to view exam date in settings">
+            <span>Exam: <strong id="stat-target-date" class="text-accent font-semibold">--</strong></span>
+          </div>
+          <div id="kpi-card-pace-speed" class="hidden 2xl:flex items-center gap-1 cursor-pointer hover:text-accent transition">
+            <span>• Pace: <strong id="kpi-minutes-display">90m</strong>@<strong id="kpi-speed-display" class="text-accent">1.25x</strong></span>
+          </div>
+          <span id="stat-daily-target" class="hidden">~0 min</span>
+          <span id="stat-effective-done" class="hidden">0h 00m</span>
+          <span id="pacing-note-detail" class="hidden"></span>
+          <span id="pacing-mode-label" class="hidden"></span>
+          <span id="header-lesson-count" class="hidden">0</span>
+          <span id="header-course-title" class="hidden">DBMS Exam Prep</span>
+        </div>
       </div>
     </div>
 
-    <!-- Right Controls: Curriculum Drawer, Layout Toggles, Theme Switcher & Settings -->
-    <div class="flex items-center space-x-2 shrink-0">
-      <button id="btn-toggle-curriculum" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-alabaster-hover hover:bg-alabaster-subcard dark:bg-charcoal-hover dark:hover:bg-charcoal-subcard text-xs font-medium text-alabaster-text dark:text-charcoal-text border border-alabaster-border dark:border-charcoal-border transition" title="Inspect & Filter Playlist Videos (Skip Examples)">
-        <span>Curriculum (<span id="header-lesson-count">0</span>)</span>
+    <!-- Right Zone: + New Goal, Cram Sheet, Mock Exam, Settings, Studio Toggle, Theme -->
+    <div class="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+      <button id="btn-new-course" class="bg-accent hover:bg-blue-700 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition flex items-center gap-1 shadow-sm active:scale-95 shrink-0" title="Create a new study goal">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        <span class="hidden sm:inline">New Goal</span>
       </button>
 
-      <!-- Layout Collapse Toggles -->
-      <div class="hidden md:flex items-center bg-alabaster-canvas dark:bg-charcoal-canvas border border-alabaster-border dark:border-charcoal-border rounded-lg p-0.5">
-        <button id="btn-collapse-player" class="p-1 text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text rounded hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition" title="Toggle Player Focus / Theater Mode">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-        </button>
-        <button id="btn-collapse-schedule" class="p-1 text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text rounded hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition" title="Toggle Schedule Sidebar">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-        </button>
-      </div>
+      <button id="btn-open-cram-sheet" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-xs font-medium text-amber-700 dark:text-amber-300 border border-amber-500/30 transition active:scale-95 shadow-sm shrink-0" title="Generate or view Last-Night Exam Cram Sheet">
+        <span>⚡</span>
+        <span class="hidden sm:inline">Cram Sheet</span>
+      </button>
+
+      <button id="btn-mock-exam" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-bg-canvas hover:bg-bg-card text-xs font-medium text-text-primary border border-border-subtle transition active:scale-95 shrink-0" title="Start a timed mock exam">
+        <span>Mock Exam</span>
+      </button>
+
+      <!-- Settings Button -->
+      <button id="btn-settings" class="p-1.5 rounded-lg border border-border-subtle bg-bg-canvas hover:bg-bg-card text-text-primary transition shrink-0" title="Settings, Course Details, Pace, Diagnostic, Curriculum & Replan">
+        <svg class="w-4 h-4 text-text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      </button>
+
+      <!-- Toggle Right Studio Panel Button -->
+      <button id="btn-toggle-studio" class="p-1.5 rounded-lg border border-border-subtle bg-bg-canvas hover:bg-bg-card text-text-primary transition shrink-0" title="Collapse / Expand Right Studio Panel">
+        <svg class="w-4 h-4 text-text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 4v16"/></svg>
+      </button>
 
       <!-- Theme Switcher Button (☀️ / 🌙) -->
-      <button id="btn-theme-toggle" class="p-1.5 rounded-lg border border-alabaster-border dark:border-charcoal-border bg-alabaster-canvas hover:bg-alabaster-hover dark:bg-charcoal-canvas dark:hover:bg-charcoal-hover text-alabaster-text dark:text-charcoal-text transition" title="Toggle Theme (Light / Dark)">
+      <button id="btn-theme-toggle" class="p-1.5 rounded-lg border border-border-subtle bg-bg-canvas hover:bg-bg-card text-text-primary transition shrink-0" title="Toggle Theme (Light / Dark)">
         <svg id="theme-icon-sun" class="w-3.5 h-3.5 text-amber-500 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-        <svg id="theme-icon-moon" class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
-      </button>
-
-      <!-- Settings Modal Button -->
-      <button id="btn-settings" class="p-1.5 text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text hover:bg-alabaster-hover dark:hover:bg-charcoal-hover rounded-lg transition" title="Settings, Storage Guard & Maintenance">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <svg id="theme-icon-moon" class="w-3.5 h-3.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
       </button>
     </div>
   </header>
-
-  <!-- Slim Minimalist Status Strip -->
-  <section id="pacing-status-card" class="border-b border-alabaster-border dark:border-charcoal-border bg-alabaster-card dark:bg-charcoal-card px-4 py-1.5 shrink-0 text-xs text-alabaster-muted dark:text-charcoal-muted flex items-center justify-between transition-colors">
-    <div class="flex items-center gap-4 flex-wrap">
-      <div class="flex items-center gap-1.5">
-        <span>Study Left:</span>
-        <strong id="stat-effective-left" class="font-mono text-alabaster-text dark:text-charcoal-text font-semibold">0h 00m</strong>
-        <span class="text-[11px]">(<span id="stat-daily-target">~0 min</span>/day)</span>
-      </div>
-      <div class="hidden sm:flex items-center gap-1.5">
-        <span>Projected Finish:</span>
-        <strong id="stat-projected-finish" class="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">--</strong>
-        <span id="pacing-note-detail" class="text-[11px] text-alabaster-muted dark:text-charcoal-muted"></span>
-      </div>
-      <div id="kpi-card-exam-date" class="flex items-center gap-1.5 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition" title="Click to edit exam date">
-        <span>Exam Date:</span>
-        <strong id="stat-target-date" class="font-mono text-blue-600 dark:text-blue-400 font-semibold">--</strong>
-      </div>
-      <div id="kpi-card-pace-speed" class="hidden md:flex items-center gap-1.5 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition" title="Click to edit pace and speed">
-        <span>Pace:</span>
-        <strong id="kpi-minutes-display" class="font-mono text-alabaster-text dark:text-charcoal-text">90m</strong>
-        <span>@</span>
-        <strong id="kpi-speed-display" class="font-mono text-blue-600 dark:text-blue-400">1.25x</strong>
-        <span id="pacing-mode-label" class="text-[10px] text-alabaster-muted dark:text-charcoal-muted"></span>
-      </div>
-    </div>
-    <div class="text-[11px] font-mono text-alabaster-muted dark:text-charcoal-muted">
-      Completed: <strong id="stat-effective-done" class="text-emerald-600 dark:text-emerald-400 font-semibold">0h 00m</strong>
-    </div>
-  </section>
 
   <!-- Diff & Undo Notification Banner -->
   <div id="diff-banner" class="hidden bg-blue-50 dark:bg-blue-950/80 border-b border-blue-200 dark:border-blue-800/80 px-4 py-2 text-xs text-blue-900 dark:text-blue-200 flex items-center justify-between shrink-0 shadow-sm">
@@ -288,95 +339,153 @@
     <!-- View A: Split Workspace (3-Column Layout: Left Syllabus, Center Study Canvas, Right Studio) -->
     <div id="workspace-view" class="flex-1 flex flex-col md:flex-row overflow-hidden w-full">
 
-      <!-- LEFT COLUMN: Lesson Syllabus List (~260px) -->
-      <section id="pane-schedule" class="w-full md:w-64 xl:w-72 shrink-0 border-b md:border-b-0 md:border-r border-alabaster-border dark:border-charcoal-border bg-alabaster-card dark:bg-charcoal-card flex flex-col overflow-hidden transition-all duration-200">
+      <!-- LEFT COLUMN: Lesson Syllabus Rail (~260px expanded, 52px collapsed) -->
+      <section id="pane-schedule" class="w-full md:w-64 xl:w-72 shrink-0 border-b md:border-b-0 md:border-r border-border-subtle bg-bg-sidebar flex flex-col overflow-hidden transition-all duration-200 relative select-none">
         
-        <!-- Syllabus Header -->
-        <div class="px-3.5 py-2.5 border-b border-alabaster-border dark:border-charcoal-border flex items-center justify-between text-xs shrink-0 bg-alabaster-subcard/50 dark:bg-charcoal-subcard/50">
-          <span class="font-semibold text-alabaster-text dark:text-charcoal-text tracking-tight">Lesson Syllabus List</span>
-          <button id="btn-toggle-collapse-all" class="text-[11px] text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text p-1 transition" title="Toggle collapse all days">
-            ^
-          </button>
-        </div>
-
-        <!-- Filter Bar & Buffer Choices -->
-        <div class="px-3 py-1.5 border-b border-alabaster-border dark:border-charcoal-border flex items-center justify-between text-[11px] shrink-0 bg-alabaster-card dark:bg-charcoal-card gap-1">
-          <div class="flex items-center gap-1">
-            <button id="btn-filter-all" class="px-2 py-0.5 rounded text-[11px] font-medium bg-blue-600 text-white shadow-sm">All</button>
-            <button id="btn-filter-concepts" class="px-2 py-0.5 rounded text-[11px] font-medium text-alabaster-muted dark:text-charcoal-muted hover:text-alabaster-text dark:hover:text-charcoal-text" title="Skip question & example videos">Concepts</button>
-            <button id="btn-filter-examples" class="px-2 py-0.5 rounded text-[11px] font-medium text-alabaster-muted dark:text-charcoal-muted hover:text-alabaster-text dark:hover:text-charcoal-text">Examples</button>
-            <button id="btn-filter-pyq" class="px-2 py-0.5 rounded text-[11px] font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 border border-transparent hover:border-amber-300 dark:hover:border-amber-700/60 transition" title="Show only high-yield topics with past exam questions">🔥 PYQs</button>
+        <!-- Collapsed Slim Vertical Pill Rail (52px Chrome-style) -->
+        <div id="schedule-collapsed-rail" class="w-[52px] h-full flex-col items-center justify-between py-2 select-none">
+          <div class="flex flex-col items-center gap-2 w-full">
+            <button id="btn-expand-rail-top" type="button" class="w-8 h-8 rounded-lg border border-border-subtle bg-bg-card hover:bg-bg-canvas text-text-primary flex items-center justify-center transition shadow-sm active:scale-95" title="Expand Syllabus Rail">
+              <svg class="w-4 h-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
+            </button>
+            <div class="w-6 h-[1px] bg-border-subtle my-1"></div>
           </div>
-          <!-- Buffer selector -->
-          <div class="flex items-center gap-0.5 text-[10px]">
-            <span class="text-alabaster-muted dark:text-charcoal-muted">Buf:</span>
-            <button id="pill-buffer-zero" class="px-1.5 py-0.5 rounded font-medium text-alabaster-muted dark:text-charcoal-muted" title="Finish on Exam Date (0 days buffer)">0d</button>
-            <button id="pill-buffer-two" class="px-1.5 py-0.5 rounded font-semibold bg-blue-600 text-white shadow-sm" title="Finish 2 days early for revision">2d</button>
+
+          <!-- Middle: Scrollable Pill Rail of Days (D1, D2, V1...) -->
+          <div id="collapsed-rail-badges" class="flex-1 overflow-y-auto space-y-2 py-1 px-1 flex flex-col items-center w-full">
+            <!-- Dynamically populated day badges -->
           </div>
-        </div>
 
-        <!-- Day-Wise Schedule Scrollable Timeline -->
-        <div id="schedule-days-container" class="flex-1 overflow-y-auto px-2 py-2 space-y-2">
-          <!-- Injected dynamically via app.js -->
-        </div>
-
-        <!-- Bottom Resources Tray -->
-        <div class="border-t border-alabaster-border dark:border-charcoal-border p-3 shrink-0 bg-alabaster-subcard/40 dark:bg-charcoal-subcard/40 space-y-2">
-          <div class="flex items-center justify-between text-xs">
-            <span class="font-semibold text-alabaster-text dark:text-charcoal-text">Resources</span>
-            <button id="btn-open-add-source" class="text-blue-600 dark:text-blue-400 hover:underline text-[11px] font-medium" title="Add PDF or Web source">
-              + Add
+          <!-- Bottom: Footer Icons -->
+          <div class="flex flex-col items-center gap-2 pt-2 border-t border-border-subtle w-full">
+            <a href="https://github.com" target="_blank" rel="noopener noreferrer" class="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-card transition" title="GitHub Repository">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+            </a>
+            <button id="btn-collapsed-settings" type="button" class="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-card transition" title="Open Settings">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </button>
           </div>
-          <div id="sources-pills-list" class="flex flex-col gap-1 text-[11px]">
-            <!-- Dynamically populated resource pills -->
+        </div>
+
+        <!-- Expanded Full Syllabus View -->
+        <div id="schedule-expanded-content" class="flex-1 flex flex-col overflow-hidden min-w-0">
+          <!-- Syllabus Header -->
+          <div class="px-3.5 py-2.5 border-b border-border-subtle flex items-center justify-between text-xs shrink-0 bg-bg-card/50">
+            <span class="font-semibold text-text-primary tracking-tight">Lesson Syllabus List</span>
+            <button id="btn-toggle-collapse-all" class="text-[11px] text-text-secondary hover:text-text-primary px-2 py-0.5 rounded border border-border-subtle hover:bg-bg-card transition" title="Toggle collapse all days">
+              Collapse Days
+            </button>
           </div>
-          
-          <!-- Compact Replan Bar -->
-          <div class="pt-2 border-t border-alabaster-border/60 dark:border-charcoal-border/60 flex items-center justify-between text-[11px]">
-            <div class="flex items-center gap-1.5 text-alabaster-muted dark:text-charcoal-muted">
-              <select id="inline-playback-speed" class="bg-alabaster-canvas dark:bg-charcoal-canvas text-alabaster-text dark:text-charcoal-text border border-alabaster-border dark:border-charcoal-border rounded px-1.5 py-0.5 font-mono text-[10px]">
-                <option value="1.0">1.0x</option>
-                <option value="1.25">1.25x</option>
-                <option value="1.5">1.5x</option>
-                <option value="2.0">2.0x</option>
-              </select>
-              <input type="number" id="inline-minutes-day" class="w-10 bg-alabaster-canvas dark:bg-charcoal-canvas text-alabaster-text dark:text-charcoal-text border border-alabaster-border dark:border-charcoal-border rounded px-1 py-0.5 text-center font-mono text-[10px]" min="15" max="480" step="15" value="90">
-              <span>m/d</span>
+
+          <!-- Course Controls & Pacing Strategy Bar -->
+          <div class="px-3 py-1.5 border-b border-border-subtle flex items-center justify-between text-[11px] shrink-0 bg-bg-card/30">
+            <div class="flex items-center gap-1">
+              <span class="text-text-secondary text-[10px] uppercase font-semibold">Pace:</span>
+              <button id="pill-strategy-paced" class="px-1.5 py-0.5 rounded font-semibold bg-accent text-white shadow-sm" title="Finish on exam date">Paced</button>
+              <button id="pill-strategy-fixed" class="px-1.5 py-0.5 rounded font-medium text-text-secondary hover:text-text-primary" title="Fixed daily study minutes">Fixed</button>
             </div>
-            <button id="btn-replan-now" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-2 py-0.5 rounded text-[11px] shadow-sm transition active:scale-95">
-              Replan
-            </button>
+            <div class="flex items-center gap-1.5 text-text-secondary">
+              <button id="btn-edit-course" class="p-1 rounded hover:text-text-primary hover:bg-bg-sidebar transition text-xs" title="Edit course settings">✏️</button>
+              <button id="btn-toggle-curriculum" class="p-1 rounded hover:text-text-primary hover:bg-bg-sidebar transition text-xs" title="Curriculum Drawer">📚</button>
+              <button id="btn-open-syllabus-modal" class="p-1 rounded hover:text-text-primary hover:bg-bg-sidebar transition text-xs" title="Paste University Syllabus to Auto-Select Videos">📑</button>
+              <button id="btn-diagnostic-test" class="p-1 rounded hover:text-text-primary hover:bg-bg-sidebar transition text-xs" title="3-Minute Diagnostic Pre-Test">⏱️</button>
+            </div>
+          </div>
+
+          <!-- Filter Bar & Buffer Choices -->
+          <div class="px-3 py-1.5 border-b border-border-subtle flex items-center justify-between text-[11px] shrink-0 bg-bg-sidebar gap-1">
+            <div class="flex items-center gap-1">
+              <button id="btn-filter-all" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-accent text-white shadow-sm transition" title="Show all lessons (theory and examples)">All</button>
+              <button id="btn-filter-concepts" class="px-2 py-0.5 rounded text-[11px] font-medium text-text-secondary hover:text-text-primary hover:bg-bg-card transition" title="Show concepts & theory only (skips practicals & examples)">Concepts</button>
+              <button id="btn-filter-examples" class="px-2 py-0.5 rounded text-[11px] font-medium text-text-secondary hover:text-text-primary hover:bg-bg-card transition" title="Show practical examples, problems & applications only">Examples</button>
+              <button id="btn-filter-pyq" class="px-2 py-0.5 rounded text-[11px] font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-500/10 border border-transparent hover:border-amber-500/30 transition" title="Show only high-yield topics with past exam questions">🔥 PYQs</button>
+            </div>
+            <!-- Buffer selector -->
+            <div class="flex items-center gap-0.5 text-[10px]">
+              <span class="text-text-secondary">Buf:</span>
+              <button id="pill-buffer-zero" class="px-1.5 py-0.5 rounded font-medium text-text-secondary" title="Finish on Exam Date (0 days buffer)">0d</button>
+              <button id="pill-buffer-two" class="px-1.5 py-0.5 rounded font-semibold bg-accent text-white shadow-sm" title="Finish 2 days early for revision">2d</button>
+            </div>
+          </div>
+
+          <!-- Day-Wise Schedule Scrollable Timeline -->
+          <div id="schedule-days-container" class="flex-1 overflow-y-auto px-2 py-2 space-y-2">
+            <!-- Injected dynamically via app.js -->
+          </div>
+
+          <!-- Bottom Resources Tray -->
+          <div class="border-t border-border-subtle p-3 shrink-0 bg-bg-card/40 space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-semibold text-text-primary">Resources</span>
+              <button id="btn-open-add-source" class="text-accent hover:underline text-[11px] font-medium" title="Add PDF, Web or Past Paper source">
+                + Add
+              </button>
+            </div>
+            <div id="sources-pills-list" class="flex flex-col gap-1 text-[11px]">
+              <!-- Dynamically populated resource pills -->
+            </div>
+            
+            <!-- Compact Replan Bar -->
+            <div class="pt-2 border-t border-border-subtle flex items-center justify-between text-[11px]">
+              <div class="flex items-center gap-1.5 text-text-secondary">
+                <select id="inline-playback-speed" class="bg-bg-canvas text-text-primary border border-border-subtle rounded px-1.5 py-0.5 font-mono text-[10px]">
+                  <option value="1.0">1.0x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2.0">2.0x</option>
+                </select>
+                <input type="number" id="inline-minutes-day" class="w-10 bg-bg-canvas text-text-primary border border-border-subtle rounded px-1 py-0.5 text-center font-mono text-[10px]" min="15" max="480" step="15" value="90">
+                <span>m/d</span>
+              </div>
+              <button id="btn-replan-now" class="bg-accent hover:bg-blue-700 text-white font-medium px-2 py-0.5 rounded text-[11px] shadow-sm transition active:scale-95">
+                Replan
+              </button>
+            </div>
           </div>
         </div>
       </section>
 
-      <!-- CENTER COLUMN: Primary Study Area (Lecture Video + Full Scrollable Notes Canvas) -->
-      <section id="pane-studio" class="flex-1 md:w-7/12 flex flex-col bg-alabaster-canvas dark:bg-charcoal-canvas overflow-hidden min-w-0 transition-all duration-200 relative">
+      <!-- CENTER COLUMN: Primary Study Area (Bounded Video + Full Scrollable Notes Canvas) -->
+      <section id="pane-studio" class="flex-1 flex flex-col bg-bg-canvas overflow-hidden min-w-0 relative">
         
-        <!-- Video Player Frame -->
-        <div id="player-wrapper" class="relative w-full bg-black aspect-video max-h-[45vh] flex items-center justify-center border-b border-alabaster-border dark:border-charcoal-border shadow-sm shrink-0 transition-all duration-200">
-          <div id="player-container" class="w-full h-full flex items-center justify-center">
-            <div id="yt-player-placeholder" class="text-slate-400 text-xs flex flex-col items-center">
-              <svg class="w-10 h-10 mb-2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              Select a lesson from the syllabus to begin playback
+        <!-- Video Player Frame (Bounded Top Pane, 30vh Default, min-height 180px, max-height 55vh) -->
+        <div id="player-wrapper" class="relative w-full shrink-0 flex flex-col overflow-hidden" style="height: var(--video-pane-height, 30vh); min-height: 180px; max-height: 55vh;">
+          <div id="player-container" class="w-full h-full flex items-center justify-center p-2 bg-bg-sidebar">
+            <div id="yt-player-stage" class="w-full h-full flex items-center justify-center max-w-full max-h-full aspect-video bg-black rounded-lg overflow-hidden shadow-sm relative">
+              <div id="yt-player-placeholder" class="text-text-secondary text-xs flex flex-col items-center">
+                <svg class="w-10 h-10 mb-2 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Select a lesson from the syllabus to begin playback
+              </div>
+              <div id="yt-player" class="w-full h-full"></div>
             </div>
-            <div id="yt-player" class="w-full h-full"></div>
+          </div>
+        </div>
+
+        <!-- Horizontal Splitter Slider between Video and Notes (6px drag handle) -->
+        <div id="video-notes-splitter" class="group relative w-full h-[6px] bg-border-subtle hover:bg-accent/40 active:bg-accent/60 cursor-row-resize flex items-center justify-center select-none z-20 shrink-0 transition-colors" title="Drag to resize video pane (Double-click to reset to 34vh)">
+          <!-- Center Grip Pill -->
+          <div class="w-12 h-1 rounded-full bg-text-secondary/40 group-hover:bg-accent transition-colors"></div>
+
+          <!-- Quick-Snap Buttons beside divider -->
+          <div class="absolute right-4 -top-3 flex items-center gap-1 bg-bg-card border border-border-subtle rounded-md px-1.5 py-0.5 shadow-md text-[10px] z-30 transition-all opacity-95 hover:opacity-100">
+            <button type="button" id="snap-compact-video" class="px-1.5 py-0.5 rounded hover:bg-bg-sidebar text-text-secondary hover:text-text-primary font-medium transition" title="Compact Video (25%)">Compact (25%)</button>
+            <button type="button" id="snap-balanced-video" class="px-1.5 py-0.5 rounded hover:bg-bg-sidebar text-text-secondary hover:text-text-primary font-medium transition" title="Balanced (38%)">Balanced (38%)</button>
+            <button type="button" id="btn-collapse-player" class="px-1.5 py-0.5 rounded hover:bg-bg-sidebar text-accent font-semibold transition" title="Hide / Show Video">Hide/Show</button>
           </div>
         </div>
 
         <!-- Active Lesson Action Strip -->
-        <div class="px-4 py-2 border-b border-alabaster-border dark:border-charcoal-border bg-alabaster-card/70 dark:bg-charcoal-card/70 flex items-center justify-between gap-3 shrink-0 text-xs">
+        <div class="px-4 py-2 border-b border-border-subtle bg-bg-sidebar/70 flex items-center justify-between gap-3 shrink-0 text-xs select-none">
           <div class="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden">
-            <button id="btn-toggle-active-priority" class="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-mono cursor-pointer shrink-0" title="Click to toggle Priority (Core / Deep-Dive)">
+            <button id="btn-toggle-active-priority" class="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-text border border-border-subtle font-mono cursor-pointer shrink-0" title="Click to toggle Priority (Core / Deep-Dive)">
               <span id="active-lesson-priority">Core</span>
             </button>
             <span id="active-lesson-split" class="hidden text-[10px] text-amber-600 dark:text-amber-400 font-mono"></span>
-            <h2 id="active-lesson-title" class="text-xs sm:text-sm font-semibold text-alabaster-text dark:text-charcoal-text truncate cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition" title="Click to edit lesson title">Select a lesson to begin study</h2>
-            <button id="btn-edit-active-title" class="text-alabaster-muted hover:text-blue-600 dark:text-charcoal-muted dark:hover:text-blue-400 p-1 shrink-0 relative z-10" title="Edit lesson title and details">
+            <h2 id="active-lesson-title" class="text-xs sm:text-sm font-semibold text-text-primary truncate cursor-pointer hover:text-accent transition" title="Click to edit lesson title">Select a lesson to begin study</h2>
+            <button id="btn-edit-active-title" class="text-text-secondary hover:text-accent p-1 shrink-0 relative z-10" title="Edit lesson title and details">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
             </button>
-            <span class="text-[11px] text-alabaster-muted dark:text-charcoal-muted font-mono shrink-0 hidden lg:inline">
+            <span class="text-[11px] text-text-secondary font-mono shrink-0 hidden lg:inline">
               <span id="active-lesson-time">00:00 - 00:00</span>
               <span class="mx-1">•</span>
               <span id="active-lesson-eff-min">0 min</span>
@@ -385,54 +494,86 @@
 
           <!-- Action Buttons -->
           <div class="flex items-center gap-1.5 shrink-0">
-            <button id="btn-toggle-auto-advance" class="px-2 py-1 rounded bg-alabaster-canvas dark:bg-charcoal-canvas border border-alabaster-border dark:border-charcoal-border text-alabaster-text dark:text-charcoal-text text-[11px] transition flex items-center gap-1" title="Auto-advance to next scheduled lesson slice">
+            <button id="btn-toggle-auto-advance" class="px-2 py-1 rounded bg-bg-canvas border border-border-subtle text-text-primary text-[11px] transition flex items-center gap-1" title="Auto-advance to next scheduled lesson slice">
               <span>Auto-Advance: <strong id="auto-advance-label">ON</strong></span>
             </button>
-            <button id="btn-toggle-active-complete" class="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-medium px-2.5 py-1 rounded transition flex items-center gap-1 shadow-sm active:scale-95">
+            <button id="btn-toggle-active-complete" class="bg-accent hover:bg-blue-700 text-white text-[11px] font-medium px-2.5 py-1 rounded transition flex items-center gap-1 shadow-sm active:scale-95">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
               <span id="active-complete-label">Mark Complete</span>
             </button>
-            <button id="btn-skip-active" class="bg-alabaster-canvas dark:bg-charcoal-canvas hover:bg-alabaster-hover dark:hover:bg-charcoal-hover text-alabaster-text dark:text-charcoal-text text-[11px] px-2 py-1 rounded border border-alabaster-border dark:border-charcoal-border transition" title="Skip this lesson & reflow">
+            <button id="btn-skip-active" class="bg-bg-canvas hover:bg-bg-card text-text-primary text-[11px] px-2 py-1 rounded border border-border-subtle transition" title="Skip this lesson & reflow">
               Skip
             </button>
-            <button id="btn-edit-active-lesson" class="text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text text-[11px] px-1.5 py-1 rounded hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition" title="Edit lesson details">
+            <button id="btn-edit-active-lesson" class="text-text-secondary hover:text-text-primary text-[11px] px-1.5 py-1 rounded hover:bg-bg-card transition" title="Edit lesson details">
               Edit
             </button>
-            <button id="btn-transcribe-lesson" class="text-[11px] text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text px-1.5 py-1 rounded hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition flex items-center gap-1" title="Transcribe">
+            <button id="btn-transcribe-lesson" class="text-[11px] text-text-secondary hover:text-text-primary px-1.5 py-1 rounded hover:bg-bg-card transition flex items-center gap-1" title="Transcribe">
               <span id="transcribe-btn-label">Transcribe</span>
-              <span id="transcribe-status-pill" class="hidden text-[9px] px-1 rounded bg-blue-100 dark:bg-blue-950 font-mono"></span>
+              <span id="transcribe-status-pill" class="hidden text-[9px] px-1 rounded bg-accent-soft text-accent-soft-text font-mono"></span>
             </button>
-            <button id="btn-capture-keyframes" class="text-[11px] text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text px-1.5 py-1 rounded hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition" title="Screenshots">
-              📸
+            <button id="btn-capture-keyframes" class="text-[11px] text-text-secondary hover:text-text-primary px-1.5 py-1 rounded hover:bg-bg-card transition flex items-center gap-1" title="Extract keyframe slide transitions from lecture video">
+              <span>📸</span>
+              <span class="hidden sm:inline">Screenshots</span>
             </button>
-            <button id="btn-regenerate-notes" class="text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text p-1 rounded hover:bg-alabaster-hover dark:hover:bg-charcoal-hover transition" title="Regenerate notes">
+            <button id="btn-snap-current-to-notes" type="button" class="text-[11px] text-accent hover:text-blue-700 bg-accent-soft px-2 py-1 rounded border border-border-subtle transition flex items-center gap-1 font-medium shadow-sm active:scale-95" title="Capture video frame at current timestamp and add to My Notes space">
+              <span>📸</span>
+              <span>Snap to Notes</span>
+            </button>
+            <button id="btn-regenerate-notes" class="text-text-secondary hover:text-text-primary p-1 rounded hover:bg-bg-card transition" title="Regenerate notes">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
             </button>
           </div>
         </div>
 
         <!-- Keyframes Visual Strip -->
-        <div id="keyframes-strip" class="hidden px-4 py-2 bg-alabaster-subcard dark:bg-charcoal-subcard border-b border-alabaster-border dark:border-charcoal-border overflow-x-auto flex items-center gap-3 shrink-0">
-          <!-- Populated dynamically with keyframe cards -->
-        </div>
+        <div id="keyframes-strip" class="hidden px-4 py-2 bg-bg-sidebar border-b border-border-subtle overflow-x-auto flex items-center gap-3 shrink-0"></div>
 
         <!-- Grounded Structured Notes Canvas (Generous Width & Independently Scrollable) -->
         <div id="pane-grounded-notes" class="flex-1 overflow-y-auto px-6 py-6 md:px-10 md:py-8 transition-all">
-          <div class="max-w-2xl mx-auto space-y-4">
-            <div id="notes-content" class="text-sm text-alabaster-text dark:text-charcoal-text leading-relaxed space-y-3 font-normal">
-              <p class="text-alabaster-muted dark:text-charcoal-muted italic text-xs">Select a lesson to load or generate grounded study notes and timestamped bookmarks.</p>
+          <div class="max-w-[74ch] mx-auto space-y-4">
+            <!-- Grounded Notes Action Toolbar -->
+            <div id="grounded-notes-toolbar" class="flex items-center justify-between pb-3 border-b border-border-subtle text-xs shrink-0 select-none">
+              <div class="flex items-center gap-2">
+                <span class="font-semibold text-text-primary text-xs flex items-center gap-1.5">
+                  <span class="text-base">📖</span>
+                  <span>Structured Lecture Notes</span>
+                </span>
+                <span id="grounded-notes-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-text font-mono font-medium">Subtitles AI Grounded</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button type="button" id="btn-print-grounded-notes" class="px-2.5 py-1 rounded-lg bg-bg-card hover:bg-bg-sidebar border border-border-subtle text-text-primary text-[11px] font-medium transition flex items-center gap-1 shadow-sm active:scale-95" title="Save notes as a formatted PDF document">
+                  <svg class="w-3.5 h-3.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                  <span>Save as PDF</span>
+                </button>
+                <button type="button" id="btn-download-grounded-notes" class="px-2.5 py-1 rounded-lg bg-bg-card hover:bg-bg-sidebar border border-border-subtle text-text-primary text-[11px] font-medium transition flex items-center gap-1 shadow-sm active:scale-95" title="Download notes as a Markdown (.md) file">
+                  <svg class="w-3.5 h-3.5 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                  <span>Download .md</span>
+                </button>
+                <button type="button" id="btn-copy-to-personal-notes" class="px-2.5 py-1 rounded-lg bg-bg-card hover:bg-bg-sidebar border border-border-subtle text-text-secondary hover:text-text-primary text-[11px] font-medium transition flex items-center gap-1 active:scale-95" title="Copy notes into Personal Notes space to edit & annotate">
+                  <span>📝 Copy to My Notes</span>
+                </button>
+              </div>
+            </div>
+            <div id="notes-content" class="text-[16px] leading-[1.65] text-text-primary space-y-4 font-normal">
+              <p class="text-text-secondary italic text-xs">Select a lesson to load or generate grounded study notes and timestamped bookmarks.</p>
             </div>
           </div>
         </div>
 
         <!-- Floating Scroll Down Button (↓) -->
-        <button id="btn-scroll-notes-down" type="button" class="absolute bottom-5 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-alabaster-card hover:bg-alabaster-hover dark:bg-charcoal-card dark:hover:bg-charcoal-hover border border-alabaster-border dark:border-charcoal-border shadow-md text-alabaster-text dark:text-charcoal-text flex items-center justify-center transition-all hover:scale-105 active:scale-95 z-20" title="Scroll down notes" onclick="document.getElementById('pane-grounded-notes')?.scrollBy({ top: 300, behavior: 'smooth' })">
+        <button id="btn-scroll-notes-down" type="button" class="absolute bottom-5 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-bg-card hover:bg-bg-sidebar border border-border-subtle shadow-md text-text-primary flex items-center justify-center transition-all hover:scale-105 active:scale-95 z-20" title="Scroll down notes" onclick="document.getElementById('pane-grounded-notes')?.scrollBy({ top: 300, behavior: 'smooth' })">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
         </button>
       </section>
 
-      <!-- RIGHT COLUMN: Studio Panel (~380px Full-Height) -->
-      <section id="pane-right-studio" class="w-full md:w-[380px] xl:w-[420px] shrink-0 border-t md:border-t-0 md:border-l border-alabaster-border dark:border-charcoal-border bg-alabaster-card dark:bg-charcoal-card flex flex-col overflow-hidden transition-all duration-200">
+      <!-- Vertical Splitter Slider between Center Study Column and Right Studio Panel (6px drag handle) -->
+      <div id="studio-splitter" class="group relative w-[6px] h-full bg-border-subtle hover:bg-accent/40 active:bg-accent/60 cursor-col-resize flex items-center justify-center select-none z-20 shrink-0 transition-colors" title="Drag to resize Right Studio (Double-click to reset to 380px)">
+        <!-- Center Grip Pill -->
+        <div class="h-12 w-1 rounded-full bg-text-secondary/40 group-hover:bg-accent transition-colors"></div>
+      </div>
+
+      <!-- RIGHT COLUMN: Studio Panel (~380px Full-Height, Resizable up to 55vw) -->
+      <section id="pane-right-studio" class="shrink-0 border-t md:border-t-0 border-border-subtle bg-bg-sidebar flex flex-col overflow-hidden" style="width: var(--studio-panel-width, 380px); min-width: 300px; max-width: 55vw;">
         
         <!-- Studio Tabs Header (Clean Text, Zero Emojis, Calm Blue Underline) -->
         <div class="px-4 border-b border-alabaster-border dark:border-charcoal-border flex items-center space-x-4 text-xs font-medium shrink-0 bg-alabaster-card dark:bg-charcoal-card overflow-x-auto">
@@ -485,6 +626,9 @@
               <button type="button" class="md-tool-btn px-2 py-0.5 rounded font-mono hover:bg-alabaster-card dark:hover:bg-charcoal-card text-alabaster-text dark:text-charcoal-text" data-format="code" title="Code snippet (`code`)">&lt;/&gt;</button>
               <button type="button" class="md-tool-btn px-2 py-0.5 rounded hover:bg-alabaster-card dark:hover:bg-charcoal-card text-alabaster-text dark:text-charcoal-text" data-format="bullet" title="Bullet list (- item)">• List</button>
               <button type="button" class="md-tool-btn px-2 py-0.5 rounded hover:bg-alabaster-card dark:hover:bg-charcoal-card text-alabaster-text dark:text-charcoal-text" data-format="quote" title="Blockquote (&gt; quote)">&gt; Quote</button>
+              <button type="button" id="btn-toolbar-snap-frame" class="px-2 py-0.5 rounded font-medium hover:bg-bg-sidebar text-accent transition flex items-center gap-1 text-[11px] ml-auto" title="Capture screenshot of video frame at current timestamp into Notes">
+                <span>📸 Snap Frame</span>
+              </button>
             </div>
 
             <textarea id="input-personal-notes" placeholder="Write exam notes, formulas, memory shortcuts, or question checklists..." class="w-full flex-1 bg-alabaster-canvas dark:bg-charcoal-canvas border border-alabaster-border dark:border-charcoal-border rounded-xl p-3 text-xs text-alabaster-text dark:text-charcoal-text placeholder-alabaster-muted dark:placeholder-charcoal-muted focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono leading-relaxed resize-none"></textarea>
@@ -739,12 +883,25 @@
         <button id="btn-close-curriculum" class="text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text p-1">✕</button>
       </div>
 
-      <div class="p-2.5 border-b border-alabaster-border dark:border-charcoal-border flex items-center gap-2">
-        <input type="text" id="curriculum-search" placeholder="Search lessons..." class="w-full bg-alabaster-canvas dark:bg-charcoal-canvas border border-alabaster-border dark:border-charcoal-border rounded px-2 py-1 text-xs text-alabaster-text dark:text-charcoal-text focus:outline-none focus:ring-1 focus:ring-blue-500">
+      <div class="p-2.5 border-b border-border-subtle flex items-center gap-2">
+        <input type="text" id="curriculum-search" placeholder="Search lessons..." class="w-full bg-bg-canvas border border-border-subtle rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent">
       </div>
 
-      <div class="px-3 py-1.5 border-b border-alabaster-border dark:border-charcoal-border bg-alabaster-subcard/50 dark:bg-charcoal-subcard/50 flex justify-between text-[11px]">
-        <button id="btn-curriculum-include-all" class="text-blue-600 dark:text-blue-400 font-medium hover:underline">Select All</button>
+      <div class="px-3 py-2 border-b border-border-subtle bg-accent-soft/40 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span class="text-sm">📑</span>
+          <div class="truncate">
+            <div class="text-[11px] font-bold text-text-primary truncate">University Syllabus</div>
+            <div class="text-[10px] text-text-secondary truncate">Match & auto-select videos</div>
+          </div>
+        </div>
+        <button id="btn-curriculum-match-syllabus" class="shrink-0 px-2.5 py-1 rounded bg-accent hover:opacity-90 text-white text-[11px] font-semibold transition active:scale-95 shadow-sm">
+          Match Syllabus
+        </button>
+      </div>
+
+      <div class="px-3 py-1.5 border-b border-border-subtle bg-bg-sidebar flex justify-between text-[11px]">
+        <button id="btn-curriculum-include-all" class="text-accent font-medium hover:underline">Select All</button>
         <button id="btn-curriculum-skip-examples" class="text-amber-600 dark:text-amber-400 font-medium hover:underline" title="Skip questions & example videos">Skip All Examples</button>
       </div>
 
@@ -811,15 +968,15 @@
           </div>
 
           <!-- Preset Card 2: TOC Playlist -->
-          <div id="card-preset-toc" class="group relative bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 hover:border-purple-500 dark:hover:border-purple-500 rounded-2xl p-5 shadow-sm hover:shadow-md transition cursor-pointer flex flex-col justify-between">
+          <div id="card-preset-toc" class="group relative bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 hover:border-accent dark:hover:border-accent rounded-2xl p-5 shadow-sm hover:shadow-md transition cursor-pointer flex flex-col justify-between">
             <div>
               <div class="flex items-center justify-between mb-2">
-                <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-mono">
+                <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-text border border-border-subtle font-mono">
                   Curated Playlist • 114 Videos
                 </span>
-                <span class="text-[11px] font-mono text-zinc-400 group-hover:text-purple-500 transition">Neso Academy</span>
+                <span class="text-[11px] font-mono text-zinc-400 group-hover:text-accent transition">Neso Academy</span>
               </div>
-              <h3 class="text-sm font-bold text-zinc-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition">
+              <h3 class="text-sm font-bold text-zinc-900 dark:text-white group-hover:text-accent dark:group-hover:text-accent transition">
                 Theory of Computation (TOC) Complete Syllabus
               </h3>
               <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2">
@@ -828,7 +985,7 @@
             </div>
             <div class="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between text-xs">
               <span class="text-[11px] text-zinc-500 font-mono">Paced • 90m/day @ 1.25x</span>
-              <span class="font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1 group-hover:translate-x-0.5 transition">
+              <span class="font-semibold text-accent flex items-center gap-1 group-hover:translate-x-0.5 transition">
                 <span>Select / Populate</span> →
               </span>
             </div>
@@ -1000,6 +1157,46 @@
       </div>
 
       <div class="space-y-4 text-xs overflow-y-auto pr-1 flex-1">
+        <!-- 0. Course Settings, Pacing & Accelerator Tools -->
+        <div class="bg-zinc-50 dark:bg-zinc-800/60 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-700 space-y-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <span class="font-bold text-zinc-900 dark:text-white text-xs uppercase tracking-wider">Course Configuration</span>
+              <p class="text-[10px] text-zinc-500">Edit course title, deadline, speed, pace & curriculum</p>
+            </div>
+            <button id="modal-btn-edit-course" class="bg-accent hover:bg-blue-700 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition flex items-center gap-1 shadow-sm active:scale-95">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              <span>Edit Course</span>
+            </button>
+          </div>
+
+          <!-- Pacing Strategy Pills -->
+          <div class="flex items-center justify-between text-xs pt-1.5 border-t border-zinc-200 dark:border-zinc-700">
+            <span class="text-zinc-600 dark:text-zinc-400 font-medium">Pacing Strategy:</span>
+            <div class="flex items-center bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg p-0.5 text-[11px]">
+              <button id="modal-pill-strategy-paced" class="px-2 py-0.5 rounded font-medium transition strategy-btn bg-accent text-white shadow-sm" title="Spread lessons evenly across all days until exam">
+                Finish on Exam Date
+              </button>
+              <button id="modal-pill-strategy-fixed" class="px-2 py-0.5 rounded font-medium transition strategy-btn text-zinc-500 hover:text-zinc-900 dark:hover:text-white" title="Fixed daily minutes (Sprint mode)">
+                By Daily Spend
+              </button>
+            </div>
+          </div>
+
+          <!-- Accelerator Tools Row: Diagnostic, Curriculum, & Syllabus -->
+          <div class="grid grid-cols-3 gap-2 pt-1.5 border-t border-zinc-200 dark:border-zinc-700">
+            <button id="modal-btn-diagnostic-test" class="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-accent-soft hover:opacity-90 text-[10.5px] font-semibold text-accent-soft-text border border-border-subtle transition active:scale-95" title="Take a 3-min diagnostic pre-test to test out of known topics">
+              <span>⏱️ Diagnostic</span>
+            </button>
+            <button id="modal-btn-match-syllabus" class="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-accent-soft hover:opacity-90 text-[10.5px] font-semibold text-accent-soft-text border border-border-subtle transition active:scale-95" title="Paste University Syllabus to Auto-Select Videos">
+              <span>📑 Syllabus</span>
+            </button>
+            <button id="modal-btn-toggle-curriculum" class="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-[10.5px] font-semibold text-zinc-800 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700 transition active:scale-95" title="Inspect & Filter Playlist Videos (Skip Examples)">
+              <span>📚 Curriculum</span>
+            </button>
+          </div>
+        </div>
+
         <!-- 1. LLM Engine Presets & API Keys -->
         <div class="bg-zinc-50 dark:bg-zinc-800/60 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-700">
           <div class="flex items-center justify-between mb-2">
@@ -1334,41 +1531,52 @@
 
   <!-- Edit Course Settings Modal (Comprehensive Course Editor) -->
   <div id="edit-course-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl max-h-[90vh] flex flex-col">
-      <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
+    <div class="bg-bg-card border border-border-subtle rounded-3xl max-w-lg w-full p-6 shadow-2xl max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 mb-4 border-b border-border-subtle shrink-0">
         <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+          <div class="w-8 h-8 rounded-lg bg-accent-soft text-accent-soft-text flex items-center justify-center font-bold">
             ✏️
           </div>
           <div>
-            <h3 class="text-base font-bold text-slate-900 dark:text-white">Edit Course & Pacing</h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400">Update title, exam deadline, pacing strategy & rest days</p>
+            <h3 class="text-base font-bold text-text-primary">Edit Course & Pacing</h3>
+            <p class="text-xs text-text-secondary">Update title, exam deadline, pacing strategy & rest days</p>
           </div>
         </div>
-        <button id="btn-close-edit-course" class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-sm p-1">✕</button>
+        <button id="btn-close-edit-course" class="text-text-secondary hover:text-text-primary text-sm p-1">✕</button>
       </div>
 
       <form id="form-edit-course" class="space-y-4 overflow-y-auto flex-1 pr-1">
         <div>
-          <label class="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1">Course Title</label>
-          <input type="text" id="edit-course-title" required class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Course Title</label>
+          <input type="text" id="edit-course-title" required class="w-full bg-bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent">
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1">Exam Date (Deadline)</label>
-            <input type="date" id="edit-course-target-date" required class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono">
+            <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Exam Date (Deadline)</label>
+            <input type="date" id="edit-course-target-date" class="w-full bg-bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent font-mono">
           </div>
           <div>
-            <label class="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1">Daily Study (Minutes)</label>
-            <input type="number" id="edit-course-minutes" min="15" max="480" step="15" required class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono">
+            <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Or Number of Study Days</label>
+            <input type="number" id="edit-course-days" min="1" max="365" placeholder="e.g. 14" class="w-full bg-bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent font-mono">
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1">Playback Speed</label>
-            <select id="edit-course-speed" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Daily Study (Minutes)</label>
+            <input type="number" id="edit-course-minutes" min="15" max="480" step="15" required class="w-full bg-bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent font-mono">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Preferred Daily Budget (Min)</label>
+            <input type="number" id="edit-course-pref-minutes" min="15" max="480" step="15" placeholder="60" class="w-full bg-bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent font-mono">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Playback Speed</label>
+            <select id="edit-course-speed" class="w-full bg-bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent">
               <option value="1.0">1.0x (Normal)</option>
               <option value="1.25">1.25x (Accelerated)</option>
               <option value="1.5">1.5x (Fast)</option>
@@ -1376,8 +1584,8 @@
             </select>
           </div>
           <div>
-            <label class="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1">Revision Buffer</label>
-            <select id="edit-course-buffer" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Revision Buffer</label>
+            <select id="edit-course-buffer" class="w-full bg-bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent">
               <option value="0">0 Days (Finish on Exam Date)</option>
               <option value="1">1 Day</option>
               <option value="2">2 Days (Recommended)</option>
@@ -1388,50 +1596,50 @@
         </div>
 
         <div>
-          <label class="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1">Schedule Strategy</label>
+          <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Schedule Strategy</label>
           <div class="grid grid-cols-2 gap-2">
-            <label class="flex items-center gap-2 p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer">
-              <input type="radio" name="edit-strategy" value="paced" id="edit-strat-paced" class="text-indigo-600 focus:ring-0">
+            <label class="flex items-center gap-2 p-2.5 bg-bg-canvas rounded-xl border border-border-subtle cursor-pointer">
+              <input type="radio" name="edit-strategy" value="paced" id="edit-strat-paced" class="text-accent focus:ring-0">
               <div class="text-xs">
-                <div class="font-bold text-slate-900 dark:text-white">Paced to Exam</div>
-                <div class="text-[10px] text-slate-500">Spread evenly across all days</div>
+                <div class="font-bold text-text-primary">Paced to Exam</div>
+                <div class="text-[10px] text-text-secondary">Spread evenly across all days</div>
               </div>
             </label>
-            <label class="flex items-center gap-2 p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer">
-              <input type="radio" name="edit-strategy" value="fixed" id="edit-strat-fixed" class="text-indigo-600 focus:ring-0">
+            <label class="flex items-center gap-2 p-2.5 bg-bg-canvas rounded-xl border border-border-subtle cursor-pointer">
+              <input type="radio" name="edit-strategy" value="fixed" id="edit-strat-fixed" class="text-accent focus:ring-0">
               <div class="text-xs">
-                <div class="font-bold text-slate-900 dark:text-white">By Daily Spend</div>
-                <div class="text-[10px] text-slate-500">Fixed minutes per day</div>
+                <div class="font-bold text-text-primary">By Daily Spend</div>
+                <div class="text-[10px] text-text-secondary">Fixed minutes per day</div>
               </div>
             </label>
           </div>
         </div>
 
         <div>
-          <label class="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1">Weekly Rest Days</label>
+          <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Weekly Rest Days</label>
           <div class="flex flex-wrap gap-2 text-xs">
-            <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
-              <input type="checkbox" name="edit-rest-day" value="Sunday" class="edit-rest-checkbox text-indigo-600">
-              <span>Sun</span>
+            <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-bg-canvas border border-border-subtle cursor-pointer">
+              <input type="checkbox" name="edit-rest-day" value="Sunday" class="edit-rest-checkbox text-accent">
+              <span class="text-text-primary">Sun</span>
             </label>
-            <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
-              <input type="checkbox" name="edit-rest-day" value="Saturday" class="edit-rest-checkbox text-indigo-600">
-              <span>Sat</span>
+            <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-bg-canvas border border-border-subtle cursor-pointer">
+              <input type="checkbox" name="edit-rest-day" value="Saturday" class="edit-rest-checkbox text-accent">
+              <span class="text-text-primary">Sat</span>
             </label>
-            <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
-              <input type="checkbox" name="edit-rest-day" value="Friday" class="edit-rest-checkbox text-indigo-600">
-              <span>Fri</span>
+            <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-bg-canvas border border-border-subtle cursor-pointer">
+              <input type="checkbox" name="edit-rest-day" value="Friday" class="edit-rest-checkbox text-accent">
+              <span class="text-text-primary">Fri</span>
             </label>
-            <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
-              <input type="checkbox" name="edit-rest-day" value="Wednesday" class="edit-rest-checkbox text-indigo-600">
-              <span>Wed</span>
+            <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-bg-canvas border border-border-subtle cursor-pointer">
+              <input type="checkbox" name="edit-rest-day" value="Wednesday" class="edit-rest-checkbox text-accent">
+              <span class="text-text-primary">Wed</span>
             </label>
           </div>
         </div>
 
-        <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2 shrink-0">
-          <button type="button" id="btn-cancel-edit-course" class="px-4 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition">Cancel</button>
-          <button type="submit" id="btn-submit-edit-course" class="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs transition shadow-md shadow-indigo-500/20 active:scale-95">
+        <div class="pt-3 border-t border-border-subtle flex justify-end gap-2 shrink-0">
+          <button type="button" id="btn-cancel-edit-course" class="px-4 py-2 rounded-xl text-xs font-medium text-text-secondary hover:bg-bg-sidebar transition">Cancel</button>
+          <button type="submit" id="btn-submit-edit-course" class="px-5 py-2 rounded-xl bg-accent hover:bg-blue-600 text-white font-bold text-xs transition shadow-sm active:scale-95">
             Save & Replan Schedule
           </button>
         </div>
@@ -1441,13 +1649,13 @@
 
   <!-- Edit Lesson Modal (Rename, Priority, Reschedule Date) -->
   <div id="edit-lesson-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl">
-      <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-200 dark:border-slate-800">
+    <div class="bg-bg-card border border-border-subtle rounded-3xl max-w-md w-full p-6 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 mb-4 border-b border-border-subtle">
         <div class="flex items-center gap-2">
           <span class="text-base">✏️</span>
-          <h3 class="text-base font-bold text-slate-900 dark:text-white">Edit Lesson</h3>
+          <h3 class="text-base font-bold text-text-primary">Edit Lesson</h3>
         </div>
-        <button id="btn-close-edit-lesson" class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-sm">✕</button>
+        <button id="btn-close-edit-lesson" class="text-text-secondary hover:text-text-primary text-sm">✕</button>
       </div>
 
       <form id="form-edit-lesson" class="space-y-4">
@@ -1455,32 +1663,32 @@
         <input type="hidden" id="edit-lesson-alloc-id">
         
         <div>
-          <label class="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1">Lesson Title</label>
-          <input type="text" id="edit-lesson-title-input" required class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Lesson Title</label>
+          <input type="text" id="edit-lesson-title-input" required class="w-full bg-bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent">
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1">Priority</label>
-            <select id="edit-lesson-priority-input" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Priority</label>
+            <select id="edit-lesson-priority-input" class="w-full bg-bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent">
               <option value="core">Core (Essential)</option>
               <option value="deep-dive">Deep-Dive (Optional)</option>
             </select>
           </div>
           <div>
-            <label class="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1">Move to Date</label>
-            <input type="date" id="edit-lesson-reschedule-date" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono">
+            <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Move to Date</label>
+            <input type="date" id="edit-lesson-reschedule-date" class="w-full bg-bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent font-mono">
           </div>
         </div>
 
         <div>
-          <label class="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1">Lesson Summary / Notes</label>
-          <textarea id="edit-lesson-summary-input" rows="3" placeholder="Brief summary or concept notes..." class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+          <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Lesson Summary / Notes</label>
+          <textarea id="edit-lesson-summary-input" rows="3" placeholder="Brief summary or concept notes..." class="w-full bg-bg-canvas border border-border-subtle rounded-xl p-2.5 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"></textarea>
         </div>
 
         <div class="pt-2 flex justify-end gap-2">
-          <button type="button" id="btn-cancel-edit-lesson" class="px-4 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition">Cancel</button>
-          <button type="submit" id="btn-submit-edit-lesson" class="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs transition shadow-md shadow-indigo-500/20 active:scale-95">
+          <button type="button" id="btn-cancel-edit-lesson" class="px-4 py-2 rounded-xl text-xs font-medium text-text-secondary hover:bg-bg-sidebar transition">Cancel</button>
+          <button type="submit" id="btn-submit-edit-lesson" class="px-5 py-2 rounded-xl bg-accent hover:bg-blue-600 text-white font-bold text-xs transition shadow-sm active:scale-95">
             Save Lesson
           </button>
         </div>
@@ -1490,28 +1698,28 @@
 
   <!-- Edit Flashcard Modal -->
   <div id="edit-card-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl">
-      <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-200 dark:border-slate-800">
-        <h3 class="text-base font-bold text-slate-900 dark:text-white">Edit Flashcard</h3>
-        <button id="btn-close-edit-card" class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-sm">✕</button>
+    <div class="bg-bg-card border border-border-subtle rounded-3xl max-w-md w-full p-6 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 mb-4 border-b border-border-subtle">
+        <h3 class="text-base font-bold text-text-primary">Edit Flashcard</h3>
+        <button id="btn-close-edit-card" class="text-text-secondary hover:text-text-primary text-sm">✕</button>
       </div>
       <form id="form-edit-card" class="space-y-4">
         <input type="hidden" id="edit-card-id">
         <div>
-          <label class="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1">Front (Question or Concept)</label>
-          <textarea id="edit-card-front-input" required rows="2" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500"></textarea>
+          <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Front (Question or Concept)</label>
+          <textarea id="edit-card-front-input" required rows="2" class="w-full bg-bg-canvas border border-border-subtle rounded-xl p-2.5 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"></textarea>
         </div>
         <div>
-          <label class="block text-xs font-semibold uppercase text-slate-600 dark:text-slate-300 mb-1">Back (Answer & Explanation)</label>
-          <textarea id="edit-card-back-input" required rows="3" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500"></textarea>
+          <label class="block text-xs font-semibold uppercase text-text-secondary mb-1">Back (Answer & Explanation)</label>
+          <textarea id="edit-card-back-input" required rows="3" class="w-full bg-bg-canvas border border-border-subtle rounded-xl p-2.5 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"></textarea>
         </div>
         <div class="pt-2 flex justify-between items-center">
-          <button type="button" id="btn-delete-card-from-modal" class="text-rose-600 dark:text-rose-400 text-xs hover:underline font-semibold flex items-center gap-1">
+          <button type="button" id="btn-delete-card-from-modal" class="text-red-600 dark:text-red-400 text-xs hover:underline font-semibold flex items-center gap-1">
             <span>🗑️ Delete Card</span>
           </button>
           <div class="flex gap-2">
-            <button type="button" id="btn-cancel-edit-card" class="px-4 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition">Cancel</button>
-            <button type="submit" id="btn-submit-edit-card" class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition shadow-sm active:scale-95">Update Card</button>
+            <button type="button" id="btn-cancel-edit-card" class="px-4 py-2 rounded-xl text-xs font-medium text-text-secondary hover:bg-bg-sidebar transition">Cancel</button>
+            <button type="submit" id="btn-submit-edit-card" class="px-5 py-2 rounded-xl bg-accent hover:bg-blue-600 text-white font-bold text-xs transition shadow-sm active:scale-95">Update Card</button>
           </div>
         </div>
       </form>
@@ -1522,30 +1730,148 @@
   <div id="modal-cram-sheet" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
     <div class="bg-alabaster-card dark:bg-charcoal-card border border-alabaster-border dark:border-charcoal-border rounded-2xl max-w-4xl w-full h-[90vh] flex flex-col shadow-2xl overflow-hidden">
       <!-- Header -->
-      <div class="px-5 py-3 border-b border-alabaster-border dark:border-charcoal-border flex items-center justify-between shrink-0 bg-alabaster-subcard/60 dark:bg-charcoal-subcard/60 no-print">
+      <div class="px-5 py-3 border-b border-border-subtle flex items-center justify-between shrink-0 bg-bg-sidebar no-print">
         <div class="flex items-center gap-2">
-          <span class="text-sm font-bold text-alabaster-text dark:text-charcoal-text">⚡ Last-Night Exam Cram Sheet</span>
-          <span id="badge-cram-cache" class="text-[10px] px-2 py-0.5 rounded-full font-mono bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">Cached</span>
+          <span class="text-sm font-bold text-text-primary">⚡ Last-Night Exam Cram Sheet</span>
+          <span id="badge-cram-cache" class="text-[10px] px-2 py-0.5 rounded-full font-mono bg-accent-soft text-accent-soft-text border border-border-subtle">Cached</span>
         </div>
         <div class="flex items-center gap-2">
-          <button id="btn-print-cram-sheet" class="px-3 py-1 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex items-center gap-1 transition active:scale-95" title="Print crisp A4 two-column exam sheet or Save as PDF">
+          <button id="btn-full-cram-sheet" class="px-3 py-1 rounded-lg text-xs font-semibold bg-accent hover:bg-blue-600 text-white shadow-sm flex items-center gap-1 transition active:scale-95" title="Sequentially process entire course playlist/syllabus in batches and synthesize complete master cheat sheet">
+            <span>⚡ Full Syllabus Synthesis</span>
+          </button>
+          <button id="btn-print-cram-sheet" class="px-3 py-1 rounded-lg text-xs font-semibold bg-bg-card hover:bg-bg-sidebar border border-border-subtle text-text-primary shadow-sm flex items-center gap-1 transition active:scale-95" title="Print crisp A4 two-column exam sheet or Save as PDF">
             <span>🖨️ Print / Save PDF</span>
           </button>
-          <button id="btn-download-cram-md" class="px-3 py-1 rounded-lg text-xs font-medium border border-alabaster-border dark:border-charcoal-border bg-alabaster-canvas dark:bg-charcoal-canvas hover:bg-alabaster-hover dark:hover:bg-charcoal-hover text-alabaster-text dark:text-charcoal-text transition active:scale-95" title="Download raw Markdown file">
+          <button id="btn-download-cram-md" class="px-3 py-1 rounded-lg text-xs font-medium border border-border-subtle bg-bg-canvas hover:bg-bg-sidebar text-text-primary transition active:scale-95" title="Download raw Markdown file">
             <span>📥 Download .md</span>
           </button>
-          <button id="btn-refresh-cram-sheet" class="px-2.5 py-1 rounded-lg text-xs font-medium border border-alabaster-border dark:border-charcoal-border text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text transition" title="Force regenerate cram sheet from latest notes & PYQs">
+          <button id="btn-refresh-cram-sheet" class="px-2.5 py-1 rounded-lg text-xs font-medium border border-border-subtle text-text-secondary hover:text-text-primary transition" title="Force regenerate cram sheet from latest notes & PYQs">
             <span>🔄 Re-Synthesize</span>
           </button>
-          <button id="btn-close-cram-sheet" class="p-1 rounded-lg text-alabaster-muted hover:text-alabaster-text dark:text-charcoal-muted dark:hover:text-charcoal-text transition text-sm">
+          <button id="btn-close-cram-sheet" class="p-1 rounded-lg text-text-secondary hover:text-text-primary transition text-sm">
             ✕
           </button>
         </div>
       </div>
       <!-- Scrollable Printable Container -->
-      <div class="flex-1 overflow-y-auto p-6 space-y-4 bg-alabaster-canvas dark:bg-charcoal-canvas">
-        <div id="cram-sheet-content" class="max-w-3xl mx-auto space-y-4 text-xs sm:text-sm leading-relaxed text-alabaster-text dark:text-charcoal-text">
+      <div class="flex-1 overflow-y-auto p-6 space-y-4 bg-bg-canvas">
+        <div id="cram-sheet-content" class="max-w-3xl mx-auto space-y-4 text-xs sm:text-sm leading-relaxed text-text-primary">
           <!-- Markdown rendered cram sheet -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Syllabus Alignment & Auto-Curator Modal -->
+  <div id="modal-syllabus-match" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
+    <div class="bg-bg-card border border-border-subtle rounded-2xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- Modal Header -->
+      <div class="px-5 py-3 border-b border-border-subtle flex items-center justify-between shrink-0 bg-bg-sidebar">
+        <div class="flex items-center gap-2">
+          <span class="text-base">📑</span>
+          <div>
+            <h3 class="text-sm font-bold text-text-primary">Syllabus Matcher & Auto-Curator</h3>
+            <p class="text-[11px] text-text-secondary">Paste your university syllabus to auto-select matching videos and trim the rest</p>
+          </div>
+        </div>
+        <button id="btn-close-syllabus-modal" class="text-text-secondary hover:text-text-primary p-1 rounded hover:bg-bg-card transition" title="Close">✕</button>
+      </div>
+
+      <!-- Step 1: Input Screen -->
+      <div id="syllabus-step-input" class="p-5 flex-1 overflow-y-auto space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-text-primary mb-1.5">Course / University Syllabus Text</label>
+          <textarea id="input-syllabus-text" rows="9" class="w-full bg-bg-canvas border border-border-subtle rounded-xl p-3 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent font-sans leading-relaxed resize-none" placeholder="Paste your syllabus here...
+
+e.g.
+Unit 1: Theory of Computation Basics
+Finite Automata, Deterministic Finite Automata (DFA), Non-deterministic Finite Automata (NFA), Equivalence of DFA and NFA, Minimization of DFA.
+
+Unit 2: Regular Expressions & Languages
+Regular Expressions, Regular Grammars, Pumping Lemma for Regular Languages.
+
+Unit 3: Context-Free Grammars and Pushdown Automata
+Context-Free Grammars (CFG), Pushdown Automata (PDA), Acceptance by final state.
+
+Unit 4: Turing Machines
+Turing Machine definition and design, Halting Problem, Undecidability."></textarea>
+          <p class="text-[11px] text-text-secondary mt-1">Accepts units, modules, bullet points, or comma-separated topics from any course outline or exam guide.</p>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border-subtle">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-medium text-text-secondary">Matching Strictness:</span>
+            <div class="inline-flex rounded-lg border border-border-subtle p-0.5 bg-bg-canvas text-[11px]">
+              <button type="button" id="pill-syl-balanced" class="px-2.5 py-1 rounded-md font-semibold bg-accent text-white shadow-sm transition">Balanced</button>
+              <button type="button" id="pill-syl-strict" class="px-2.5 py-1 rounded-md font-medium text-text-secondary hover:text-text-primary transition">Strict</button>
+              <button type="button" id="pill-syl-comprehensive" class="px-2.5 py-1 rounded-md font-medium text-text-secondary hover:text-text-primary transition">Comprehensive</button>
+            </div>
+          </div>
+          <button id="btn-analyze-syllabus" class="px-4 py-2 rounded-xl bg-accent text-white font-semibold text-xs shadow-sm hover:opacity-90 transition active:scale-95 flex items-center gap-1.5">
+            <span>✨</span>
+            <span id="btn-analyze-syllabus-text">Analyze & Match Videos</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 2: Review Screen (Initially Hidden) -->
+      <div id="syllabus-step-review" class="hidden flex-1 flex flex-col min-h-0 overflow-hidden">
+        <!-- Stats Summary Bar -->
+        <div class="p-4 border-b border-border-subtle bg-bg-canvas grid grid-cols-3 gap-3 text-center shrink-0">
+          <div class="p-2 rounded-xl bg-bg-card border border-border-subtle">
+            <div id="stat-syl-matched-count" class="text-lg font-bold text-accent">0 / 0</div>
+            <div class="text-[10px] text-text-secondary font-medium">Videos Matched</div>
+          </div>
+          <div class="p-2 rounded-xl bg-bg-card border border-border-subtle">
+            <div id="stat-syl-saved-time" class="text-lg font-bold text-emerald-600 dark:text-emerald-400">0h 0m</div>
+            <div class="text-[10px] text-text-secondary font-medium">Out-of-Syllabus Time Saved</div>
+          </div>
+          <div class="p-2 rounded-xl bg-bg-card border border-border-subtle">
+            <div id="stat-syl-coverage" class="text-lg font-bold text-text-primary">0%</div>
+            <div class="text-[10px] text-text-secondary font-medium">Syllabus Coverage</div>
+          </div>
+        </div>
+
+        <!-- Review Tabs & Bulk Actions -->
+        <div class="px-4 py-2 border-b border-border-subtle flex items-center justify-between bg-bg-sidebar shrink-0 text-xs">
+          <div class="flex items-center gap-2">
+            <button id="tab-syl-topics" class="px-2.5 py-1 rounded-md font-semibold bg-accent text-white transition">By Syllabus Topic</button>
+            <button id="tab-syl-checklist" class="px-2.5 py-1 rounded-md font-medium text-text-secondary hover:text-text-primary transition">All Videos Checklist</button>
+          </div>
+          <div class="flex items-center gap-2 text-[11px]">
+            <button id="btn-syl-select-matched" class="text-accent hover:underline font-medium">Select Matched</button>
+            <span class="text-text-secondary">•</span>
+            <button id="btn-syl-select-all" class="text-text-secondary hover:text-text-primary hover:underline">Select All</button>
+            <span class="text-text-secondary">•</span>
+            <button id="btn-syl-deselect-all" class="text-text-secondary hover:text-text-primary hover:underline">Clear</button>
+          </div>
+        </div>
+
+        <!-- Scrollable Tab Content -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-3">
+          <!-- View A: Grouped by Syllabus Topic -->
+          <div id="syllabus-view-topics" class="space-y-3">
+            <!-- Injected via JS -->
+          </div>
+
+          <!-- View B: All Videos Checklist -->
+          <div id="syllabus-view-checklist" class="hidden space-y-1.5 divide-y divide-border-subtle/40">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="p-3.5 border-t border-border-subtle bg-bg-sidebar flex items-center justify-between shrink-0">
+          <button id="btn-syl-back" class="px-3 py-1.5 rounded-lg border border-border-subtle text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-bg-card transition">
+            ← Edit Syllabus
+          </button>
+          <div class="flex items-center gap-2.5">
+            <span id="syllabus-selected-label" class="text-xs font-medium text-text-secondary">0 videos selected</span>
+            <button id="btn-apply-syllabus" class="px-4 py-2 rounded-xl bg-accent text-white font-semibold text-xs shadow-sm hover:opacity-90 transition active:scale-95 flex items-center gap-1.5">
+              <span>🚀</span>
+              <span id="btn-apply-syllabus-text">Apply & Auto-Reschedule Course</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1557,10 +1883,13 @@
     <span>Explain with AI</span>
   </button>
 
+  <!-- Hidden Print Container for Grounded Lecture Notes -->
+  <div id="grounded-notes-print-container" class="hidden"></div>
+
   <!-- Floating Toast Notifications -->
   <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
   <!-- Main JavaScript App -->
-  <script src="/static/js/app.js?v=0.5.2"></script>
+  <script src="/static/js/app.js?v=0.6.4"></script>
 </body>
 </html>

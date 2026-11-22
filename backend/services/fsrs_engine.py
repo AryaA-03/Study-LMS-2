@@ -7,6 +7,7 @@ based on proximity to exam date, due-card retrieval, and interval previews.
 
 import json
 import uuid
+import re
 import datetime
 from datetime import timezone, timedelta
 from typing import List, Dict, Any, Optional, Tuple
@@ -342,3 +343,132 @@ def get_flashcard_counts(conn, course_id: str) -> Dict[str, int]:
         "learning": learning,
         "review": review,
     }
+
+
+def generate_concept_flashcards(
+    conn,
+    course_id: str,
+    lesson_id: str,
+    count: int = 5,
+) -> List[Dict[str, Any]]:
+    """Automatically generates 4-6 concise Q&A / formula flashcards per Concept Clip.
+    
+    Extracts key principles, definitions, or formulas from the clip's transcript chunks,
+    tags each with [MM:SS] timestamp and clip reference, and inserts them into the
+    FSRS spaced-repetition queue.
+    """
+    cur = conn.cursor()
+    # Check if flashcards already exist for this lesson/clip
+    cur.execute("SELECT COUNT(*) FROM flashcards WHERE lesson_id = ?;", (lesson_id,))
+    existing_count = cur.fetchone()[0]
+    if existing_count >= 4:
+        cur.execute("SELECT * FROM flashcards WHERE lesson_id = ? ORDER BY created_at ASC;", (lesson_id,))
+        rows = cur.fetchall()
+        col_names = [d[0] for d in cur.description]
+        scheduler = get_fsrs_scheduler()
+        now_utc = datetime.datetime.now(timezone.utc)
+        results = []
+        for r in rows:
+            cd = dict(zip(col_names, r))
+            fc = card_to_fsrs(cd)
+            intervals = preview_intervals(fc, scheduler, now_utc)
+            cd["intervals"] = intervals
+            cd["state_name"] = fc.state.name
+            results.append(cd)
+        return results
+
+    # Fetch lesson title and chunks
+    cur.execute("SELECT title FROM lessons WHERE id = ?;", (lesson_id,))
+    l_row = cur.fetchone()
+    lesson_title = l_row[0] if l_row else "Concept"
+
+    cur.execute(
+        """
+        SELECT id, chunk_index, start_sec, end_sec, content
+        FROM chunks
+        WHERE lesson_id = ?
+        ORDER BY start_sec ASC;
+        """,
+        (lesson_id,)
+    )
+    chunks = [
+        {"id": r[0], "chunk_index": r[1], "start_sec": r[2] or 0, "end_sec": r[3] or 0, "content": r[4] or ""}
+        for r in cur.fetchall()
+    ]
+
+    cards_to_create = []
+
+    if chunks:
+        for c in chunks:
+            s_sec = int(c["start_sec"])
+            h, rem = divmod(s_sec, 3600)
+            m, s = divmod(rem, 60)
+            t_str = f"[{h:02d}:{m:02d}:{s:02d}]" if h > 0 else f"[{m:02d}:{s:02d}]"
+            content = c["content"].strip()
+            sentences = [sent.strip() for sent in content.split(".") if len(sent.strip()) > 15]
+
+            for sent in sentences:
+                s_low = sent.lower()
+                if any(kw in s_low for kw in ["is defined as", "means", "formula", "syntax", "tuple", "property", "theorem", "rule", "transition", "condition"]):
+                    parts = re.split(r"\b(is defined as|means|is given by|refers to|is called|states that)\b", sent, maxsplit=1, flags=re.IGNORECASE)
+                    if len(parts) >= 3:
+                        term = parts[0].strip()
+                        definition = parts[1].strip() + " " + parts[2].strip()
+                        front = f"What is the definition or role of '{term}' in {lesson_title}?"
+                        back = f"{term} {definition}"
+                    else:
+                        front = f"State the key rule/formula for {lesson_title}:"
+                        back = sent
+
+                    cards_to_create.append({
+                        "front": front,
+                        "back": back,
+                        "chunk_id": c["id"],
+                        "source_quote": f"{t_str} {sent}",
+                    })
+                    if len(cards_to_create) >= count:
+                        break
+            if len(cards_to_create) >= count:
+                break
+
+    # If fewer than 4 cards found from definitions, synthesize from remaining chunk sentences
+    if len(cards_to_create) < 4 and chunks:
+        for idx, c in enumerate(chunks):
+            s_sec = int(c["start_sec"])
+            h, rem = divmod(s_sec, 3600)
+            m, s = divmod(rem, 60)
+            t_str = f"[{h:02d}:{m:02d}:{s:02d}]" if h > 0 else f"[{m:02d}:{s:02d}]"
+            sent = c["content"].split(".")[0].strip()
+            if sent and len(sent) > 15:
+                cards_to_create.append({
+                    "front": f"Explain the core principle discussed at {t_str} in '{lesson_title}':",
+                    "back": sent,
+                    "chunk_id": c["id"],
+                    "source_quote": f"{t_str} {sent}",
+                })
+            if len(cards_to_create) >= count:
+                break
+
+    # Fallback if no chunks
+    if not cards_to_create:
+        cards_to_create.append({
+            "front": f"What is the primary topic of '{lesson_title}'?",
+            "back": f"Foundational concepts, mechanics, and properties of {lesson_title}.",
+            "chunk_id": None,
+            "source_quote": "[00:00] Overview",
+        })
+
+    created_cards = []
+    for item in cards_to_create[:count]:
+        card = create_flashcard(
+            conn=conn,
+            course_id=course_id,
+            lesson_id=lesson_id,
+            chunk_id=item["chunk_id"],
+            front=item["front"],
+            back=item["back"],
+            source_quote=item["source_quote"],
+        )
+        created_cards.append(card)
+
+    return created_cards

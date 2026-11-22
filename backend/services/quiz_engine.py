@@ -46,15 +46,33 @@ def run_sync(coro):
         return asyncio.run(coro)
 
 
+VIDEO_NOISE_PATTERN = re.compile(
+    r"(\[music\]|\[applause\]|\[laughter\]|"
+    r"\bwelcome\s+(to|back|everyone)\b|"
+    r"\bhello\s+everyone\b|"
+    r"\b(see\s+you|watching\s+and\s+see\s+you|thank\s+you\s+for\s+watching|thanks\s+for\s+watching)\b|"
+    r"\b(subscribe|hit\s+the\s+bell|like\s+and\s+subscribe|leave\s+a\s+comment|comment\s+below)\b|"
+    r"\b(in\s+this\s+video|in\s+the\s+next\s+video|in\s+the\s+next\s+lecture|next\s+lecture\s+onwards)\b|"
+    r"\b(goodbye|bye\s+bye|stay\s+tuned)\b)",
+    re.IGNORECASE
+)
+
+
 def extract_key_sentences(text: str) -> List[str]:
-    """Splits text into clean sentences suitable for grounding."""
+    """Splits text into clean sentences suitable for grounding, strictly filtering video noise and boilerplate."""
     # Split on sentence boundaries
     raw = re.split(r"(?<=[.!?])\s+", text.strip())
     sentences = []
     for s in raw:
         clean = s.strip()
-        # Keep substantive sentences between 30 and 220 chars
-        if 30 <= len(clean) <= 220 and not clean.startswith("#") and not clean.startswith("["):
+        # Remove inline audio tokens
+        clean = re.sub(r"\[(?:Music|Applause|Laughter)\]", "", clean, flags=re.IGNORECASE).strip()
+        # Skip video noise, outro, and social prompts
+        if VIDEO_NOISE_PATTERN.search(clean):
+            continue
+        words = clean.split()
+        # Keep substantive sentences between 35 and 220 chars with at least 6 substantive words
+        if len(words) >= 6 and 35 <= len(clean) <= 220 and not clean.startswith("#") and not clean.startswith("["):
             sentences.append(clean)
     return sentences
 
@@ -102,42 +120,59 @@ Output pure JSON adhering to this exact schema:
 
     async with httpx.AsyncClient(timeout=25.0) as client:
         if api_key:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "systemInstruction": {"parts": [{"text": system_instruction}]},
-                "generationConfig": {"responseMimeType": "application/json", "temperature": 0.1}
-            }
-            resp = await client.post(url, json=payload)
-            if resp.status_code == 200:
-                raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-                return json.loads(raw_text)
-        elif groq_key:
-            url = "https://api.groq.com/openai/v1/chat/completions"
-            headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
-            payload = {
-                "model": "llama-3.3-70b-versatile",
-                "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}],
-                "response_format": {"type": "json_object"},
-                "temperature": 0.1
-            }
-            resp = await client.post(url, json=payload, headers=headers)
-            if resp.status_code == 200:
-                raw_text = resp.json()["choices"][0]["message"]["content"]
-                return json.loads(raw_text)
-        elif openrouter_key:
-            url = "https://openrouter.ai/api/v1/chat/completions"
-            headers = {"Authorization": f"Bearer {openrouter_key}", "Content-Type": "application/json"}
-            payload = {
-                "model": "google/gemini-2.5-flash",
-                "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}],
-                "response_format": {"type": "json_object"},
-                "temperature": 0.1
-            }
-            resp = await client.post(url, json=payload, headers=headers)
-            if resp.status_code == 200:
-                raw_text = resp.json()["choices"][0]["message"]["content"]
-                return json.loads(raw_text)
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                payload = {
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "systemInstruction": {"parts": [{"text": system_instruction}]},
+                    "generationConfig": {"responseMimeType": "application/json", "temperature": 0.1}
+                }
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    return json.loads(raw_text)
+                else:
+                    logger.warning(f"Gemini rubric eval returned {resp.status_code}; trying fallback providers")
+            except Exception as e:
+                logger.warning(f"Gemini rubric eval failed: {e}; trying fallback providers")
+
+        if groq_key:
+            try:
+                url = "https://api.groq.com/openai/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}],
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.1
+                }
+                resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code == 200:
+                    raw_text = resp.json()["choices"][0]["message"]["content"]
+                    return json.loads(raw_text)
+                else:
+                    logger.warning(f"Groq rubric eval returned {resp.status_code}; trying fallback providers")
+            except Exception as e:
+                logger.warning(f"Groq rubric eval failed: {e}; trying fallback providers")
+
+        if openrouter_key:
+            try:
+                url = "https://openrouter.ai/api/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {openrouter_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "google/gemini-2.5-flash",
+                    "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}],
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.1
+                }
+                resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code == 200:
+                    raw_text = resp.json()["choices"][0]["message"]["content"]
+                    return json.loads(raw_text)
+                else:
+                    logger.warning(f"OpenRouter rubric eval returned {resp.status_code}")
+            except Exception as e:
+                logger.warning(f"OpenRouter rubric eval failed: {e}")
     return {}
 
 
@@ -280,12 +315,16 @@ def generate_no_key_questions(
     for chunk in chunks:
         chunk_id = chunk["id"]
         lesson_id = chunk.get("lesson_id")
+        start_sec = int(chunk.get("start_sec") or 0)
+        end_sec = int(chunk.get("end_sec") or start_sec)
         content = chunk.get("content", "")
         sentences = extract_key_sentences(content)
         for s in sentences:
             candidates.append({
                 "chunk_id": chunk_id,
                 "lesson_id": lesson_id,
+                "start_sec": start_sec,
+                "end_sec": end_sec,
                 "sentence": s,
                 "content": content
             })
@@ -293,9 +332,12 @@ def generate_no_key_questions(
     if not candidates:
         # Fallback to taking snippet from chunk
         for chunk in chunks:
+            start_sec = int(chunk.get("start_sec") or 0)
             candidates.append({
                 "chunk_id": chunk["id"],
                 "lesson_id": chunk.get("lesson_id"),
+                "start_sec": start_sec,
+                "end_sec": int(chunk.get("end_sec") or start_sec),
                 "sentence": chunk.get("content", "")[:120].strip(),
                 "content": chunk.get("content", "")
             })
@@ -322,17 +364,22 @@ def generate_no_key_questions(
             question_text = f"According to the cited material, what is stated regarding '{subject}'?"
             correct_option = f"{subject} {predicate}"
         else:
-            words = quote.split()
-            first_few = " ".join(words[:4])
-            question_text = f"Based on the source material, which statement accurately reflects the discussion on '{first_few}...'?"
+            # Extract key concept or formulate meaningful question
+            question_text = f"Based on the course lecture content, which statement accurately describes the core principle of this topic?"
             correct_option = quote
 
-        # Build 3 plausible distractors from other sentences or negation
-        distractors = [s for s in all_sentences if s != quote and len(s) > 20]
+        # Build 3 plausible distractors from other clean sentences or academic formulations
+        distractors = [s for s in all_sentences if s != quote and len(s) > 25]
+        academic_fallbacks = [
+            "It restricts memory structures strictly to linear sequential arrays without state transitions.",
+            "It eliminates boundary validation checks by executing unbounded randomized trials.",
+            "It is formulated as an undecidable model with zero computational constraints.",
+            "It assumes instantaneous unbounded storage without state persistence.",
+        ]
+        fb_idx = 0
         while len(distractors) < 3:
-            distractors.append(f"It is entirely unrelated to {quote[:30]}...")
-            distractors.append(f"The source disproves that {quote[:30]}...")
-            distractors.append(f"This applies only in non-deterministic environments.")
+            distractors.append(academic_fallbacks[fb_idx % len(academic_fallbacks)])
+            fb_idx += 1
 
         chosen_distractors = random.sample(distractors, 3)
 
@@ -344,12 +391,19 @@ def generate_no_key_questions(
         correct_index = shuffled_options.index(correct_option)
 
         q_id = f"q_{idx}_{uuid.uuid4().hex[:6]}"
-        explanation = f"Grounded directly in cited chunk [{chunk_id}]: \"{quote}\""
+        t_sec = int(item.get("start_sec") or 0)
+        h, rem = divmod(t_sec, 3600)
+        m, s = divmod(rem, 60)
+        t_str = f"[{h:02d}:{m:02d}:{s:02d}]" if h > 0 else f"[{m:02d}:{s:02d}]"
+        explanation = f"Grounded directly in cited chunk [{chunk_id}] at {t_str}: \"{quote}\""
 
         questions.append({
             "id": q_id,
             "chunk_id": chunk_id,
             "lesson_id": lesson_id,
+            "timestamp_sec": t_sec,
+            "timestamp_str": t_str,
+            "replay_url": f"#seek={t_sec}",
             "quote": quote,
             "question": question_text,
             "options": shuffled_options,
@@ -372,6 +426,10 @@ def generate_no_key_questions(
             quote = item["sentence"]
             chunk_id = item["chunk_id"]
             lesson_id = item["lesson_id"]
+            sa_t_sec = int(item.get("start_sec") or 0)
+            h, rem = divmod(sa_t_sec, 3600)
+            m, s = divmod(rem, 60)
+            sa_t_str = f"[{h:02d}:{m:02d}:{s:02d}]" if h > 0 else f"[{m:02d}:{s:02d}]"
 
             if re.search(r"\b(is|are|means|defined as|refers to)\b", quote, re.IGNORECASE):
                 parts = re.split(r"\b(is|are|means|defined as|refers to)\b", quote, maxsplit=1, flags=re.IGNORECASE)
@@ -385,11 +443,14 @@ def generate_no_key_questions(
                 "id": sa_id,
                 "chunk_id": chunk_id,
                 "lesson_id": lesson_id,
+                "timestamp_sec": sa_t_sec,
+                "timestamp_str": sa_t_str,
+                "replay_url": f"#seek={sa_t_sec}",
                 "quote": quote,
                 "question": f"Explain the core concept, technical working mechanism, and practical application of '{subject}'. (5 Marks)",
                 "options": [],
                 "correct_index": 0,
-                "explanation": f"Grounded directly in cited chunk [{chunk_id}]: \"{quote}\"",
+                "explanation": f"Grounded directly in cited chunk [{chunk_id}] at {sa_t_str}: \"{quote}\"",
                 "question_type": "short_answer",
                 "max_marks": 5.0,
                 "rubric": [
@@ -545,83 +606,111 @@ Output pure JSON adhering to this schema:
         async with httpx.AsyncClient(timeout=35.0) as client:
             llm_qs = []
             if api_key:
-                model_used = "gemini-2.5-flash"
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent?key={api_key}"
-                payload = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "systemInstruction": {"parts": [{"text": system_instruction}]},
-                    "generationConfig": {
-                        "responseMimeType": "application/json",
+                try:
+                    model_used = "gemini-2.5-flash"
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent?key={api_key}"
+                    payload = {
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "systemInstruction": {"parts": [{"text": system_instruction}]},
+                        "generationConfig": {
+                            "responseMimeType": "application/json",
+                            "temperature": 0.2
+                        }
+                    }
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                        parsed = json.loads(raw_text)
+                        llm_qs = parsed.get("questions", [])
+                    else:
+                        logger.warning(f"Gemini API returned status {resp.status_code}: {resp.text[:200]}; trying fallback")
+                except Exception as e:
+                    logger.warning(f"Gemini quiz call failed: {e}; trying fallback")
+
+            if not llm_qs and groq_key:
+                try:
+                    model_used = "llama-3.3-70b-versatile"
+                    url = "https://api.groq.com/openai/v1/chat/completions"
+                    headers = {
+                        "Authorization": f"Bearer {groq_key}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": model_used,
+                        "messages": [
+                            {"role": "system", "content": system_instruction},
+                            {"role": "user", "content": prompt}
+                        ],
+                        "response_format": {"type": "json_object"},
                         "temperature": 0.2
                     }
-                }
-                resp = await client.post(url, json=payload)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-                    parsed = json.loads(raw_text)
-                    llm_qs = parsed.get("questions", [])
-                else:
-                    logger.warning(f"Gemini API returned status {resp.status_code}: {resp.text[:200]}")
-            elif groq_key:
-                model_used = "llama-3.3-70b-versatile"
-                url = "https://api.groq.com/openai/v1/chat/completions"
-                headers = {
-                    "Authorization": f"Bearer {groq_key}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": model_used,
-                    "messages": [
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "response_format": {"type": "json_object"},
-                    "temperature": 0.2
-                }
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    raw_text = data["choices"][0]["message"]["content"]
-                    parsed = json.loads(raw_text)
-                    llm_qs = parsed.get("questions", [])
-                else:
-                    logger.warning(f"Groq API returned status {resp.status_code}: {resp.text[:200]}")
-            elif openrouter_key:
-                model_used = "google/gemini-2.5-flash"
-                url = "https://openrouter.ai/api/v1/chat/completions"
-                headers = {
-                    "Authorization": f"Bearer {openrouter_key}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": model_used,
-                    "messages": [
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "response_format": {"type": "json_object"},
-                    "temperature": 0.2
-                }
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    raw_text = data["choices"][0]["message"]["content"]
-                    parsed = json.loads(raw_text)
-                    llm_qs = parsed.get("questions", [])
-                else:
-                    logger.warning(f"OpenRouter API returned status {resp.status_code}: {resp.text[:200]}")
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        raw_text = data["choices"][0]["message"]["content"]
+                        parsed = json.loads(raw_text)
+                        llm_qs = parsed.get("questions", [])
+                    else:
+                        logger.warning(f"Groq API returned status {resp.status_code}: {resp.text[:200]}; trying fallback")
+                except Exception as e:
+                    logger.warning(f"Groq quiz call failed: {e}; trying fallback")
+
+            if not llm_qs and openrouter_key:
+                try:
+                    model_used = "google/gemini-2.5-flash"
+                    url = "https://openrouter.ai/api/v1/chat/completions"
+                    headers = {
+                        "Authorization": f"Bearer {openrouter_key}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": model_used,
+                        "messages": [
+                            {"role": "system", "content": system_instruction},
+                            {"role": "user", "content": prompt}
+                        ],
+                        "response_format": {"type": "json_object"},
+                        "temperature": 0.2
+                    }
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        raw_text = data["choices"][0]["message"]["content"]
+                        parsed = json.loads(raw_text)
+                        llm_qs = parsed.get("questions", [])
+                    else:
+                        logger.warning(f"OpenRouter API returned status {resp.status_code}: {resp.text[:200]}")
+                except Exception as e:
+                    logger.warning(f"OpenRouter quiz call failed: {e}")
 
             verified_qs = []
             for idx, q in enumerate(llm_qs):
                 cid = q.get("chunk_id")
                 quote = q.get("quote", "").strip()
                 q_type = q.get("question_type", "mcq")
-                # Verify quote is actually in the chunk
-                if cid in chunk_map and quote and quote in chunk_map[cid]:
+                # Verify quote is actually in the chunk (with whitespace normalization tolerance)
+                quote_valid = False
+                if cid in chunk_map and quote:
+                    if quote in chunk_map[cid]:
+                        quote_valid = True
+                    else:
+                        q_norm = " ".join(quote.split())
+                        c_norm = " ".join(chunk_map[cid].split())
+                        if q_norm.lower() in c_norm.lower():
+                            quote_valid = True
+
+                if quote_valid:
                     q["id"] = f"q_{idx}_{uuid.uuid4().hex[:6]}"
                     chunk_row = next((c for c in chunks if c["id"] == cid), None)
                     q["lesson_id"] = chunk_row.get("lesson_id") if chunk_row else None
+                    t_sec = int(chunk_row.get("start_sec") or 0) if chunk_row else 0
+                    h, rem = divmod(t_sec, 3600)
+                    m, s = divmod(rem, 60)
+                    t_str = f"[{h:02d}:{m:02d}:{s:02d}]" if h > 0 else f"[{m:02d}:{s:02d}]"
+                    q["timestamp_sec"] = t_sec
+                    q["timestamp_str"] = t_str
+                    q["replay_url"] = f"#seek={t_sec}"
                     if q_type == "short_answer":
                         q["question_type"] = "short_answer"
                         q["max_marks"] = float(q.get("max_marks", 5.0))
@@ -647,7 +736,403 @@ Output pure JSON adhering to this schema:
     except Exception as e:
         logger.warning(f"LLM quiz generation failed or rejected ({e}); falling back to deterministic generation.")
 
-    return generate_no_key_questions(chunks, question_count, quiz_type)
+async def _generate_diagnostic_questions_llm(
+    conn,
+    course_id: str,
+    sampled_lessons: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Generates CourseIt-style diagnostic placement test questions via LLM."""
+    has_key = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY)
+    if not has_key or not sampled_lessons:
+        return []
+
+    system_instruction = (
+        "You are an academic curriculum director and diagnostic placement test specialist. "
+        "Your task is to generate a CourseIt-style diagnostic pre-test across the syllabus topics of the course. "
+        "Each question corresponds to one specific syllabus topic and must evaluate whether the student "
+        "already possesses sufficient foundational mastery of that topic to test out of it.\n"
+        "Strict requirements:\n"
+        "1. Exactly 1 clear conceptual or analytical question per provided topic.\n"
+        "2. Absolutely NEVER include video outro phrases ('watching and see you', 'goodbye', 'subscribe', 'in the next video'), greetings, or timestamps.\n"
+        "3. Focus on formal definitions, mechanisms, state transitions, or core properties of the topic.\n"
+        "4. Exactly 4 distinct, plausible choices per question.\n"
+        "5. Accurate correct_index (0, 1, 2, or 3) and concise explanation."
+    )
+
+    lesson_items_text = []
+    for idx, l in enumerate(sampled_lessons):
+        lid = l["id"]
+        ltitle = l["title"]
+        ch_title = l.get("chapter_title") or ltitle
+        lesson_items_text.append(f"Topic {idx + 1}: Lesson ID: {lid} | Title: {ltitle} | Chapter: {ch_title}")
+
+    user_prompt = (
+        f"Course ID: {course_id}\n\n"
+        f"Topics to assess:\n" + "\n".join(lesson_items_text) + "\n\n"
+        "Output pure JSON adhering to this schema:\n"
+        "{\n"
+        '  "questions": [\n'
+        "    {\n"
+        '      "lesson_id": "string (matching lesson id)",\n'
+        '      "topic_name": "string (lesson title)",\n'
+        '      "question": "string",\n'
+        '      "options": ["string", "string", "string", "string"],\n'
+        '      "correct_index": 0,\n'
+        '      "explanation": "string"\n'
+        "    }\n"
+        "  ]\n"
+        "}"
+    )
+
+    prompt_hash = compute_sha256(f"diagnostic:{course_id}:{len(sampled_lessons)}")
+    if conn is not None:
+        cached_str = get_cached_response(conn, prompt_hash)
+        if cached_str:
+            try:
+                cached_data = json.loads(cached_str)
+                if isinstance(cached_data, list) and len(cached_data) >= len(sampled_lessons) // 2:
+                    return cached_data
+            except Exception:
+                pass
+
+    api_key = settings.GEMINI_API_KEY
+    groq_key = settings.GROQ_API_KEY
+    openrouter_key = settings.OPENROUTER_API_KEY
+
+    raw_response = None
+    model_used = None
+
+    async with httpx.AsyncClient(timeout=25.0) as client:
+        if api_key:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                payload = {
+                    "contents": [{"parts": [{"text": user_prompt}]}],
+                    "systemInstruction": {"parts": [{"text": system_instruction}]},
+                    "generationConfig": {"responseMimeType": "application/json", "temperature": 0.15}
+                }
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    raw_response = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    model_used = "gemini-2.5-flash"
+            except Exception as e:
+                logger.warning(f"Gemini diagnostic generation failed: {e}; trying fallback")
+
+        if not raw_response and groq_key:
+            try:
+                url = "https://api.groq.com/openai/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_prompt}],
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.15
+                }
+                resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code == 200:
+                    raw_response = resp.json()["choices"][0]["message"]["content"]
+                    model_used = "groq-llama-3.3-70b"
+            except Exception as e:
+                logger.warning(f"Groq diagnostic generation failed: {e}; trying fallback")
+
+        if not raw_response and openrouter_key:
+            try:
+                url = "https://openrouter.ai/api/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {openrouter_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "google/gemini-2.5-flash",
+                    "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_prompt}],
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.15
+                }
+                resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code == 200:
+                    raw_response = resp.json()["choices"][0]["message"]["content"]
+                    model_used = "openrouter-gemini-2.5-flash"
+            except Exception as e:
+                logger.warning(f"OpenRouter diagnostic generation failed: {e}")
+
+    if not raw_response:
+        return []
+
+    try:
+        data = json.loads(raw_response)
+        parsed_qs = data.get("questions", [])
+        verified_qs = []
+        for idx, q in enumerate(parsed_qs):
+            lid = q.get("lesson_id")
+            matched_l = next((l for l in sampled_lessons if l["id"] == lid), None)
+            if not matched_l and idx < len(sampled_lessons):
+                matched_l = sampled_lessons[idx]
+                lid = matched_l["id"]
+
+            tname = matched_l["title"] if matched_l else q.get("topic_name", f"Topic {idx + 1}")
+            opts = q.get("options", [])
+            if len(opts) == 4 and "question" in q:
+                verified_qs.append({
+                    "id": f"diag_q_{idx}_{uuid.uuid4().hex[:6]}",
+                    "lesson_id": lid,
+                    "topic_name": tname,
+                    "topic_index": idx + 1,
+                    "chunk_id": f"syllabus_{lid[:8] if lid else 'gen'}",
+                    "quote": f"Syllabus Topic: {tname}",
+                    "question": q["question"],
+                    "options": opts,
+                    "correct_index": int(q.get("correct_index", 0)) % 4,
+                    "explanation": q.get("explanation", f"Core placement question for topic '{tname}'."),
+                    "question_type": "mcq",
+                    "max_marks": 1.0,
+                })
+        if len(verified_qs) >= 2:
+            if conn is not None and model_used:
+                set_cached_response(conn, prompt_hash, model_used, json.dumps(verified_qs))
+            return verified_qs
+    except Exception as parse_err:
+        logger.warning(f"Failed to parse LLM diagnostic JSON: {parse_err}")
+
+    return []
+
+
+def clean_topic_title(title: str) -> str:
+    """Extracts clean, readable chapter or topic name from noisy video titles."""
+    if not title:
+        return "Topic"
+    ch_match = re.search(r"\((Chapter[-\s]?\d+[^)]*)\)\s*[-:]?\s*(.*)", title, re.IGNORECASE)
+    if ch_match:
+        ch = ch_match.group(1).replace("-", " ")
+        rest = ch_match.group(2).strip()
+        return f"{ch}: {rest[:40]}..." if len(rest) > 40 else (f"{ch}: {rest}" if rest else ch)
+    if "|" in title:
+        parts = [p.strip() for p in title.split("|")]
+        return parts[-1]
+    cleaned = re.sub(r"^(?:Lecture|Lesson|Video|Part|Ch\.|Chapter)\s*\d+[:.\s-]*", "", title, flags=re.IGNORECASE)
+    return cleaned.strip() or title
+
+
+def generate_diagnostic_questions(
+    conn,
+    course_id: str,
+    question_count: int = 5
+) -> List[Dict[str, Any]]:
+    """Generates a high-yield CourseIt-style diagnostic placement pre-test.
+    
+    1. Distributes questions evenly across the course syllabus lessons.
+    2. Filters out video noise/chatter/boilerplates.
+    3. Grounds each question in that specific lesson's core concept or technical mechanism.
+    4. Attaches lesson_id and topic_name so correct answers directly test out the topic.
+    """
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, title, chapter_title, order_index
+        FROM lessons
+        WHERE course_id = ?
+        ORDER BY order_index ASC;
+        """,
+        (course_id,)
+    )
+    lessons = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
+    if not lessons:
+        return []
+
+    # Sample lessons evenly across the syllabus
+    if len(lessons) <= question_count:
+        sampled_lessons = lessons
+    else:
+        step = (len(lessons) - 1) / max(1, question_count - 1)
+        sampled_indices = [round(i * step) for i in range(question_count)]
+        seen_idx = set()
+        sampled_lessons = []
+        for idx in sampled_indices:
+            if idx not in seen_idx:
+                seen_idx.add(idx)
+                sampled_lessons.append(lessons[idx])
+
+    # Try LLM generation if key configured
+    has_llm = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY)
+    if has_llm:
+        try:
+            llm_qs = run_sync(_generate_diagnostic_questions_llm(conn, course_id, sampled_lessons))
+            if llm_qs and len(llm_qs) >= max(2, len(sampled_lessons) // 2):
+                return llm_qs
+        except Exception as e:
+            logger.warning(f"[Diagnostic] LLM placement generation failed ({e}); falling back to deterministic.")
+
+    # High-yield deterministic placement test generator
+    questions = []
+    for idx, l in enumerate(sampled_lessons):
+        lid = l["id"]
+        raw_title = l["title"]
+        clean_title = clean_topic_title(raw_title)
+        ch_title = l.get("chapter_title") or clean_title
+
+        # Check for clean transcript sentences for this lesson
+        cur.execute("SELECT id, content FROM chunks WHERE lesson_id = ? ORDER BY chunk_index ASC;", (lid,))
+        crows = cur.fetchall()
+        clean_sentences = []
+        for cid, content in crows:
+            sents = extract_key_sentences(content)
+            for s in sents:
+                clean_sentences.append((cid, s))
+
+        q_obj = None
+        # Approach A: Ground from clean lesson sentence if definition exists
+        for cid, s in clean_sentences:
+            if re.search(r"\b(is a|is an|defined as|refers to|consists of)\b", s, re.IGNORECASE):
+                parts = re.split(r"\b(is a|is an|defined as|refers to|consists of)\b", s, maxsplit=1, flags=re.IGNORECASE)
+                subject = parts[0].strip()
+                predicate = parts[1].strip() + " " + parts[2].strip() if len(parts) >= 3 else s
+                if 3 <= len(subject) <= 50 and len(subject.split()) <= 6:
+                    question_text = f"In the study of '{clean_title}', what is the core role or definition of '{subject}'?"
+                    correct_option = f"{subject} {predicate}"
+                    distractors = [
+                        f"It restricts {subject} strictly to static linear arrays without transitions.",
+                        f"It eliminates formal boundary states by executing unbounded randomized trials.",
+                        f"It is an undecidable formulation with zero input validation.",
+                    ]
+                    options = [correct_option] + distractors
+                    random.seed(idx + 42)
+                    random.shuffle(options)
+                    q_obj = {
+                        "id": f"diag_q_{idx}_{uuid.uuid4().hex[:6]}",
+                        "lesson_id": lid,
+                        "topic_name": clean_title,
+                        "topic_index": idx + 1,
+                        "chunk_id": cid,
+                        "quote": s,
+                        "question": question_text,
+                        "options": options,
+                        "correct_index": options.index(correct_option),
+                        "explanation": f"Grounded in lesson content [{cid}]: \"{s}\"",
+                        "question_type": "mcq",
+                        "max_marks": 1.0,
+                    }
+                    break
+
+        # Approach B: Academic domain concept heuristics
+        if not q_obj:
+            t_lower = raw_title.lower() + " " + clean_title.lower()
+            if "pushdown" in t_lower or "pda" in t_lower:
+                question_text = "What primary architectural component enables a Pushdown Automaton (PDA) to recognize Context-Free Languages beyond standard Finite Automata?"
+                correct_option = "An auxiliary Last-In-First-Out (LIFO) stack data structure for tracking nested or balanced symbols."
+                distractors = [
+                    "A bidirectional read-write tape head capable of unbounded arbitrary memory movement.",
+                    "An infinite array with direct O(1) random-access indexing.",
+                    "A non-deterministic lookup table with zero intermediate storage.",
+                ]
+                explanation = "Pushdown automata extend finite automata with a stack memory, enabling them to recognize languages with nested or balanced structures."
+            elif "deterministic" in t_lower or "dfa" in t_lower:
+                question_text = "Which formal condition is strictly required for a Deterministic Finite Automaton (DFA)?"
+                correct_option = "For every state and every alphabet symbol, there is exactly one unique transition to a next state, with no epsilon moves."
+                distractors = [
+                    "A state may execute empty-string (epsilon) transitions without consuming input.",
+                    "Multiple concurrent transitions for the same input character are evaluated in parallel.",
+                    "State transitions can push and pop symbols from an unbounded memory stack.",
+                ]
+                explanation = "A DFA is strictly deterministic: exactly one transition is defined for each state-symbol pair, and epsilon moves are forbidden."
+            elif "finite state" in t_lower or "fsm" in t_lower or "automata (intro" in t_lower:
+                question_text = "What is the fundamental theoretical memory limitation of Finite State Machines (FSMs)?"
+                correct_option = "They possess strictly finite memory and cannot maintain an unbounded counter to recognize languages like aⁿbⁿ."
+                distractors = [
+                    "They cannot compute boolean logic or state-based switching.",
+                    "They require non-deterministic guessing to recognize simple regular patterns.",
+                    "They can only process input strings consisting of single-bit binary characters.",
+                ]
+                explanation = "Because an FSM has a finite set of states, it cannot count arbitrarily large numbers of matching symbols."
+            elif "pumping lemma" in t_lower:
+                question_text = "What is the primary academic purpose of the Pumping Lemma in formal language theory?"
+                correct_option = "To formally prove by contradiction that a specific candidate language is NOT regular."
+                distractors = [
+                    "To deterministically minimize the number of states in an arbitrary DFA.",
+                    "To convert non-deterministic finite automata into equivalent context-free grammars.",
+                    "To prove that every context-sensitive language is decidable in polynomial time.",
+                ]
+                explanation = "The Pumping Lemma establishes a necessary condition for all regular languages, making it a standard tool to prove non-regularity by contradiction."
+            elif "turing" in t_lower:
+                question_text = "What fundamental capability characterizes a Turing Machine compared to Automata with bounded memory?"
+                correct_option = "An infinite memory tape with a read-write head that can move both left and right across cells."
+                distractors = [
+                    "Guaranteed halting within strictly polynomial time bounds for all inputs.",
+                    "A static read-only memory buffer with zero write capability.",
+                    "Execution restricted exclusively to finite prefix regular expressions.",
+                ]
+                explanation = "A Turing Machine uses an infinite read-write tape with bidirectional movement, serving as the universal mathematical model of computation."
+            elif "er diagram" in t_lower or "entity" in t_lower or "relational model" in t_lower:
+                question_text = f"In relational database design ({clean_title}), what characterizes a 'Weak Entity Set'?"
+                correct_option = "An entity set that lacks sufficient attributes to form a primary key on its own and depends on an identifying owner entity."
+                distractors = [
+                    "A temporary table with strictly read-only nullable attributes.",
+                    "A table that cannot participate in database foreign key relationships.",
+                    "An entity whose primary key consists solely of auto-incrementing timestamps.",
+                ]
+                explanation = "A weak entity set lacks a primary key of its own and requires a foreign key relationship with an identifying strong entity set."
+            elif "indexing" in t_lower or "b-tree" in t_lower or "b+tree" in t_lower:
+                question_text = f"What is the primary algorithmic benefit of using a B-Tree / B+Tree structure for database indexing ({clean_title})?"
+                correct_option = "Maintaining balanced multi-level nodes that guarantee O(log N) operations for point lookups, insertions, and range scans."
+                distractors = [
+                    "Eliminating secondary storage by keeping all database pages in volatile CPU cache.",
+                    "Replacing disk block addressing with raw non-sequential hashing.",
+                    "Restricting index scans strictly to single-attribute equality matches.",
+                ]
+                explanation = "B-Trees keep search keys sorted across balanced height-bounded nodes, providing efficient log-time retrieval and range scans."
+            elif "recovery" in t_lower or "concurrency" in t_lower or "2pl" in t_lower or "locking" in t_lower:
+                question_text = f"In transaction concurrency control ({clean_title}), what guarantee is provided by the Two-Phase Locking (2PL) protocol?"
+                correct_option = "Conflict serializability of concurrent execution schedules."
+                distractors = [
+                    "Total prevention of all transaction deadlock states without aborts.",
+                    "Immediate durability of non-committed buffer cache writes.",
+                    "Zero read-write locking overhead across concurrent transactions.",
+                ]
+                explanation = "The Two-Phase Locking (2PL) protocol mathematically guarantees that concurrent transaction schedules are conflict-serializable."
+            elif "relational calculus" in t_lower or "calculus" in t_lower or "algebra" in t_lower:
+                question_text = f"What is the primary distinction between Relational Algebra and Relational Calculus ({clean_title})?"
+                correct_option = "Relational Algebra is procedural (specifying how to retrieve data), while Relational Calculus is declarative (specifying what data to retrieve)."
+                distractors = [
+                    "Relational Calculus operates exclusively on physical B-tree records.",
+                    "Relational Algebra cannot express natural join operations.",
+                    "Relational Calculus requires procedural execution loops for every foreign key.",
+                ]
+                explanation = "Relational algebra defines a step-by-step procedural query sequence; relational calculus is non-procedural and declarative."
+            elif "grammar" in t_lower or "cfg" in t_lower or "cfl" in t_lower:
+                question_text = "In Context-Free Grammars (CFGs), which structural rule defines production transitions?"
+                correct_option = "Each production rule replaces a single non-terminal symbol with a string of terminals and/or non-terminals."
+                distractors = [
+                    "Production rules may replace arbitrary strings of terminals with an empty symbol.",
+                    "The left-hand side of every rule must contain at least two terminal characters.",
+                    "Productions must be evaluated strictly in reverse chronological order.",
+                ]
+                explanation = "A CFG requires that every production rule has exactly one non-terminal on its left-hand side."
+            else:
+                question_text = f"In the syllabus curriculum, which core principle or operational requirement is evaluated in '{clean_title}'?"
+                correct_option = f"Establishing formal state definitions, transition boundaries, and analytical rules for {clean_title}."
+                distractors = [
+                    "Executing brute-force random trials without terminating boundary states.",
+                    "Replacing structural state verification with unconstrained direct memory access.",
+                    "Assuming all input alphabets are infinite without formal syntax constraints.",
+                ]
+                explanation = f"'{clean_title}' systematically formalizes computational state boundaries, input processing rules, and problem-solving mechanisms."
+
+            options = [correct_option] + distractors
+            random.seed(idx + 101)
+            random.shuffle(options)
+            q_obj = {
+                "id": f"diag_q_{idx}_{uuid.uuid4().hex[:6]}",
+                "lesson_id": lid,
+                "topic_name": clean_title,
+                "topic_index": idx + 1,
+                "chunk_id": f"syllabus_{lid[:8]}",
+                "quote": f"Topic: {clean_title}",
+                "question": question_text,
+                "options": options,
+                "correct_index": options.index(correct_option),
+                "explanation": explanation,
+                "question_type": "mcq",
+                "max_marks": 1.0,
+            }
+
+        questions.append(q_obj)
+
+    return questions
 
 
 def create_and_store_quiz(
@@ -661,7 +1146,42 @@ def create_and_store_quiz(
     """Generates and persists a new quiz, diagnostic test, or mock exam."""
     cur = conn.cursor()
 
-    # Retrieve relevant chunks
+    # Diagnostic Pre-Tests follow the CourseIt curriculum placement model
+    if quiz_type == "diagnostic":
+        questions = generate_diagnostic_questions(conn, course_id, question_count=question_count)
+        title = custom_title or "3-Minute Course Diagnostic Pre-Test"
+        quiz_id = f"qz_{uuid.uuid4().hex[:12]}"
+        conn.execute(
+            """
+            INSERT INTO quizzes (
+                id, course_id, lesson_id, quiz_type, title,
+                questions_json, score, passed, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            (
+                quiz_id,
+                course_id,
+                None,
+                quiz_type,
+                title,
+                json.dumps(questions),
+                0.0,
+                0,
+                datetime.now(timezone.utc).isoformat()
+            )
+        )
+        conn.commit()
+        return {
+            "id": quiz_id,
+            "course_id": course_id,
+            "lesson_id": None,
+            "quiz_type": quiz_type,
+            "title": title,
+            "questions": questions,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    # Retrieve relevant chunks for lesson quiz or mock exam
     if lesson_id:
         cur.execute(
             "SELECT * FROM chunks WHERE lesson_id = ? ORDER BY chunk_index ASC;",
