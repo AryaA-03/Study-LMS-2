@@ -34,7 +34,7 @@ async def transcribe_lesson(
 
     course_id = row[1]
     source_id = row[2] or ""
-    video_id = int(row[3] or 0) or ""
+    video_id = str(row[3] or "").strip()
     start_sec = int(row[4] or 0)
     end_sec = row[5]
     video_url = row[6] or video_id

@@ -1,59 +1,16 @@
-/** Typed REST API client with AbortController support and error normalization. */
-
 export interface Course {
   id: string;
   title: string;
-  goal_query: string;
-  target_date: string;
-  minutes_per_day: number;
-  playback_speed: number;
-  rest_days: string[];
-  revision_buffer_days: number;
-  schedule_strategy?: string;
-  progress_pct?: number;
-  total_lessons?: number;
-  completed_lessons?: number;
-}
-
-export interface Allocation {
-  id: string;
-  course_id: string;
-  lesson_id: string;
-  lesson_title: string;
-  video_id?: string;
-  video_url?: string;
-  scheduled_date: string;
-  allocated_start_sec: number;
-  allocated_end_sec: number;
-  effective_minutes: number;
-  is_completed: boolean;
-  is_skipped: boolean;
-  priority?: string;
-  pyq_hit_count?: number;
-}
-
-export interface ScheduleDay {
-  date: string;
-  day_name: string;
-  is_rest_day: boolean;
-  is_revision_buffer: boolean;
-  total_minutes: number;
-  allocations: Allocation[];
-}
-
-export interface ScheduleResponse {
-  course_id: string;
-  days: ScheduleDay[];
-  projected_finish_date?: string;
-  is_behind_schedule?: boolean;
-  behind_days?: number;
-  can_undo?: boolean;
-}
-
-export interface LessonNote {
-  lesson_id: string;
-  content_markdown: string;
-  personal_notes: string;
+  goal_query?: string;
+  target_date?: string;
+  minutes_per_day?: number;
+  preferred_daily_minutes?: number;
+  playback_speed?: number;
+  rest_days?: string[];
+  revision_buffer_days?: number;
+  schedule_strategy?: 'paced' | 'fixed';
+  status?: string;
+  created_at?: string;
 }
 
 export interface SourceItem {
@@ -62,32 +19,143 @@ export interface SourceItem {
   source_type: string;
   title: string;
   url?: string;
-  is_approved: boolean;
-  duration_sec?: number;
+  external_id?: string;
+  is_approved?: number;
+  created_at?: string;
+}
+
+export interface Lesson {
+  id: string;
+  course_id: string;
+  source_id?: string;
+  title: string;
+  chapter_title?: string;
+  video_id?: string;
+  video_url?: string;
+  start_sec?: number;
+  end_sec?: number;
+  raw_duration_sec?: number;
+  priority?: string;
+  order_index?: number;
+  is_excluded?: number | boolean;
+  is_tested_out?: number | boolean;
+  has_transcript?: number | boolean;
+  pyq_hit_count?: number;
+  pyq_total_marks?: number;
+  status?: string;
+}
+
+export interface AllocationItem {
+  id: string;
+  lesson_id: string;
+  lesson_title: string;
+  chapter_title?: string;
+  video_id?: string;
+  video_url?: string;
+  scheduled_date: string;
+  allocated_start_sec?: number;
+  allocated_end_sec?: number;
+  effective_minutes: number;
+  is_completed: boolean;
+  is_skipped: boolean;
+  priority?: string;
+  pyq_hit_count?: number;
+  pyq_total_marks?: number;
+  split_index?: number;
+  split_count?: number;
+}
+
+export interface ScheduleDay {
+  date: string;
+  day_number?: number;
+  day_label?: string;
+  total_minutes: number;
+  completed_minutes?: number;
+  allocations: AllocationItem[];
+}
+
+export interface ScheduleResponse {
+  course_id: string;
+  days: ScheduleDay[];
+  total_lessons?: number;
+  completed_lessons?: number;
+  progress_pct?: number;
+  total_effective_minutes?: number;
+  remaining_effective_minutes?: number;
+  completed_effective_minutes?: number;
+  projected_finish_date?: string;
+  target_date?: string;
+  is_behind_schedule?: boolean;
+  behind_message?: string;
+  effective_daily_target_minutes?: number;
+  schedule_strategy?: string;
+  can_undo?: boolean;
+}
+
+export interface LessonNotes {
+  lesson_id: string;
+  content_markdown: string;
+  personal_notes?: string;
+  is_generated_by_llm?: boolean;
+  updated_at?: string;
+}
+
+export interface QACitation {
+  chunk_id?: string;
+  start_sec?: number;
+  timestamp_label?: string;
+  lesson_id?: string;
+  lesson_title?: string;
+}
+
+export interface QAItem {
+  id?: string;
+  query?: string;
+  question?: string;
+  answer_markdown?: string;
+  answer?: string;
+  citations?: QACitation[];
+  created_at?: string;
 }
 
 export interface QuizQuestion {
   id: string;
-  chunk_id: string;
-  lesson_id?: string;
-  quote: string;
-  question: string;
+  question_text: string;
+  question_type: string;
   options: string[];
-  correct_index: number;
-  explanation: string;
-  question_type?: string;
-  timestamp_sec?: number;
-  timestamp_str?: string;
-  replay_url?: string;
+  correct_index?: number;
+  explanation?: string;
+  source_timestamp_sec?: number;
+  lesson_id?: string;
 }
 
-export interface QuizResponse {
+export interface Quiz {
   id: string;
   course_id: string;
   lesson_id?: string;
   quiz_type: string;
-  title: string;
+  title?: string;
   questions: QuizQuestion[];
+  score?: number;
+  completed_at?: string;
+}
+
+export interface QuizSubmitResult {
+  quiz_id: string;
+  score: number;
+  correct_count: number;
+  total_questions: number;
+  mastery_status?: string;
+  schedule_updated?: boolean;
+  flashcards_created?: number;
+  results?: Array<{
+    question_id: string;
+    is_correct: boolean;
+    correct_index?: number;
+    explanation?: string;
+    source_timestamp_sec?: number;
+    lesson_id?: string;
+  }>;
 }
 
 export interface Flashcard {
@@ -96,158 +164,325 @@ export interface Flashcard {
   lesson_id?: string;
   front: string;
   back: string;
-  due_date: string;
-  state_name: string;
-  reps: number;
-  interval_previews?: Record<string, string>;
-}
-
-export interface QAItem {
-  id: string;
-  query: string;
-  answer_markdown: string;
-  citations?: Array<{ chunk_id?: string; source_title?: string; start_sec?: number; timestamp_str?: string }>;
+  due_date?: string;
+  source_timestamp_sec?: number;
+  state?: number;
+  reps?: number;
 }
 
 export interface PYQItem {
   id: string;
-  paper_title?: string;
   question_number?: string;
   question_text: string;
   marks?: number;
-  lesson_id?: string;
+  paper_title?: string;
+  paper_id?: string;
+  matched_lesson_id?: string;
+  matched_lesson_title?: string;
 }
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
+export interface PYQSummary {
+  papers: Array<{ id: string; title: string; question_count?: number; created_at?: string }>;
+  questions: PYQItem[];
+  total_questions?: number;
+}
+
+export interface CramSheet {
+  id?: string;
+  course_id: string;
+  content_markdown: string;
+  is_generated_by_llm?: boolean;
+  cached?: boolean;
+  updated_at?: string;
+}
+
+export interface JobStatus {
+  id: string;
+  job_type: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  progress_pct: number;
+  message?: string;
+  result?: any;
+  error_text?: string;
+}
+
+export interface SystemSettings {
+  ai_provider?: string;
+  gemini_api_key_set?: boolean;
+  groq_api_key_set?: boolean;
+  openrouter_api_key_set?: boolean;
+  ollama_base_url?: string;
+  ollama_model?: string;
+  whisper_model?: string;
+  cookies_browser?: string;
+  [key: string]: any;
+}
+
+async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const isFormData = options.body instanceof FormData;
+  const headers: Record<string, string> = isFormData
+    ? {}
+    : { 'Content-Type': 'application/json' };
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-    ...init,
+    ...options,
+    headers: { ...headers, ...(options.headers as Record<string, string> | undefined) },
   });
   if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
+    let detail = `HTTP ${res.status}`;
     try {
-      const body = await res.json();
-      msg = body.detail || body.message || msg;
+      const data = await res.json();
+      detail = data.detail || data.message || detail;
     } catch {
-      /* ignore */
+      // ignore non-json
     }
-    throw new Error(msg);
+    throw new Error(detail);
   }
-  return res.json() as Promise<T>;
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    return res.json() as Promise<T>;
+  }
+  return (await res.text()) as unknown as T;
 }
 
 export const api = {
   // Courses
   listCourses: () => request<Course[]>('/api/courses'),
-  createCourse: (payload: Record<string, unknown>) =>
+  createCourse: (payload: Partial<Course>) =>
     request<Course>('/api/courses', { method: 'POST', body: JSON.stringify(payload) }),
+  updateCourse: (courseId: string, payload: Partial<Course>) =>
+    request<Course>(`/api/courses/${courseId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteCourse: (courseId: string) =>
     request<{ success: boolean }>(`/api/courses/${courseId}`, { method: 'DELETE' }),
-  importYoutubeSource: (courseId: string, url: string, is_approved = true) =>
-    request<Record<string, unknown>>(`/api/courses/${courseId}/sources/import`, {
+  clusterTopics: (courseId: string) =>
+    request<{ lessons_updated: number; topics_created: number; topics: Array<{ title: string; lesson_count: number }> }>(
+      `/api/courses/${courseId}/topics/cluster`,
+      { method: 'POST' },
+    ),
+  exportCourseJsonUrl: (courseId: string) => `/api/courses/${courseId}/export`,
+  exportCourseMarkdownUrl: (courseId: string) => `/api/courses/${courseId}/export-markdown`,
+
+  // Sources & Discovery
+  discoverSources: (courseId: string, query: string) =>
+    request<{ candidates: any[] }>(`/api/courses/${courseId}/discover`, {
       method: 'POST',
-      body: JSON.stringify({ url, is_approved }),
+      body: JSON.stringify({ query }),
+    }),
+  importSource: (courseId: string, url: string, auto_approve = true) =>
+    request<SourceItem>(`/api/courses/${courseId}/sources/import`, {
+      method: 'POST',
+      body: JSON.stringify({ url, auto_approve }),
+    }),
+  approveSources: (courseId: string, source_ids_to_approve: string[], source_ids_to_reject: string[] = []) =>
+    request<SourceItem[]>(`/api/courses/${courseId}/sources/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ source_ids_to_approve, source_ids_to_reject }),
     }),
   listSources: (courseId: string) => request<SourceItem[]>(`/api/courses/${courseId}/sources`),
   deleteSource: (courseId: string, sourceId: string) =>
     request<{ success: boolean }>(`/api/courses/${courseId}/sources/${sourceId}`, { method: 'DELETE' }),
-  uploadPdfSource: async (courseId: string, file: File, title: string) => {
+  uploadPdfSource: (courseId: string, file: File, title?: string) => {
     const fd = new FormData();
     fd.append('file', file);
-    fd.append('title', title || file.name);
-    const res = await fetch(`/api/courses/${courseId}/sources/pdf`, { method: 'POST', body: fd });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `HTTP ${res.status}`);
-    return res.json();
+    if (title) fd.append('title', title);
+    return request<any>(`/api/courses/${courseId}/sources/pdf`, { method: 'POST', body: fd });
   },
   importWebSource: (courseId: string, url: string, title?: string) =>
-    request<Record<string, unknown>>(`/api/courses/${courseId}/sources/web`, {
+    request<any>(`/api/courses/${courseId}/sources/web`, {
       method: 'POST',
       body: JSON.stringify({ url, title }),
     }),
-
-  // Schedule
-  getSchedule: (courseId: string, signal?: AbortSignal) =>
-    request<ScheduleResponse>(`/api/courses/${courseId}/schedule`, { signal }),
-  generateSchedule: (courseId: string) =>
-    request<ScheduleResponse>(`/api/courses/${courseId}/schedule/generate`, { method: 'POST', body: '{}' }),
-  replanSchedule: (courseId: string, payload: Record<string, unknown>) =>
-    request<ScheduleResponse>(`/api/courses/${courseId}/schedule/replan`, {
+  submitManualTranscript: (courseId: string, title: string, transcript_text: string, url?: string) =>
+    request<any>(`/api/courses/${courseId}/sources/manual-transcript`, {
       method: 'POST',
+      body: JSON.stringify({ title, transcript_text, url: url || '' }),
+    }),
+
+  // Lessons & Syllabus
+  listLessons: (courseId: string) => request<Lesson[]>(`/api/courses/${courseId}/lessons`),
+  updateLesson: (courseId: string, lessonId: string, payload: Partial<Lesson>) =>
+    request<Lesson>(`/api/courses/${courseId}/lessons/${lessonId}`, {
+      method: 'PATCH',
       body: JSON.stringify(payload),
     }),
-  undoReplan: (courseId: string) =>
-    request<ScheduleResponse>(`/api/courses/${courseId}/schedule/undo`, { method: 'POST', body: '{}' }),
-  toggleAllocation: (courseId: string, allocId: string) =>
-    request<ScheduleResponse>(`/api/courses/${courseId}/schedule/allocations/${allocId}/toggle`, { method: 'POST' }),
-  skipAllocation: (courseId: string, allocId: string) =>
-    request<ScheduleResponse>(`/api/courses/${courseId}/schedule/allocations/${allocId}/skip`, { method: 'POST' }),
+  toggleExcludeLesson: (courseId: string, lessonId: string) =>
+    request<Lesson>(`/api/courses/${courseId}/lessons/${lessonId}/toggle-exclude`, { method: 'POST' }),
+  matchSyllabus: (courseId: string, syllabus_text: string, strictness: 'strict' | 'balanced' | 'comprehensive' = 'balanced') =>
+    request<any>(`/api/courses/${courseId}/syllabus/match`, {
+      method: 'POST',
+      body: JSON.stringify({ syllabus_text, strictness }),
+    }),
+  applySyllabus: (courseId: string, syllabus_text: string, selected_lesson_ids: string[]) =>
+    request<any>(`/api/courses/${courseId}/syllabus/apply`, {
+      method: 'POST',
+      body: JSON.stringify({ syllabus_text, selected_lesson_ids }),
+    }),
 
-  // Notes & Media
+  // Schedule
+  getSchedule: (courseId: string) => request<ScheduleResponse>(`/api/courses/${courseId}/schedule`),
+  generateSchedule: (courseId: string) =>
+    request<ScheduleResponse>(`/api/courses/${courseId}/schedule/generate`, { method: 'POST' }),
+  replanSchedule: (courseId: string, mode: 'normal' | 'emergency_cram' | 'strict_pacing' = 'normal') =>
+    request<any>(`/api/courses/${courseId}/schedule/replan`, {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+    }),
+  completeAllocation: (courseId: string, allocationId: string) =>
+    request<ScheduleResponse>(`/api/courses/${courseId}/schedule/allocations/${allocationId}/complete`, { method: 'POST' }),
+  toggleAllocation: (courseId: string, allocationId: string) =>
+    request<any>(`/api/courses/${courseId}/schedule/allocations/${allocationId}/toggle`, { method: 'POST' }),
+  skipAllocation: (courseId: string, allocationId: string) =>
+    request<ScheduleResponse>(`/api/courses/${courseId}/schedule/allocations/${allocationId}/skip`, { method: 'POST' }),
+  undoSchedule: (courseId: string) =>
+    request<ScheduleResponse>(`/api/courses/${courseId}/schedule/undo`, { method: 'POST' }),
+
+  // Notes
   getLessonNotes: (lessonId: string, signal?: AbortSignal) =>
-    request<LessonNote>(`/api/lessons/${lessonId}/notes`, { signal }),
+    request<LessonNotes>(`/api/lessons/${lessonId}/notes`, { signal }),
   regenerateLessonNotes: (lessonId: string) =>
-    request<LessonNote>(`/api/lessons/${lessonId}/notes/regenerate`, { method: 'POST' }),
+    request<LessonNotes>(`/api/lessons/${lessonId}/notes/regenerate`, { method: 'POST' }),
   savePersonalNotes: (lessonId: string, personal_notes: string) =>
     request<{ success: boolean }>(`/api/lessons/${lessonId}/notes/personal`, {
       method: 'PUT',
       body: JSON.stringify({ personal_notes }),
     }),
-  transcribeLesson: (lessonId: string) =>
-    request<Record<string, unknown>>(`/api/lessons/${lessonId}/transcribe`, { method: 'POST' }),
-  captureScreenshots: (lessonId: string) =>
-    request<Array<Record<string, unknown>>>(`/api/lessons/${lessonId}/screenshots`, { method: 'POST' }),
 
   // Ask AI
   getQAHistory: (courseId: string, signal?: AbortSignal) =>
     request<QAItem[]>(`/api/courses/${courseId}/qa`, { signal }),
-  askQuestion: (courseId: string, query: string, lesson_id?: string | null) =>
+  askQuestion: (courseId: string, query: string, scope: 'lesson' | 'course' = 'lesson', lesson_id?: string | null) =>
     request<QAItem>(`/api/courses/${courseId}/qa`, {
       method: 'POST',
-      body: JSON.stringify({ query, lesson_id: lesson_id || null }),
+      body: JSON.stringify({
+        query,
+        lesson_id: scope === 'lesson' ? lesson_id : null,
+      }),
     }),
 
-  // Quizzes, Flashcards, PYQs, Cram Sheet
-  generateQuiz: (courseId: string, quiz_type: 'lesson' | 'diagnostic' | 'mock_exam', lesson_id?: string | null, question_count = 5) =>
-    request<QuizResponse>(`/api/courses/${courseId}/quizzes/generate`, {
+  // Quizzes (lesson, diagnostic, mock_exam)
+  generateQuiz: (
+    courseId: string,
+    payload: { quiz_type: 'lesson' | 'diagnostic' | 'mock_exam'; lesson_id?: string | null; question_count?: number },
+  ) =>
+    request<Quiz>(`/api/courses/${courseId}/quizzes/generate`, {
       method: 'POST',
-      body: JSON.stringify({ quiz_type, lesson_id: lesson_id || null, question_count }),
+      body: JSON.stringify(payload),
     }),
-  submitQuiz: (courseId: string, quizId: string, answers: Record<string, number>, time_taken_seconds = 60) =>
-    request<Record<string, unknown>>(`/api/courses/${courseId}/quizzes/${quizId}/submit`, {
+  listQuizzes: (courseId: string, quiz_type?: string, lesson_id?: string) => {
+    const params = new URLSearchParams();
+    if (quiz_type) params.set('quiz_type', quiz_type);
+    if (lesson_id) params.set('lesson_id', lesson_id);
+    const qs = params.toString();
+    return request<Quiz[]>(`/api/courses/${courseId}/quizzes${qs ? `?${qs}` : ''}`);
+  },
+  submitQuiz: (
+    courseId: string,
+    quizId: string,
+    answers: Record<string, number>,
+    short_answers: Record<string, string> = {},
+    time_taken_seconds = 60,
+  ) =>
+    request<QuizSubmitResult>(`/api/courses/${courseId}/quizzes/${quizId}/submit`, {
       method: 'POST',
-      body: JSON.stringify({ answers, short_answers: {}, time_taken_seconds }),
+      body: JSON.stringify({ answers, short_answers, time_taken_seconds }),
     }),
-  listFlashcards: (courseId: string, due_only = false) =>
-    request<Flashcard[]>(`/api/courses/${courseId}/flashcards?due_only=${due_only}`),
-  reviewFlashcard: (courseId: string, cardId: string, rating: number) =>
-    request<Flashcard>(`/api/courses/${courseId}/flashcards/${cardId}/review`, {
+
+  // Flashcards (FSRS)
+  listFlashcards: (courseId: string, dueOnly = false, lessonId?: string) => {
+    const params = new URLSearchParams();
+    if (dueOnly) params.set('due_only', 'true');
+    if (lessonId) params.set('lesson_id', lessonId);
+    const qs = params.toString();
+    return request<Flashcard[]>(`/api/courses/${courseId}/flashcards${qs ? `?${qs}` : ''}`);
+  },
+  reviewFlashcard: (courseId: string, cardId: string, rating: 1 | 2 | 3 | 4) =>
+    request<any>(`/api/courses/${courseId}/flashcards/${cardId}/review`, {
       method: 'POST',
       body: JSON.stringify({ rating }),
     }),
+  createFlashcard: (courseId: string, payload: { front: string; back: string; lesson_id?: string; source_timestamp_sec?: number }) =>
+    request<Flashcard>(`/api/courses/${courseId}/flashcards`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   deleteFlashcard: (courseId: string, cardId: string) =>
     request<{ success: boolean }>(`/api/courses/${courseId}/flashcards/${cardId}`, { method: 'DELETE' }),
-  listPYQs: (courseId: string, lesson_id?: string) =>
-    request<PYQItem[]>(lesson_id ? `/api/courses/${courseId}/lessons/${lesson_id}/pyq` : `/api/courses/${courseId}/pyq`),
-  getCramSheet: (courseId: string) =>
-    request<{ content_markdown: string }>(`/api/courses/${courseId}/cram-sheet`),
-  generateCramSheet: (courseId: string) =>
-    request<{ content_markdown: string }>(`/api/courses/${courseId}/cram-sheet/generate`, { method: 'POST' }),
-  generateCramSheetAsync: (courseId: string) =>
-    request<{ job_id: string; status: string }>(`/api/courses/${courseId}/cram-sheet/generate-full-async`, { method: 'POST' }),
-  getJob: (jobId: string) => request<Record<string, unknown>>(`/api/jobs/${jobId}`),
+  generateLessonFlashcards: (courseId: string, lessonId: string) =>
+    request<Flashcard[]>(`/api/courses/${courseId}/flashcards/lessons/${lessonId}/generate`, { method: 'POST' }),
 
-  // Settings
-  getSettings: () => request<Record<string, unknown>>('/api/settings'),
-  saveKeys: (keys: Record<string, string>) =>
-    request<{ success: boolean; message: string }>('/api/settings/keys', {
+  // PYQs
+  getPyqSummary: (courseId: string) => request<PYQSummary>(`/api/courses/${courseId}/pyq`),
+  getLessonPyqs: (courseId: string, lessonId: string) =>
+    request<PYQItem[]>(`/api/courses/${courseId}/lessons/${lessonId}/pyq`),
+  uploadPyqFile: (courseId: string, file: File, title?: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (title) fd.append('title', title);
+    return request<any>(`/api/courses/${courseId}/pyq/upload-file`, { method: 'POST', body: fd });
+  },
+  uploadPyqText: (courseId: string, title: string, raw_text: string) =>
+    request<any>(`/api/courses/${courseId}/pyq/upload-text`, {
       method: 'POST',
-      body: JSON.stringify(keys),
+      body: JSON.stringify({ title, raw_text }),
     }),
-  testConnection: (provider: string, api_key?: string, base_url?: string) =>
+  deletePyqPaper: (courseId: string, paperId: string) =>
+    request<{ success: boolean }>(`/api/courses/${courseId}/pyq/papers/${paperId}`, { method: 'DELETE' }),
+
+  // Cram Sheet & Background Jobs
+  getCramSheet: (courseId: string) => request<CramSheet>(`/api/courses/${courseId}/cram-sheet`),
+  generateCramSheet: (courseId: string, force_refresh = true) =>
+    request<CramSheet>(`/api/courses/${courseId}/cram-sheet/generate`, {
+      method: 'POST',
+      body: JSON.stringify({ force_refresh }),
+    }),
+  generateFullCramSheetAsync: (courseId: string) =>
+    request<{ job_id: string; status: string }>(`/api/courses/${courseId}/cram-sheet/generate-full-async`, {
+      method: 'POST',
+    }),
+  getJob: (jobId: string) => request<JobStatus>(`/api/jobs/${jobId}`),
+  downloadCramSheetUrl: (courseId: string) => `/api/courses/${courseId}/cram-sheet/download`,
+
+
+  // Transcription & Keyframe Slides
+  transcribeLesson: (lessonId: string) =>
+    request<{ success: boolean; lesson_id: string; transcript_type: string; chunk_count: number }>(
+      `/api/lessons/${lessonId}/transcribe`,
+      { method: 'POST' },
+    ),
+  captureScreenshots: (lessonId: string) =>
+    request<Array<{ id: string; timestamp_sec: number; image_url: string; caption?: string }>>(
+      `/api/lessons/${lessonId}/screenshots`,
+      { method: 'POST' },
+    ),
+  listScreenshots: (lessonId: string) =>
+    request<Array<{ id: string; timestamp_sec: number; image_url: string; caption?: string }>>(
+      `/api/lessons/${lessonId}/screenshots`,
+    ),
+  updateFlashcard: (courseId: string, cardId: string, payload: { front: string; back: string }) =>
+    request<Flashcard>(`/api/courses/${courseId}/flashcards/${cardId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  discoverWebSources: (courseId: string) =>
+    request<{ candidates: Array<{ title: string; url: string; snippet?: string }> }>(
+      `/api/courses/${courseId}/sources/discover-web`,
+    ),
+
+  // Settings & Data Portability
+  getSettings: () => request<SystemSettings>('/api/settings'),
+  saveSettings: (payload: Record<string, any>) =>
+    request<any>('/api/settings', { method: 'POST', body: JSON.stringify(payload) }),
+  testConnection: (provider?: string) =>
     request<{ success: boolean; message: string }>('/api/settings/test-connection', {
       method: 'POST',
-      body: JSON.stringify({ provider, api_key, base_url }),
+      body: JSON.stringify({ provider }),
     }),
-  cleanupCache: () => request<{ success: boolean; message: string }>('/api/settings/cleanup-cache', { method: 'POST' }),
-  vacuumDb: () => request<{ success: boolean; message: string }>('/api/settings/vacuum', { method: 'POST' }),
+  cleanupCache: () => request<any>('/api/settings/cleanup-cache', { method: 'POST' }),
+  vacuumDb: () => request<any>('/api/settings/vacuum', { method: 'POST' }),
+  updateYtdlp: () => request<any>('/api/settings/update-ytdlp', { method: 'POST' }),
+  backupDbUrl: () => '/api/settings/backup',
+  restoreDb: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request<any>('/api/settings/restore', { method: 'POST', body: fd });
+  },
 };

@@ -1220,6 +1220,47 @@
         }
       }
     },
+    "/api/courses/{course_id}/topics/cluster": {
+      "post": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Cluster Topics Endpoint",
+        "description": "Group related playlist videos and lessons into structured Topic Units.",
+        "operationId": "cluster_topics_endpoint_api_courses__course_id__topics_cluster_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/courses/{course_id}/schedule/generate": {
       "post": {
         "tags": [

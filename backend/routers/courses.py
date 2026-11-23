@@ -580,6 +580,11 @@ def approve_sources(
                 meta = extract_metadata(s_row["url"], cookies_browser=cookies_browser)
                 create_lessons_from_meta(course_id, sid, meta, db)
                 db.commit()
+                try:
+                    from backend.services.topic_grouper import cluster_course_topics
+                    cluster_course_topics(db, course_id)
+                except Exception as cg_err:
+                    logger.warning(f"[Courses] Topic clustering skipped: {cg_err}")
             except Exception as e:
                 logger.error(f"[Courses] Fallback placeholder created for {s_row['url']}: {e}")
                 lid = str(uuid.uuid4())
@@ -1250,3 +1255,13 @@ def delete_course_source(course_id: str, source_id: str, db: sqlite3.Connection 
     db.execute("DELETE FROM sources WHERE id = ? AND course_id = ?;", (source_id, course_id))
     db.commit()
     return {"success": True, "deleted_source_id": source_id}
+
+
+@router.post("/{course_id}/topics/cluster")
+def cluster_topics_endpoint(course_id: str, db: sqlite3.Connection = Depends(get_db)):
+    """Group related playlist videos and lessons into structured Topic Units."""
+    row = db.execute("SELECT id FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Course not found")
+    from backend.services.topic_grouper import cluster_course_topics
+    return cluster_course_topics(db, course_id)

@@ -1,12 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ExternalLink, VideoOff } from 'lucide-react';
-
-interface YouTubePlayerProps {
-  videoId?: string;
-  startSec?: number;
-  playbackSpeed?: number;
-  seekRequest?: { sec: number; nonce: number } | null;
-}
+import { ExternalLink, PlayCircle } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -15,126 +8,173 @@ declare global {
   }
 }
 
+interface YouTubePlayerProps {
+  videoId?: string | null;
+  videoUrl?: string | null;
+  startSec?: number;
+  endSec?: number;
+  playbackSpeed?: number;
+  seekRequest?: { sec: number; ts: number } | null;
+  lessonTitle?: string;
+}
+
+let ytApiPromise: Promise<void> | null = null;
+function loadYTApi(): Promise<void> {
+  if (window.YT && window.YT.Player) return Promise.resolve();
+  if (ytApiPromise) return ytApiPromise;
+  ytApiPromise = new Promise((resolve) => {
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      if (prev) prev();
+      resolve();
+    };
+    if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+    }
+  });
+  return ytApiPromise;
+}
+
+export function extractVideoId(videoId?: string | null, videoUrl?: string | null): string | null {
+  if (videoId && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) return videoId;
+  if (!videoUrl) return null;
+  const m = videoUrl.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
 export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   videoId,
+  videoUrl,
   startSec = 0,
+  endSec,
   playbackSpeed = 1.0,
   seekRequest,
+  lessonTitle,
 }) => {
-  const mountRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
   const readyRef = useRef(false);
-  const pendingRef = useRef<{ videoId: string; startSec: number } | null>(null);
+  const pendingSeekRef = useRef<number | null>(null);
   const [embedError, setEmbedError] = useState(false);
+
+  const resolvedId = extractVideoId(videoId, videoUrl);
 
   useEffect(() => {
     setEmbedError(false);
-    if (!videoId) return;
+    if (!resolvedId) return;
 
-    const loadSlice = (vid: string, sec: number) => {
-      if (!readyRef.current || !playerRef.current?.loadVideoById) {
-        pendingRef.current = { videoId: vid, startSec: sec };
-        return;
-      }
-      try {
-        playerRef.current.loadVideoById({ videoId: vid, startSeconds: Math.max(0, Math.floor(sec)) });
-        if (playbackSpeed && typeof playerRef.current.setPlaybackRate === 'function') {
-          playerRef.current.setPlaybackRate(playbackSpeed);
+    let cancelled = false;
+    loadYTApi().then(() => {
+      if (cancelled || !containerRef.current) return;
+      if (playerRef.current && readyRef.current) {
+        try {
+          playerRef.current.cueVideoById({
+            videoId: resolvedId,
+            startSeconds: startSec || 0,
+            ...(endSec && endSec > (startSec || 0) ? { endSeconds: endSec } : {}),
+          });
+          if (playbackSpeed) playerRef.current.setPlaybackRate(playbackSpeed);
+          return;
+        } catch {
+          // rebuild below
         }
-      } catch {
-        setEmbedError(true);
       }
-    };
 
-    const initPlayer = () => {
-      if (!mountRef.current || playerRef.current || !window.YT?.Player) return;
-      playerRef.current = new window.YT.Player(mountRef.current, {
+      containerRef.current.innerHTML = '';
+      const mountEl = document.createElement('div');
+      containerRef.current.appendChild(mountEl);
+
+      playerRef.current = new window.YT.Player(mountEl, {
         width: '100%',
         height: '100%',
-        videoId,
-        playerVars: { start: Math.max(0, Math.floor(startSec)), rel: 0, modestbranding: 1 },
+        videoId: resolvedId,
+        playerVars: {
+          rel: 0,
+          modestbranding: 1,
+          start: Math.floor(startSec || 0),
+          ...(endSec && endSec > (startSec || 0) ? { end: Math.floor(endSec) } : {}),
+        },
         events: {
-          onReady: () => {
+          onReady: (ev: any) => {
             readyRef.current = true;
-            if (playbackSpeed && typeof playerRef.current?.setPlaybackRate === 'function') {
-              try {
-                playerRef.current.setPlaybackRate(playbackSpeed);
-              } catch {
-                /* ignore */
+            try {
+              if (playbackSpeed) ev.target.setPlaybackRate(playbackSpeed);
+              if (pendingSeekRef.current !== null) {
+                ev.target.seekTo(pendingSeekRef.current, true);
+                ev.target.playVideo();
+                pendingSeekRef.current = null;
               }
-            }
-            if (pendingRef.current) {
-              const p = pendingRef.current;
-              pendingRef.current = null;
-              loadSlice(p.videoId, p.startSec);
+            } catch {
+              // ignore
             }
           },
           onError: () => setEmbedError(true),
         },
       });
-    };
+    });
 
-    if (window.YT?.Player) {
-      if (playerRef.current) {
-        loadSlice(videoId, startSec);
-      } else {
-        initPlayer();
-      }
-    } else {
-      pendingRef.current = { videoId, startSec };
-      if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-        const tag = document.createElement('script');
-        tag.src = 'https://www.youtube.com/iframe_api';
-        tag.async = true;
-        document.head.appendChild(tag);
-      }
-      const prevReady = window.onYouTubeIframeAPIReady;
-      window.onYouTubeIframeAPIReady = () => {
-        prevReady?.();
-        initPlayer();
-      };
-    }
-  }, [videoId, startSec, playbackSpeed]);
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedId, startSec, endSec]);
 
   useEffect(() => {
-    if (!seekRequest || !readyRef.current || !playerRef.current?.seekTo) return;
-    try {
-      playerRef.current.seekTo(Math.max(0, seekRequest.sec), true);
-      playerRef.current.playVideo?.();
-    } catch {
-      /* ignore */
+    if (playerRef.current && readyRef.current && playbackSpeed) {
+      try {
+        playerRef.current.setPlaybackRate(playbackSpeed);
+      } catch {
+        // ignore
+      }
+    }
+  }, [playbackSpeed]);
+
+  useEffect(() => {
+    if (!seekRequest) return;
+    if (playerRef.current && readyRef.current) {
+      try {
+        playerRef.current.seekTo(seekRequest.sec, true);
+        playerRef.current.playVideo();
+      } catch {
+        pendingSeekRef.current = seekRequest.sec;
+      }
+    } else {
+      pendingSeekRef.current = seekRequest.sec;
     }
   }, [seekRequest]);
 
-  if (!videoId) {
+  if (!resolvedId) {
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-subtle text-fg-secondary text-sm rounded-lg border border-border-def p-6">
-        <VideoOff className="w-6 h-6 mb-2 opacity-60" />
-        <span>Select a video lesson to start watching</span>
+      <div className="flex h-full w-full flex-col items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4 text-center">
+        <PlayCircle className="mb-2 h-8 w-8 text-[var(--fg-muted)]" />
+        <p className="text-sm font-medium text-[var(--fg-primary)]">{lessonTitle || 'Select a lesson to begin'}</p>
+        <p className="mt-1 text-xs text-[var(--fg-secondary)]">
+          This lesson is a reading / PDF / manual transcript unit — study directly in the structured notes below.
+        </p>
       </div>
     );
   }
 
   if (embedError) {
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-subtle text-fg-secondary text-sm rounded-lg border border-border-def p-6 gap-2">
-        <VideoOff className="w-6 h-6 opacity-70" />
-        <span>This video could not be embedded (offline or embed disabled).</span>
+      <div className="flex h-full w-full flex-col items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4 text-center">
+        <p className="text-sm font-medium text-[var(--fg-primary)]">YouTube embed unavailable for this video</p>
         <a
-          href={`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&t=${Math.floor(startSec)}s`}
+          href={`https://www.youtube.com/watch?v=${resolvedId}&t=${Math.floor(startSec || 0)}s`}
           target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-accent-text hover:underline font-medium"
+          rel="noreferrer"
+          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white"
         >
-          Open on YouTube <ExternalLink className="w-3.5 h-3.5" />
+          Open on YouTube <ExternalLink className="h-3.5 w-3.5" />
         </a>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-full rounded-lg overflow-hidden bg-black border border-border-def">
-      <div ref={mountRef} className="w-full h-full" />
+    <div className="relative h-full w-full overflow-hidden rounded-xl bg-black shadow-sm">
+      <div ref={containerRef} className="h-full w-full" />
     </div>
   );
 };
