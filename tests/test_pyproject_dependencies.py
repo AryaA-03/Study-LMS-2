@@ -20,3 +20,11 @@ def test_project_dependencies_are_valid_pep508():
     assert faster_whisper.marker.evaluate(
         {"sys_platform": "linux", "platform_machine": "x86_64"}
     )
+
+
+def test_setuptools_only_discovers_backend_package():
+    pyproject = tomllib.loads(
+        (Path(__file__).parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    )
+
+    assert pyproject["tool"]["setuptools"]["packages"]["find"]["include"] == ["backend*"]
