@@ -23,6 +23,24 @@ import yt_dlp
 
 from backend.config import get_settings
 
+
+_WHISPER_MODEL_SINGLETON = None
+
+
+def _get_faster_whisper_model():
+    global _WHISPER_MODEL_SINGLETON
+    if _WHISPER_MODEL_SINGLETON is None:
+        from faster_whisper import WhisperModel
+        _WHISPER_MODEL_SINGLETON = WhisperModel("tiny", device="cpu", compute_type="int8")
+    return _WHISPER_MODEL_SINGLETON
+
+
+def get_caption_cache_path(video_id: str) -> Path:
+    safe_vid = re.sub(r"[^a-zA-Z0-9_-]", "", str(video_id or ""))[:32] or "unknown"
+    cache_dir = get_settings().DATA_DIR / "cache" / "captions"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / f"{safe_vid}.json"
+
 logger = logging.getLogger("learn_lms.transcription")
 settings = get_settings()
 
@@ -429,7 +447,7 @@ def transcribe_audio_slice_with_whisper(
         try:
             from faster_whisper import WhisperModel
             logger.info("Running faster-whisper on CPU (int8)")
-            model = WhisperModel("tiny", device="cpu", compute_type="int8")
+            model = _get_faster_whisper_model()
             segments, _ = model.transcribe(audio_path, beam_size=1)
             for seg in segments:
                 s = base_offset_sec + seg.start

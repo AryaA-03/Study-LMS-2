@@ -68,6 +68,7 @@ let currentLessonId = null;
 let qaScope = 'lesson'; // 'lesson' | 'notebook'
 let ytPlayer = null;
 let isYtReady = false;
+let pendingVideoSlice = null;
 let collapsedDays = new Set();
 let areAllDaysCollapsed = false;
 
@@ -335,6 +336,7 @@ window.onYouTubeIframeAPIReady = function() {
 
 function onPlayerReady(event) {
   isYtReady = true;
+    if (pendingVideoSlice) { const _p = pendingVideoSlice; pendingVideoSlice = null; playVideoSlice(_p.videoId, _p.startSec, _p.endSec); }
   Logger.player('Player Ready', event);
   const placeholder = document.getElementById('yt-player-placeholder');
   if (placeholder) placeholder.classList.add('hidden');
@@ -469,6 +471,10 @@ async function triggerAutoAdvance() {
 }
 
 function playVideoSlice(videoId, startSec, endSec) {
+    if (!isYtReady || !ytPlayer || typeof ytPlayer.loadVideoById !== 'function') {
+        pendingVideoSlice = { videoId, startSec, endSec };
+        return;
+    }
   if (!videoId) return;
   const placeholder = document.getElementById('yt-player-placeholder');
   if (placeholder) placeholder.classList.add('hidden');
@@ -5439,4 +5445,118 @@ document.addEventListener('DOMContentLoaded', () => {
             if (mainSettingsBtn) mainSettingsBtn.click();
         });
     }
+});
+
+// =========================================================================
+// Phase 4: Command Palette (Cmd+K / Ctrl+K) & URL Hash Deep Linking
+// =========================================================================
+function updateUrlHash(courseId, lessonId) {
+    try {
+        if (!courseId) return;
+        const hash = lessonId ? `#/course/${encodeURIComponent(courseId)}/lesson/${encodeURIComponent(lessonId)}` : `#/course/${encodeURIComponent(courseId)}`;
+        if (window.location.hash !== hash) {
+            window.history.replaceState(null, '', hash);
+        }
+    } catch (_) {}
+}
+
+function getInitialHashTarget() {
+    const m = (window.location.hash || '').match(/^#\/course\/([^/]+)(?:\/lesson\/([^/]+))?/);
+    if (!m) return null;
+    return { courseId: decodeURIComponent(m[1]), lessonId: m[2] ? decodeURIComponent(m[2]) : null };
+}
+
+function initCommandPalette() {
+    const modal = document.getElementById('command-palette-modal');
+    const input = document.getElementById('command-palette-input');
+    const list = document.getElementById('command-palette-list');
+    if (!modal || !input || !list) return;
+
+    const closePalette = () => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    };
+
+    const getItems = () => {
+        const items = [
+            { label: 'New Learning Goal / Course', type: 'Action', run: () => document.getElementById('btn-new-course')?.click() },
+            { label: 'Open Cram Sheet', type: 'Action', run: () => document.getElementById('btn-open-cram-sheet')?.click() },
+            { label: 'Start Mock Exam', type: 'Action', run: () => document.getElementById('btn-open-mock-exam')?.click() },
+            { label: 'Open Settings', type: 'Action', run: () => document.getElementById('btn-settings')?.click() },
+            { label: 'Toggle Light / Dark Theme', type: 'Action', run: () => document.getElementById('btn-theme-toggle')?.click() },
+            { label: 'Replan Schedule Now', type: 'Action', run: () => document.getElementById('btn-replan-now')?.click() },
+        ];
+        if (Array.isArray(currentLessons)) {
+            currentLessons.slice(0, 60).forEach((l) => {
+                items.push({
+                    label: l.title || 'Untitled Lesson',
+                    type: 'Lesson',
+                    run: () => {
+                        const card = document.querySelector(`[data-lesson-id="${CSS.escape(l.id)}"]`);
+                        if (card) card.click();
+                        updateUrlHash(currentCourseId, l.id);
+                    },
+                });
+            });
+        }
+        return items;
+    };
+
+    const renderList = (query) => {
+        const q = (query || '').trim().toLowerCase();
+        const matched = getItems().filter((it) => !q || it.label.toLowerCase().includes(q) || it.type.toLowerCase().includes(q)).slice(0, 12);
+        list.textContent = '';
+        if (matched.length === 0) {
+            const li = document.createElement('li');
+            li.className = 'px-3 py-3 text-xs text-text-secondary';
+            li.textContent = 'No matching commands or lessons.';
+            list.appendChild(li);
+            return;
+        }
+        matched.forEach((it) => {
+            const li = document.createElement('li');
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg hover:bg-bg-sidebar text-text-primary';
+            const spanLabel = document.createElement('span');
+            spanLabel.textContent = it.label;
+            const spanType = document.createElement('span');
+            spanType.className = 'text-xs text-text-secondary px-1.5 py-0.5 rounded bg-bg-sidebar';
+            spanType.textContent = it.type;
+            btn.appendChild(spanLabel);
+            btn.appendChild(spanType);
+            btn.addEventListener('click', () => {
+                closePalette();
+                it.run();
+            });
+            li.appendChild(btn);
+            list.appendChild(li);
+        });
+    };
+
+    document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            if (modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                input.value = '';
+                renderList('');
+                input.focus();
+            } else {
+                closePalette();
+            }
+        } else if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+            closePalette();
+        }
+    });
+
+    input.addEventListener('input', () => renderList(input.value));
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closePalette();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initCommandPalette();
 });

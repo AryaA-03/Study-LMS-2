@@ -296,18 +296,27 @@ def update_ytdlp():
     return result
 
 @router.post("/cleanup-cache")
-def cleanup_cache():
-    """Cleans cached transcripts and screenshots."""
+def cleanup_cache(db: sqlite3.Connection = Depends(get_db)):
+    """Cleans cached transcripts, captions, screenshots (synced with SQLite), and expired LLM cache."""
+    from backend.services.llm_cache import prune_expired_cache
+
     transcripts_dir = DATA_DIR / "transcripts"
     screenshots_dir = DATA_DIR / "screenshots"
+    captions_cache_dir = DATA_DIR / "cache" / "captions"
 
     cleaned_bytes = 0
-    for directory in [transcripts_dir, screenshots_dir]:
+    for directory in [transcripts_dir, screenshots_dir, captions_cache_dir]:
         if directory.exists():
             size = get_dir_size(directory)
             cleaned_bytes += size
             shutil.rmtree(directory, ignore_errors=True)
             directory.mkdir(parents=True, exist_ok=True)
+    try:
+        db.execute("DELETE FROM screenshots;")
+        db.commit()
+    except Exception:
+        pass
+    prune_expired_cache(db)
 
     return {
         "success": True,

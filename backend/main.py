@@ -20,7 +20,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("learn_lms")
 
+from contextlib import asynccontextmanager
 from backend.config import BASE_DIR
+from backend.deps import CurrentUser, get_current_user
+from backend.infra.logging_config import install_secret_redaction
+from backend.infra.job_queue import recover_interrupted_jobs
+from backend.services.llm_cache import prune_expired_cache
+
+install_secret_redaction()
 from backend.database import get_db
 from backend.routers import (
     courses,
@@ -38,10 +45,30 @@ from backend.routers import (
     transcripts,
 )
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    try:
+        from backend.database import get_db_context
+        with get_db_context() as conn:
+            try:
+                recover_interrupted_jobs(conn)
+            except Exception:
+                pass
+            try:
+                prune_expired_cache(conn)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    yield
+
+
 app = FastAPI(
     title="Learn LMS & Exam Prep API",
     description="Local-first autonomous personal LMS and exam-prep platform.",
-    version="0.8.0",
+    version="0.9.0",
+    lifespan=lifespan,
 )
 
 # Restrict CORS to explicit local origins and methods
@@ -140,12 +167,12 @@ def health_check(db: sqlite3.Connection = Depends(get_db)):
             schema_version = int(row[0]) if (row and row[0] is not None) else 0
         except sqlite3.OperationalError:
             schema_version = 0
-        return {"status": "ok", "db": "ok", "version": "0.8.0", "schema_version": schema_version}
+        return {"status": "ok", "db": "ok", "version": "0.9.0", "schema_version": schema_version}
     except Exception as exc:
         logger.error(f"Health check DB failure: {exc}")
         return JSONResponse(
             status_code=503,
-            content={"status": "degraded", "db": "error", "version": "0.8.0"},
+            content={"status": "degraded", "db": "error", "version": "0.9.0"},
         )
 
 
@@ -159,3 +186,9 @@ def export_openapi_spec(output_path: Path = BASE_DIR / "openapi.json"):
 if __name__ == "__main__":
     export_openapi_spec()
     print("Locked openapi.json generated successfully.")
+
+
+@app.get("/api/auth/me")
+def get_auth_me(user: CurrentUser = Depends(get_current_user)):
+    """Returns the authenticated user context (local owner in AUTH_MODE=local, JWT user in hosted mode)."""
+    return {"id": user.id, "email": user.email, "role": user.role}
