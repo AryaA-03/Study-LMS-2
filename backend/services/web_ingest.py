@@ -21,6 +21,7 @@ logger = logging.getLogger("learn_lms.web_ingest")
 settings = get_settings()
 
 USER_AGENT = "LearnLMS-StudyBot/1.0 (+http://localhost; personal study only)"
+MAX_WEB_BYTES = 5 * 1024 * 1024
 
 
 def is_allowed_by_robots(url: str) -> bool:

@@ -6,7 +6,7 @@ from pypdf import PdfWriter
 import io
 
 from backend.services.pdf_ingest import extract_and_chunk_pdf, ingest_pdf_source
-from backend.services.web_ingest import chunk_web_text, is_allowed_by_robots
+from backend.services.web_ingest import MAX_WEB_BYTES, chunk_web_text, is_allowed_by_robots
 from backend.migrations.runner import apply_migrations
 from backend.database import init_connection
 
@@ -21,6 +21,10 @@ def create_dummy_pdf_bytes(text_pages: list) -> bytes:
     buf = io.BytesIO()
     writer.write(buf)
     return buf.getvalue()
+
+
+def test_web_ingest_max_size_is_5_mb():
+    assert MAX_WEB_BYTES == 5 * 1024 * 1024
 
 
 def test_chunk_web_text():
