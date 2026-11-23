@@ -118,10 +118,8 @@ def ensure_port_available(host: str = "127.0.0.1", port: int = 8000):
                 out = subprocess.check_output(["lsof", "-ti", f":{port}"]).decode().strip()
                 pids = [p.strip() for p in out.splitlines() if p.strip() and p.strip() != str(os.getpid())]
                 for pid in pids:
-                    print(f"🔄 Terminating stale server process {pid} on port {port}...")
-                    print(f'Port {port} is in use by PID {pid}. Stop it manually or set APP_PORT to another port.')
-                time.sleep(1)
-                print(f"✅ Port {port} freed successfully.")
+                    print(f"❌ Port {port} is in use by PID {pid}. Run: kill {pid} (or set APP_PORT=8001 python run.py)")
+                sys.exit(1)
             except Exception as e:
                 print(f"⚠️ Could not auto-terminate process on port {port}: {e}")
 

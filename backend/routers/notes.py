@@ -2,6 +2,7 @@
 
 import logging
 from typing import Dict, Any
+from backend.deps import get_current_user
 from fastapi import APIRouter, Depends, HTTPException
 import sqlite3
 
@@ -10,7 +11,7 @@ from backend.models.schemas import PersonalNotesUpdate, NoteResponse
 from backend.services.notes import get_or_generate_lesson_notes, save_personal_notes
 
 logger = logging.getLogger("learn_lms.api.notes")
-router = APIRouter(prefix="/api/lessons", tags=["notes"])
+router = APIRouter(prefix="/api/lessons", tags=["notes"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("/{lesson_id}/notes", response_model=NoteResponse)

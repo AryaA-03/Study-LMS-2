@@ -122,13 +122,6 @@ async def ingest_pdf_source(
             """,
             (chunk_id, course_id, source_id, chunk["chunk_index"], chunk["token_count"], content_with_page)
         )
-        db_conn.execute(
-            """
-            INSERT INTO chunks_fts (id, course_id, lesson_id, content)
-            VALUES (?, ?, NULL, ?);
-            """,
-            (chunk_id, course_id, content_with_page)
-        )
 
     db_conn.commit()
     logger.info(f"Ingested PDF source {source_id} with {len(chunks)} chunks")

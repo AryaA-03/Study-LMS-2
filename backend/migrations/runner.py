@@ -112,7 +112,7 @@ def apply_migrations(db_path: Path = DB_PATH) -> int:
         if not pending:
             return 0
 
-        backup_db_before_migration(db_path, current_version)
+        backup_db_before_migration(db_path, current_version, backups_dir=db_path.parent / "backups")
 
         applied_count = 0
         # Use manual transaction control so multi-statement migrations are truly atomic

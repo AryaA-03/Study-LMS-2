@@ -4,6 +4,7 @@ import json
 import sqlite3
 import logging
 from typing import List, Dict, Any, Optional
+from backend.deps import get_current_user
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.database import get_db
@@ -18,7 +19,7 @@ from backend.services.quiz_engine import create_and_store_quiz, grade_and_apply_
 from backend.routers.schedule import trigger_course_reflow
 
 logger = logging.getLogger("learn_lms.quizzes_router")
-router = APIRouter(prefix="/api/courses/{course_id}/quizzes", tags=["quizzes"])
+router = APIRouter(prefix="/api/courses/{course_id}/quizzes", tags=["quizzes"], dependencies=[Depends(get_current_user)])
 
 
 @router.post("/generate", response_model=QuizResponse)

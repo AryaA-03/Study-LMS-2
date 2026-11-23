@@ -28,7 +28,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -67,7 +72,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}": {
@@ -109,7 +119,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       },
       "put": {
         "tags": [
@@ -159,7 +174,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       },
       "delete": {
         "tags": [
@@ -198,7 +218,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       },
       "patch": {
         "tags": [
@@ -248,7 +273,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/discover": {
@@ -299,7 +329,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/sources/import": {
@@ -351,7 +386,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/sources/confirm": {
@@ -407,7 +447,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/sources/approve": {
@@ -463,7 +508,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/lessons/filter": {
@@ -520,7 +570,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/lessons/{lesson_id}/toggle-exclude": {
@@ -571,7 +626,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/syllabus/match": {
@@ -624,7 +684,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/syllabus/apply": {
@@ -677,7 +742,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/syllabus": {
@@ -720,7 +790,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/lessons/{lesson_id}": {
@@ -781,7 +856,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       },
       "patch": {
         "tags": [
@@ -840,7 +920,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/lessons/{lesson_id}/notes": {
@@ -901,7 +986,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/sources": {
@@ -947,7 +1037,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/lessons": {
@@ -993,7 +1088,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/export": {
@@ -1034,7 +1134,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/export-markdown": {
@@ -1075,7 +1180,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/sources/manual-transcript": {
@@ -1126,7 +1236,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/sources/discover-web": {
@@ -1167,7 +1282,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/sources/{source_id}": {
@@ -1217,7 +1337,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/topics/cluster": {
@@ -1258,7 +1383,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/schedule/generate": {
@@ -1300,7 +1430,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/schedule": {
@@ -1342,7 +1477,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/schedule/allocations/{allocation_id}/toggle": {
@@ -1393,7 +1533,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/schedule/allocations/{allocation_id}/complete": {
@@ -1445,7 +1590,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/schedule/allocations/{allocation_id}/skip": {
@@ -1496,7 +1646,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/schedule/allocations/{allocation_id}/reschedule": {
@@ -1557,7 +1712,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/schedule/replan": {
@@ -1609,7 +1769,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/schedule/undo": {
@@ -1652,7 +1817,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/settings": {
@@ -1673,7 +1843,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -1710,7 +1885,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/settings/test-connection": {
@@ -1752,7 +1932,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/settings/update-ytdlp": {
@@ -1772,7 +1957,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/settings/cleanup-cache": {
@@ -1792,7 +1982,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/settings/keys": {
@@ -1836,7 +2031,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/settings/backup": {
@@ -1856,7 +2056,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/settings/vacuum": {
@@ -1876,7 +2081,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/settings/restore": {
@@ -1916,7 +2126,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/lessons/{lesson_id}/transcribe": {
@@ -1960,7 +2175,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/lessons/{lesson_id}/chunks": {
@@ -2007,7 +2227,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/lessons/{lesson_id}/status": {
@@ -2051,7 +2276,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/lessons/{lesson_id}/notes": {
@@ -2094,7 +2324,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       },
       "put": {
         "tags": [
@@ -2145,7 +2380,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/lessons/{lesson_id}/notes/regenerate": {
@@ -2188,7 +2428,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/lessons/{lesson_id}/notes/personal": {
@@ -2242,7 +2487,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/lessons/{lesson_id}/screenshots": {
@@ -2289,7 +2539,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -2334,7 +2589,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/screenshots/{course_id}/{lesson_id}/{filename}": {
@@ -2393,7 +2653,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/sources/pdf": {
@@ -2444,7 +2709,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/sources/web": {
@@ -2495,7 +2765,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/qa": {
@@ -2542,7 +2817,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -2593,7 +2873,67 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/courses/{course_id}/qa/{thread_id}": {
+      "delete": {
+        "tags": [
+          "qa"
+        ],
+        "summary": "Delete Qa Thread",
+        "description": "Delete a single Q&A history thread for this course.",
+        "operationId": "delete_qa_thread_api_courses__course_id__qa__thread_id__delete",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            },
+            "name": "thread_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/quizzes/generate": {
@@ -2645,7 +2985,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/quizzes/{quiz_id}": {
@@ -2696,7 +3041,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/quizzes/{quiz_id}/submit": {
@@ -2757,7 +3107,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/quizzes": {
@@ -2821,7 +3176,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/flashcards/due": {
@@ -2886,7 +3246,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/flashcards/counts": {
@@ -2928,7 +3293,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/flashcards": {
@@ -3004,7 +3374,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -3054,7 +3429,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/flashcards/{card_id}/review": {
@@ -3115,7 +3495,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/flashcards/{card_id}": {
@@ -3176,7 +3561,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       },
       "delete": {
         "tags": [
@@ -3223,7 +3613,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/flashcards/lessons/{lesson_id}/generate": {
@@ -3279,7 +3674,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/jobs": {
@@ -3330,7 +3730,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/jobs/{job_id}": {
@@ -3371,7 +3776,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/jobs/{job_id}/cancel": {
@@ -3412,7 +3822,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/jobs/{job_id}/events": {
@@ -3421,7 +3836,7 @@
           "jobs"
         ],
         "summary": "Stream Job Events",
-        "description": "Server-Sent Events (SSE) stream for live background job progress.",
+        "description": "Server-Sent Events (SSE) stream for live background job progress until terminal status or disconnect.",
         "operationId": "stream_job_events_api_jobs__job_id__events_get",
         "parameters": [
           {
@@ -3453,7 +3868,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/pyq/upload-file": {
@@ -3506,7 +3926,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/pyq/upload-text": {
@@ -3559,7 +3984,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/pyq": {
@@ -3600,7 +4030,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/lessons/{lesson_id}/pyq": {
@@ -3650,7 +4085,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/pyq/papers/{paper_id}": {
@@ -3700,7 +4140,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/cram-sheet/generate": {
@@ -3761,7 +4206,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/cram-sheet/generate-full": {
@@ -3804,7 +4254,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/cram-sheet": {
@@ -3847,7 +4302,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/cram-sheet/download": {
@@ -3888,7 +4348,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/courses/{course_id}/cram-sheet/generate-full-async": {
@@ -3929,7 +4394,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/": {
@@ -3992,17 +4462,6 @@
         "summary": "Get Auth Me",
         "description": "Returns the authenticated user context (local owner in AUTH_MODE=local, JWT user in hosted mode).",
         "operationId": "get_auth_me_api_auth_me_get",
-        "parameters": [
-          {
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            },
-            "name": "authorization",
-            "in": "header"
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -4011,18 +4470,13 @@
                 "schema": {}
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     }
   },
@@ -6335,6 +6789,12 @@
             "type": "string"
           }
         }
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
       }
     }
   }

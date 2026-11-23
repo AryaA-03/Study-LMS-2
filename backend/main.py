@@ -65,7 +65,12 @@ async def lifespan(_app: FastAPI):
                 pass
     except Exception:
         pass
-    yield
+    from backend.infra.job_worker import job_worker
+    job_worker.start()
+    try:
+        yield
+    finally:
+        await job_worker.stop()
 
 
 app = FastAPI(
@@ -87,6 +92,8 @@ app.add_middleware(
         "http://127.0.0.1:8008",
         "http://localhost:7860",
         "http://127.0.0.1:7860",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
     ],
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -119,6 +126,15 @@ async def security_and_logging_middleware(request: Request, call_next):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' https://www.youtube.com https://s.ytimg.com; "
+            "style-src 'self' 'unsafe-inline'; "
+            "frame-src https://www.youtube.com https://www.youtube-nocookie.com; "
+            "img-src 'self' data: blob: https://i.ytimg.com https://img.youtube.com; "
+            "font-src 'self' data:; "
+            "connect-src 'self';"
+        )
 
         if not request.url.path.startswith("/static"):
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -198,6 +214,12 @@ def health_check(db: sqlite3.Connection = Depends(get_db)):
         )
 
 
+@app.get("/api/auth/me")
+def get_auth_me(user: CurrentUser = Depends(get_current_user)):
+    """Returns the authenticated user context (local owner in AUTH_MODE=local, JWT user in hosted mode)."""
+    return {"id": user.id, "email": user.email, "role": user.role}
+
+
 def export_openapi_spec(output_path: Path = BASE_DIR / "openapi.json"):
     """Dumps locked OpenAPI specification to openapi.json."""
     spec = app.openapi()
@@ -208,9 +230,3 @@ def export_openapi_spec(output_path: Path = BASE_DIR / "openapi.json"):
 if __name__ == "__main__":
     export_openapi_spec()
     print("Locked openapi.json generated successfully.")
-
-
-@app.get("/api/auth/me")
-def get_auth_me(user: CurrentUser = Depends(get_current_user)):
-    """Returns the authenticated user context (local owner in AUTH_MODE=local, JWT user in hosted mode)."""
-    return {"id": user.id, "email": user.email, "role": user.role}

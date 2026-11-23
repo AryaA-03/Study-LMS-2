@@ -2,6 +2,7 @@
 
 import logging
 from typing import Dict, Any, List
+from backend.deps import get_current_user
 from fastapi import APIRouter, Depends, HTTPException
 import sqlite3
 
@@ -9,7 +10,7 @@ from backend.database import get_db
 from backend.services.transcription import ingest_lesson_transcript
 
 logger = logging.getLogger("learn_lms.api.transcripts")
-router = APIRouter(prefix="/api/lessons", tags=["transcripts"])
+router = APIRouter(prefix="/api/lessons", tags=["transcripts"], dependencies=[Depends(get_current_user)])
 
 
 @router.post("/{lesson_id}/transcribe")

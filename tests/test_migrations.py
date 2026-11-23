@@ -54,7 +54,6 @@ def test_fts5_cleanup_trigger():
         conn.execute("INSERT INTO courses (id, title, goal_query, target_date) VALUES ('c1', 'T', 'G', '2026-12-31');")
         conn.execute("INSERT INTO sources (id, course_id, source_type, title) VALUES ('s1', 'c1', 'web', 'S');")
         conn.execute("INSERT INTO chunks (id, course_id, source_id, chunk_index, token_count, content) VALUES ('chk1', 'c1', 's1', 0, 10, 'Automata Theory');")
-        conn.execute("INSERT INTO chunks_fts (id, course_id, lesson_id, content) VALUES ('chk1', 'c1', NULL, 'Automata Theory');")
         conn.commit()
 
         assert conn.execute("SELECT COUNT(*) FROM chunks_fts;").fetchone()[0] == 1

@@ -1,57 +1,61 @@
 """Authenticated encryption helper for per-user BYOK API keys in hosted multi-user mode.
 
-Uses AES-256-GCM when `cryptography` is installed, with a pure-stdlib authenticated
-HMAC-SHA256 + SHA-256 CTR stream fallback so local environments never fail imports.
+Uses real AES-256-GCM (via `cryptography`) with HKDF-SHA256 per-secret salt key derivation
+and unique 12-byte random nonces. Stored format is versioned (`v1:<salt_b64>:<ct_b64>`)
+for safe future key rotation.
 """
 
 import base64
-import hashlib
-import hmac
 import os
 from typing import Tuple
 
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-def _derive_key(master_secret: str) -> bytes:
+
+def _derive_subkey(master_secret: str, salt: bytes) -> bytes:
     if not master_secret or len(master_secret) < 16:
         raise ValueError("MASTER_ENCRYPTION_KEY must be at least 16 characters.")
-    return hashlib.sha256(master_secret.encode("utf-8")).digest()
-
-
-def _keystream(key: bytes, nonce: bytes, length: int) -> bytes:
-    out = bytearray()
-    counter = 0
-    while len(out) < length:
-        block = hashlib.sha256(key + nonce + counter.to_bytes(4, "big")).digest()
-        out.extend(block)
-        counter += 1
-    return bytes(out[:length])
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        info=b"study-lms-user-secret-v1",
+    )
+    return hkdf.derive(master_secret.encode("utf-8"))
 
 
 def encrypt_secret(plaintext: str, master_secret: str) -> Tuple[str, str]:
-    """Encrypt plaintext and return (ciphertext_b64, nonce_b64) with authentication tag."""
-    key = _derive_key(master_secret)
-    nonce = os.urandom(16)
-    pt = plaintext.encode("utf-8")
-    ks = _keystream(key, nonce, len(pt))
-    ct = bytes(a ^ b for a, b in zip(pt, ks))
-    tag = hmac.new(key, nonce + ct, hashlib.sha256).digest()
+    """Encrypt plaintext with AES-256-GCM + HKDF-SHA256 and return (ciphertext_b64, nonce_b64)."""
+    salt = os.urandom(16)
+    nonce = os.urandom(12)
+    key = _derive_subkey(master_secret, salt)
+    ct = AESGCM(key).encrypt(nonce, plaintext.encode("utf-8"), None)
+    # Prefix salt to ciphertext payload so decrypt derives the exact per-secret subkey
+    packed = b"v1:" + salt + ct
     return (
-        base64.b64encode(ct + tag).decode("ascii"),
+        base64.b64encode(packed).decode("ascii"),
         base64.b64encode(nonce).decode("ascii"),
     )
 
 
 def decrypt_secret(ciphertext_b64: str, nonce_b64: str, master_secret: str) -> str:
-    """Verify authentication tag and decrypt ciphertext."""
-    key = _derive_key(master_secret)
-    nonce = base64.b64decode(nonce_b64)
-    raw = base64.b64decode(ciphertext_b64)
-    if len(raw) < 32:
-        raise ValueError("Corrupted ciphertext")
-    ct, tag = raw[:-32], raw[-32:]
-    expected_tag = hmac.new(key, nonce + ct, hashlib.sha256).digest()
-    if not hmac.compare_digest(tag, expected_tag):
-        raise ValueError("Authentication tag mismatch — invalid key or tampered ciphertext")
-    ks = _keystream(key, nonce, len(ct))
-    pt = bytes(a ^ b for a, b in zip(ct, ks))
+    """Verify AES-256-GCM authentication tag and decrypt ciphertext."""
+    try:
+        raw = base64.b64decode(ciphertext_b64)
+        nonce = base64.b64decode(nonce_b64)
+    except Exception as exc:
+        raise ValueError("Corrupted base64 secret payload") from exc
+
+    if not raw.startswith(b"v1:") or len(raw) < 3 + 16 + 16 or len(nonce) != 12:
+        raise ValueError("Unsupported or corrupted ciphertext format")
+
+    salt = raw[3:19]
+    ct = raw[19:]
+    key = _derive_subkey(master_secret, salt)
+    try:
+        pt = AESGCM(key).decrypt(nonce, ct, None)
+    except Exception as exc:
+        raise ValueError("Authentication tag mismatch or wrong master key") from exc
     return pt.decode("utf-8")

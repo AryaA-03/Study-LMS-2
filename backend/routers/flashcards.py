@@ -3,6 +3,7 @@
 import sqlite3
 import logging
 from typing import List, Dict, Any, Optional
+from backend.deps import get_current_user
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.database import get_db
@@ -22,7 +23,7 @@ from backend.services.fsrs_engine import (
 )
 
 logger = logging.getLogger("learn_lms.flashcards_router")
-router = APIRouter(prefix="/api/courses/{course_id}/flashcards", tags=["flashcards"])
+router = APIRouter(prefix="/api/courses/{course_id}/flashcards", tags=["flashcards"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("/due", response_model=List[FlashcardResponse])
@@ -177,7 +178,8 @@ def update_flashcard(
     as_of = datetime.datetime.now(timezone.utc)
     fsrs_card = card_to_fsrs(row_dict)
     intervals = preview_intervals(fsrs_card, scheduler, as_of)
-    state_enum = fsrs.State(row_dict.get("state", 1))
+    _raw_state = int(row_dict.get("state") or 0)
+    state_enum = fsrs.State(_raw_state) if _raw_state in (1, 2, 3) else fsrs.State.Learning
 
     return {
         "id": row_dict["id"],
@@ -203,8 +205,10 @@ def delete_card(
     card_id: str,
     db: sqlite3.Connection = Depends(get_db),
 ):
-    db.execute("DELETE FROM flashcards WHERE id = ? AND course_id = ?;", (card_id, course_id))
+    cur = db.execute("DELETE FROM flashcards WHERE id = ? AND course_id = ?;", (card_id, course_id))
     db.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Flashcard not found")
     return {"success": True, "deleted_id": card_id}
 
 

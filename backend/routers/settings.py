@@ -15,12 +15,14 @@ import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from backend.database import get_db
+from backend.deps import get_current_user, require_local_admin
+from backend.infra.net_guard import validate_public_url
 from backend.config import DATA_DIR, DB_PATH, TIMEZONE_STR, ENV_VARS, update_env_file
 import json
 from backend.models.schemas import SystemSettingsResponse, UpdateSettingsRequest, TestConnectionRequest, TestConnectionResponse
 from backend.services.youtube import get_ytdlp_version, update_ytdlp_package
 
-router = APIRouter(prefix="/api/settings", tags=["settings"])
+router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(get_current_user)])
 
 def get_dir_size(path: Path) -> int:
     """Calculates total size in bytes of a directory."""
@@ -152,7 +154,12 @@ def update_settings(
     if req.gemini_model: env_updates["GEMINI_MODEL"] = req.gemini_model
     if req.groq_model: env_updates["GROQ_MODEL"] = req.groq_model
     if req.openrouter_model: env_updates["OPENROUTER_MODEL"] = req.openrouter_model
-    if req.openrouter_base_url: env_updates["OPENROUTER_BASE_URL"] = req.openrouter_base_url
+    if req.openrouter_base_url:
+        try:
+            validate_public_url(req.openrouter_base_url.strip())
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=f"Invalid OpenRouter base URL: {ve}")
+        env_updates["OPENROUTER_BASE_URL"] = req.openrouter_base_url.strip()
     if req.ollama_base_url: env_updates["OLLAMA_BASE_URL"] = req.ollama_base_url
     if req.ollama_model: env_updates["OLLAMA_MODEL"] = req.ollama_model
     if env_updates:
@@ -180,7 +187,7 @@ async def test_connection(req: TestConnectionRequest):
             async with httpx.AsyncClient(timeout=8.0) as client:
                 r = await client.get(
                     "https://generativelanguage.googleapis.com/v1beta/models",
-                    params={"key": key}
+                    headers={"x-goog-api-key": key}
                 )
                 if r.status_code == 200:
                     return TestConnectionResponse(
@@ -289,13 +296,13 @@ async def test_connection(req: TestConnectionRequest):
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider}")
 
-@router.post("/update-ytdlp")
+@router.post("/update-ytdlp", dependencies=[Depends(require_local_admin)])
 def update_ytdlp():
     """One-click update of yt-dlp to latest PyPI version."""
     result = update_ytdlp_package()
     return result
 
-@router.post("/cleanup-cache")
+@router.post("/cleanup-cache", dependencies=[Depends(require_local_admin)])
 def cleanup_cache(db: sqlite3.Connection = Depends(get_db)):
     """Cleans cached transcripts, captions, screenshots (synced with SQLite), and expired LLM cache."""
     from backend.services.llm_cache import prune_expired_cache
@@ -324,7 +331,7 @@ def cleanup_cache(db: sqlite3.Connection = Depends(get_db)):
         "message": f"Cleaned {round(cleaned_bytes / (1024 * 1024), 2)} MB of cached media.",
     }
 
-@router.post("/keys")
+@router.post("/keys", dependencies=[Depends(require_local_admin)])
 def update_api_keys(keys: Dict[str, str]):
     """Safely writes API keys and LLM model presets into .env only (never in SQLite)."""
     allowed_keys = {
@@ -341,7 +348,7 @@ def update_api_keys(keys: Dict[str, str]):
     return {"success": True, "message": "API keys and model configurations updated securely in .env"}
 
 
-@router.get("/backup")
+@router.get("/backup", dependencies=[Depends(require_local_admin)])
 def download_sqlite_backup(request: Request):
     """One-click download of the raw SQLite database for offline backup and portability.
     
@@ -367,7 +374,7 @@ def download_sqlite_backup(request: Request):
     )
 
 
-@router.post("/vacuum")
+@router.post("/vacuum", dependencies=[Depends(require_local_admin)])
 def vacuum_database(db: sqlite3.Connection = Depends(get_db)):
     """Runs SQLite VACUUM to reclaim free space on disk."""
     try:
@@ -387,7 +394,7 @@ def vacuum_database(db: sqlite3.Connection = Depends(get_db)):
 
 
 
-@router.post("/restore")
+@router.post("/restore", dependencies=[Depends(require_local_admin)])
 async def restore_sqlite_backup(request: Request, file: UploadFile = File(...)):
     """Localhost-only validated SQLite database restore with automatic pre-restore backup."""
     from backend.migrations.runner import backup_db_before_migration, get_current_schema_version
@@ -411,8 +418,13 @@ async def restore_sqlite_backup(request: Request, file: UploadFile = File(...)):
             res = check_conn.execute("PRAGMA integrity_check;").fetchone()
             if not res or res[0] != "ok":
                 raise HTTPException(status_code=400, detail="Uploaded SQLite backup failed integrity check.")
+            tables = {r[0] for r in check_conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()}
+            if "courses" not in tables:
+                raise HTTPException(status_code=400, detail="Uploaded SQLite file is missing required Study LMS tables.")
         finally:
             check_conn.close()
+        from backend.migrations.runner import apply_migrations
+        apply_migrations(Path(tmp_path))
 
         if DB_PATH.exists():
             cur_conn = sqlite3.connect(str(DB_PATH))

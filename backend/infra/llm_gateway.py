@@ -1,3 +1,4 @@
+import os
 """Unified async LLM Gateway with header auth, user-configured models, 429 retry/backoff, and Ollama support."""
 
 import asyncio
@@ -8,7 +9,7 @@ from typing import Any, Dict, Optional, Tuple
 import httpx
 
 from backend.config import get_settings
-from backend.infra.net_guard import validate_ollama_url
+from backend.infra.net_guard import validate_ollama_url, validate_public_url
 
 logger = logging.getLogger("learn_lms.llm_gateway")
 
@@ -143,7 +144,7 @@ class LLMGateway:
 
             # 4. Local Ollama fallback (loopback-only)
             try:
-                ollama_base = validate_ollama_url(s.OLLAMA_BASE_URL)
+                ollama_base = validate_ollama_url(s.OLLAMA_BASE_URL, auth_mode=os.getenv("AUTH_MODE", "local"))
                 model = s.OLLAMA_MODEL
                 messages = []
                 if system_instruction:

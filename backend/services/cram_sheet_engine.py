@@ -475,7 +475,7 @@ async def generate_cram_sheet_with_llm(
         "2. Preserve clickable `[MM:SS]` timestamp pills from the source material next to each major concept and formula.\n"
         "3. Organize into these exact high-yield sections:\n"
         "   - `# <Subject> — Last-Night Exam Cram Sheet` + Exam Date callout\n"
-        "   - `## ⚡ High-Yield Topic Matrix` (compact table: Topic | Priority | Key Exam Angle | Jump `[MM:SS]`)\n"
+        "   - `## ⚡ High-Yield Exam Weightage Matrix` (compact table: Topic | Priority | Key Exam Angle | Jump `[MM:SS]`)\n"
         "   - `## 📐 Core Formulas, Formal Definitions & Complexities` (use clean LaTeX `$...$` where helpful)\n"
         "   - `## 📊 Must-Know Comparison & Distinction Tables` (at least 1–2 crisp Markdown tables contrasting key concepts from the syllabus)\n"
         "   - `## 🧠 Step-by-Step Algorithms, Worked Patterns & Common Exam Traps` (concise numbered steps + `> [!IMPORTANT]` traps)\n"

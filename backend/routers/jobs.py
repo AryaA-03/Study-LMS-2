@@ -5,13 +5,14 @@ import sqlite3
 from typing import Optional
 import asyncio
 import json
-from fastapi import APIRouter, Depends, HTTPException
+from backend.deps import get_current_user
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from backend.database import get_db
 from backend.infra.job_queue import cancel_job, get_job, list_jobs
 
-router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+router = APIRouter(prefix="/api/jobs", tags=["jobs"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("")
@@ -43,8 +44,8 @@ def cancel_background_job(job_id: str, db: sqlite3.Connection = Depends(get_db))
 
 
 @router.get("/{job_id}/events")
-async def stream_job_events(job_id: str, db: sqlite3.Connection = Depends(get_db)):
-    """Server-Sent Events (SSE) stream for live background job progress."""
+async def stream_job_events(job_id: str, request: Request, db: sqlite3.Connection = Depends(get_db)):
+    """Server-Sent Events (SSE) stream for live background job progress until terminal status or disconnect."""
     initial = get_job(db, job_id)
     if not initial:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -54,7 +55,10 @@ async def stream_job_events(job_id: str, db: sqlite3.Connection = Depends(get_db
 
     async def _event_gen():
         from backend.database import get_db_context
-        for _ in range(120):
+        ticks = 0
+        while True:
+            if await request.is_disconnected():
+                break
             ctx = get_db_context(db_file) if db_file else get_db_context()
             with ctx as conn:
                 current = get_job(conn, job_id)
@@ -63,6 +67,9 @@ async def stream_job_events(job_id: str, db: sqlite3.Connection = Depends(get_db
             yield f"data: {json.dumps(current, default=str)}\n\n"
             if current.get("status") in ("completed", "failed", "cancelled"):
                 break
-            await asyncio.sleep(0.5)
+            ticks += 1
+            if ticks % 15 == 0:
+                yield ": keep-alive\n\n"
+            await asyncio.sleep(1.0)
 
     return StreamingResponse(_event_gen(), media_type="text/event-stream")

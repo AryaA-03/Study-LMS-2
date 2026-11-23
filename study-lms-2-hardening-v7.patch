@@ -1,0 +1,2783 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 762753b..93321c9 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -26,3 +26,9 @@ jobs:
+         run: pytest -m "not e2e and not live" -q
+       - name: Verify JS syntax
+         run: node --check frontend/static/js/app.js
++
++      - name: Build React/TypeScript Frontend
++        run: |
++          cd frontend-app
++          npm ci
++          npm run build
+diff --git a/backend/deps.py b/backend/deps.py
+index a36e277..ca09b69 100644
+--- a/backend/deps.py
++++ b/backend/deps.py
+@@ -1,79 +1,175 @@
+-"""FastAPI auth & tenant dependencies supporting local-first and hosted (Supabase/OIDC) modes."""
++"""Authentication, tenant-isolation, and local-admin dependencies.
++
++Dual-mode design:
++  - AUTH_MODE=local (default): Zero-friction single-user mode returning CurrentUser(id='local').
++  - AUTH_MODE=supabase (hosted): Enforces strict HS256 JWT validation (alg header, exp, sub,
++    optional aud/iss) and tenant ownership scoping on every course/lesson/host route.
++"""
+ 
+ import base64
+ import hashlib
+ import hmac
+ import json
+ import os
++import sqlite3
+ import time
+ from dataclasses import dataclass
+-from typing import Optional
++from typing import Any, Dict, Optional
++
++from fastapi import Depends, HTTPException, Request
++from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+ 
+-from fastapi import Header, HTTPException
++from backend.database import get_db
++
++_bearer = HTTPBearer(auto_error=False)
++_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
+ 
+ 
+ @dataclass(frozen=True)
+ class CurrentUser:
+     id: str
+-    email: str = "local@study-lms.local"
++    email: Optional[str] = None
+     role: str = "owner"
++    auth_mode: str = "local"
++
+ 
++def _b64url_decode(segment: str) -> bytes:
++    padding = "=" * (-len(segment) % 4)
++    return base64.urlsafe_b64decode(segment + padding)
+ 
+-def _verify_hs256_jwt(token: str, secret: str) -> dict:
+-    """Minimal dependency-free HS256 JWT verifier (compatible with Supabase JWT secret)."""
++
++def _verify_hs256_jwt(token: str, secret: str) -> Dict[str, Any]:
++    """Strictly verify HS256 JWT: header alg, signature, mandatory exp & sub, optional aud/iss."""
+     parts = token.split(".")
+     if len(parts) != 3:
+-        raise ValueError("Malformed JWT")
++        raise HTTPException(status_code=401, detail="Malformed bearer token")
++
+     header_b64, payload_b64, sig_b64 = parts
++    try:
++        header = json.loads(_b64url_decode(header_b64).decode("utf-8"))
++    except Exception:
++        raise HTTPException(status_code=401, detail="Invalid JWT header")
+ 
+-    def _b64url_decode(s: str) -> bytes:
+-        pad = "=" * (-len(s) % 4)
+-        return base64.urlsafe_b64decode(s + pad)
++    if header.get("alg") != "HS256":
++        raise HTTPException(status_code=401, detail="Unsupported JWT algorithm")
++
++    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
++    expected_sig = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
++    try:
++        actual_sig = _b64url_decode(sig_b64)
++    except Exception:
++        raise HTTPException(status_code=401, detail="Invalid token signature encoding")
+ 
+-    expected_sig = hmac.new(
+-        secret.encode("utf-8"),
+-        f"{header_b64}.{payload_b64}".encode("utf-8"),
+-        hashlib.sha256,
+-    ).digest()
+-    actual_sig = _b64url_decode(sig_b64)
+     if not hmac.compare_digest(expected_sig, actual_sig):
+-        raise ValueError("Invalid JWT signature")
++        raise HTTPException(status_code=401, detail="Invalid token signature")
++
++    try:
++        payload = json.loads(_b64url_decode(payload_b64).decode("utf-8"))
++    except Exception:
++        raise HTTPException(status_code=401, detail="Invalid token payload")
+ 
+-    payload = json.loads(_b64url_decode(payload_b64).decode("utf-8"))
++    now = time.time()
+     exp = payload.get("exp")
+-    if exp is not None and time.time() > float(exp):
+-        raise ValueError("JWT expired")
+-    return payload
++    if exp is None or not isinstance(exp, (int, float)):
++        raise HTTPException(status_code=401, detail="Token missing required exp claim")
++    if now > float(exp):
++        raise HTTPException(status_code=401, detail="Token expired")
++
++    nbf = payload.get("nbf")
++    if nbf is not None and isinstance(nbf, (int, float)) and now < float(nbf) - 5:
++        raise HTTPException(status_code=401, detail="Token not yet valid")
+ 
++    if not payload.get("sub"):
++        raise HTTPException(status_code=401, detail="Token missing subject claim")
+ 
+-def get_current_user(authorization: Optional[str] = Header(default=None)) -> CurrentUser:
+-    """Resolve active user.
++    expected_aud = os.getenv("SUPABASE_JWT_AUD", "").strip()
++    if expected_aud:
++        aud = payload.get("aud")
++        aud_ok = (aud == expected_aud) or (isinstance(aud, list) and expected_aud in aud)
++        if not aud_ok:
++            raise HTTPException(status_code=401, detail="Invalid token audience")
+ 
+-    - AUTH_MODE=local (default): returns local owner with zero login friction.
+-    - AUTH_MODE=supabase / oidc: requires valid Bearer JWT signed with SUPABASE_JWT_SECRET / JWT_SECRET.
+-    """
+-    auth_mode = os.getenv("AUTH_MODE", "local").strip().lower()
+-    if auth_mode == "local":
+-        return CurrentUser(id="local", email="local@study-lms.local", role="owner")
++    expected_iss = os.getenv("SUPABASE_JWT_ISS", "").strip()
++    if expected_iss and payload.get("iss") != expected_iss:
++        raise HTTPException(status_code=401, detail="Invalid token issuer")
+ 
+-    if not authorization or not authorization.lower().startswith("bearer "):
+-        raise HTTPException(status_code=401, detail="Authentication required")
++    return payload
+ 
+-    token = authorization.split(" ", 1)[1].strip()
+-    secret = os.getenv("SUPABASE_JWT_SECRET") or os.getenv("JWT_SECRET") or ""
+-    if not secret:
+-        raise HTTPException(status_code=503, detail="Auth secret not configured on server")
+ 
+-    try:
+-        claims = _verify_hs256_jwt(token, secret)
+-    except Exception as exc:
+-        raise HTTPException(status_code=401, detail=f"Invalid authentication token: {exc}") from exc
++def get_current_user(
++    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
++) -> CurrentUser:
++    """Resolve authenticated user; zero-friction 'local' user in AUTH_MODE=local."""
++    auth_mode = os.getenv("AUTH_MODE", "local").strip().lower()
++    if auth_mode == "local":
++        return CurrentUser(id="local", email=None, auth_mode="local")
+ 
+-    user_id = claims.get("sub")
+-    if not user_id:
+-        raise HTTPException(status_code=401, detail="Token missing subject claim")
++    secret = os.getenv("SUPABASE_JWT_SECRET", "").strip()
++    if not secret:
++        raise HTTPException(
++            status_code=500,
++            detail="AUTH_MODE is hosted but SUPABASE_JWT_SECRET is not configured",
++        )
++    if not credentials or not credentials.credentials:
++        raise HTTPException(status_code=401, detail="Authorization Bearer token required")
++
++    payload = _verify_hs256_jwt(credentials.credentials, secret)
+     return CurrentUser(
+-        id=str(user_id),
+-        email=str(claims.get("email", "")),
+-        role=str(claims.get("role", "authenticated")),
++        id=str(payload["sub"]),
++        email=payload.get("email"),
++        auth_mode=auth_mode,
+     )
++
++
++def require_local_admin(request: Request) -> None:
++    """Restrict host-level operations (.env keys, pip update, raw DB backup/restore) to local mode + loopback."""
++    auth_mode = os.getenv("AUTH_MODE", "local").strip().lower()
++    if auth_mode != "local":
++        raise HTTPException(
++            status_code=403,
++            detail="Host-level administration endpoints are disabled in hosted mode.",
++        )
++    client_host = (request.client.host if request.client else "") or ""
++    if client_host and client_host not in _LOOPBACK_HOSTS:
++        raise HTTPException(
++            status_code=403,
++            detail="Host-level administration endpoints are restricted to localhost.",
++        )
++
++
++def require_course_owner(
++    course_id: str,
++    user: CurrentUser = Depends(get_current_user),
++    db: sqlite3.Connection = Depends(get_db),
++) -> sqlite3.Row:
++    """Verify course exists and belongs to the authenticated user (404 on mismatch)."""
++    row = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
++    if not row:
++        raise HTTPException(status_code=404, detail="Course not found")
++    owner_id = row["owner_id"] if "owner_id" in row.keys() else "local"
++    if user.auth_mode != "local" and owner_id != user.id:
++        raise HTTPException(status_code=404, detail="Course not found")
++    return row
++
++
++def require_lesson_owner(
++    lesson_id: str,
++    user: CurrentUser = Depends(get_current_user),
++    db: sqlite3.Connection = Depends(get_db),
++) -> sqlite3.Row:
++    """Verify lesson exists and its parent course belongs to the authenticated user."""
++    row = db.execute(
++        """
++        SELECT l.*, c.owner_id AS course_owner_id
++        FROM lessons l
++        JOIN courses c ON c.id = l.course_id
++        WHERE l.id = ?;
++        """,
++        (lesson_id,),
++    ).fetchone()
++    if not row:
++        raise HTTPException(status_code=404, detail="Lesson not found")
++    owner_id = row["course_owner_id"] if "course_owner_id" in row.keys() else "local"
++    if user.auth_mode != "local" and owner_id != user.id:
++        raise HTTPException(status_code=404, detail="Lesson not found")
++    return row
+diff --git a/backend/infra/crypto.py b/backend/infra/crypto.py
+index edd3bd0..5f71a8a 100644
+--- a/backend/infra/crypto.py
++++ b/backend/infra/crypto.py
+@@ -1,57 +1,61 @@
+ """Authenticated encryption helper for per-user BYOK API keys in hosted multi-user mode.
+ 
+-Uses AES-256-GCM when `cryptography` is installed, with a pure-stdlib authenticated
+-HMAC-SHA256 + SHA-256 CTR stream fallback so local environments never fail imports.
++Uses real AES-256-GCM (via `cryptography`) with HKDF-SHA256 per-secret salt key derivation
++and unique 12-byte random nonces. Stored format is versioned (`v1:<salt_b64>:<ct_b64>`)
++for safe future key rotation.
+ """
+ 
+ import base64
+-import hashlib
+-import hmac
+ import os
+ from typing import Tuple
+ 
++from cryptography.hazmat.primitives import hashes
++from cryptography.hazmat.primitives.ciphers.aead import AESGCM
++from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+ 
+-def _derive_key(master_secret: str) -> bytes:
++
++def _derive_subkey(master_secret: str, salt: bytes) -> bytes:
+     if not master_secret or len(master_secret) < 16:
+         raise ValueError("MASTER_ENCRYPTION_KEY must be at least 16 characters.")
+-    return hashlib.sha256(master_secret.encode("utf-8")).digest()
+-
+-
+-def _keystream(key: bytes, nonce: bytes, length: int) -> bytes:
+-    out = bytearray()
+-    counter = 0
+-    while len(out) < length:
+-        block = hashlib.sha256(key + nonce + counter.to_bytes(4, "big")).digest()
+-        out.extend(block)
+-        counter += 1
+-    return bytes(out[:length])
++    hkdf = HKDF(
++        algorithm=hashes.SHA256(),
++        length=32,
++        salt=salt,
++        info=b"study-lms-user-secret-v1",
++    )
++    return hkdf.derive(master_secret.encode("utf-8"))
+ 
+ 
+ def encrypt_secret(plaintext: str, master_secret: str) -> Tuple[str, str]:
+-    """Encrypt plaintext and return (ciphertext_b64, nonce_b64) with authentication tag."""
+-    key = _derive_key(master_secret)
+-    nonce = os.urandom(16)
+-    pt = plaintext.encode("utf-8")
+-    ks = _keystream(key, nonce, len(pt))
+-    ct = bytes(a ^ b for a, b in zip(pt, ks))
+-    tag = hmac.new(key, nonce + ct, hashlib.sha256).digest()
++    """Encrypt plaintext with AES-256-GCM + HKDF-SHA256 and return (ciphertext_b64, nonce_b64)."""
++    salt = os.urandom(16)
++    nonce = os.urandom(12)
++    key = _derive_subkey(master_secret, salt)
++    ct = AESGCM(key).encrypt(nonce, plaintext.encode("utf-8"), None)
++    # Prefix salt to ciphertext payload so decrypt derives the exact per-secret subkey
++    packed = b"v1:" + salt + ct
+     return (
+-        base64.b64encode(ct + tag).decode("ascii"),
++        base64.b64encode(packed).decode("ascii"),
+         base64.b64encode(nonce).decode("ascii"),
+     )
+ 
+ 
+ def decrypt_secret(ciphertext_b64: str, nonce_b64: str, master_secret: str) -> str:
+-    """Verify authentication tag and decrypt ciphertext."""
+-    key = _derive_key(master_secret)
+-    nonce = base64.b64decode(nonce_b64)
+-    raw = base64.b64decode(ciphertext_b64)
+-    if len(raw) < 32:
+-        raise ValueError("Corrupted ciphertext")
+-    ct, tag = raw[:-32], raw[-32:]
+-    expected_tag = hmac.new(key, nonce + ct, hashlib.sha256).digest()
+-    if not hmac.compare_digest(tag, expected_tag):
+-        raise ValueError("Authentication tag mismatch — invalid key or tampered ciphertext")
+-    ks = _keystream(key, nonce, len(ct))
+-    pt = bytes(a ^ b for a, b in zip(ct, ks))
++    """Verify AES-256-GCM authentication tag and decrypt ciphertext."""
++    try:
++        raw = base64.b64decode(ciphertext_b64)
++        nonce = base64.b64decode(nonce_b64)
++    except Exception as exc:
++        raise ValueError("Corrupted base64 secret payload") from exc
++
++    if not raw.startswith(b"v1:") or len(raw) < 3 + 16 + 16 or len(nonce) != 12:
++        raise ValueError("Unsupported or corrupted ciphertext format")
++
++    salt = raw[3:19]
++    ct = raw[19:]
++    key = _derive_subkey(master_secret, salt)
++    try:
++        pt = AESGCM(key).decrypt(nonce, ct, None)
++    except Exception as exc:
++        raise ValueError("Authentication tag mismatch or wrong master key") from exc
+     return pt.decode("utf-8")
+diff --git a/backend/infra/job_worker.py b/backend/infra/job_worker.py
+new file mode 100644
+index 0000000..a3b7419
+--- /dev/null
++++ b/backend/infra/job_worker.py
+@@ -0,0 +1,176 @@
++"""Single-process async SQLite background job worker.
++
++Polls the persistent `jobs` table for `queued` jobs (including jobs recovered after
++a crash/restart by `recover_interrupted_jobs`), claims them atomically, checks for
++cancellation between steps, and never holds a SQLite write lock across long awaits.
++"""
++
++import asyncio
++import json
++import logging
++import sqlite3
++from typing import Any, Dict, Optional
++
++from backend.database import get_db_context
++from backend.infra.job_queue import get_job, update_job_progress
++
++logger = logging.getLogger("learn_lms.job_worker")
++
++
++def _claim_next_queued_job() -> Optional[Dict[str, Any]]:
++    """Atomically claim the oldest queued job with attempts < 3."""
++    with get_db_context() as conn:
++        row = conn.execute(
++            """
++            SELECT * FROM jobs
++            WHERE status = 'queued' AND attempts < 3
++            ORDER BY created_at ASC
++            LIMIT 1;
++            """
++        ).fetchone()
++        if not row:
++            return None
++        job_id = row["id"]
++        cur = conn.execute(
++            """
++            UPDATE jobs
++            SET status = 'running', attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP
++            WHERE id = ? AND status = 'queued';
++            """,
++            (job_id,),
++        )
++        conn.commit()
++        if cur.rowcount == 0:
++            return None
++        return dict(row)
++
++
++def is_job_cancelled(job_id: str) -> bool:
++    """Short-lived check to honor mid-execution cancellation."""
++    with get_db_context() as conn:
++        row = conn.execute("SELECT status FROM jobs WHERE id = ?;", (job_id,)).fetchone()
++        return bool(row and row["status"] == "cancelled")
++
++
++async def _execute_job(job: Dict[str, Any]) -> None:
++    job_id = job["id"]
++    job_type = job["job_type"]
++    course_id = job.get("course_id") or ""
++    payload = {}
++    try:
++        payload = json.loads(job.get("payload_json") or "{}")
++    except Exception:
++        payload = {}
++
++    if not course_id:
++        course_id = str(payload.get("course_id") or "")
++
++    logger.info(f"[JobWorker] Claimed job {job_id} ({job_type}) for course {course_id}")
++
++    try:
++        if job_type == "cram_sheet_full":
++            from backend.services.cram_sheet_engine import synthesize_full_syllabus_cram_sheet
++
++            with get_db_context() as conn:
++                update_job_progress(conn, job_id, "running", 10, "Synthesizing full-syllabus cram sheet...")
++
++            if is_job_cancelled(job_id):
++                return
++
++            # Run synthesis with fresh connection inside executor/async context
++            with get_db_context() as conn:
++                result = await synthesize_full_syllabus_cram_sheet(conn, course_id)
++
++            if is_job_cancelled(job_id):
++                return
++
++            with get_db_context() as conn:
++                update_job_progress(
++                    conn,
++                    job_id,
++                    "completed",
++                    100,
++                    "Full-syllabus Cram Sheet complete",
++                    result={"cram_sheet_id": result.get("id"), "is_generated_by_llm": result.get("is_generated_by_llm")},
++                )
++
++        elif job_type == "study_bundle_remaining":
++            from backend.services.study_bundle import process_remaining_concept_bundles
++
++            with get_db_context() as conn:
++                update_job_progress(conn, job_id, "running", 15, "Building background study bundles...")
++
++            if is_job_cancelled(job_id):
++                return
++
++            await process_remaining_concept_bundles(course_id, job_id=job_id)
++
++            if is_job_cancelled(job_id):
++                return
++
++            with get_db_context() as conn:
++                update_job_progress(conn, job_id, "completed", 100, "Background study bundles complete")
++
++        else:
++            with get_db_context() as conn:
++                update_job_progress(
++                    conn,
++                    job_id,
++                    "failed",
++                    0,
++                    f"Unknown job type: {job_type}",
++                    error_text=f"Unsupported job_type={job_type}",
++                )
++    except Exception as exc:
++        logger.error(f"[JobWorker] Job {job_id} failed: {exc}", exc_info=True)
++        try:
++            with get_db_context() as conn:
++                update_job_progress(conn, job_id, "failed", 0, "Job failed", error_text=str(exc))
++        except Exception:
++            pass
++
++
++class BackgroundJobWorker:
++    """Lifecycle-managed async polling loop for SQLite jobs."""
++
++    def __init__(self, poll_interval: float = 1.5):
++        self.poll_interval = poll_interval
++        self._stop_event = asyncio.Event()
++        self._task: Optional[asyncio.Task] = None
++
++    def start(self) -> None:
++        if self._task is None or self._task.done():
++            self._stop_event.clear()
++            self._task = asyncio.create_task(self._loop(), name="study-lms-job-worker")
++
++    async def stop(self) -> None:
++        self._stop_event.set()
++        if self._task and not self._task.done():
++            self._task.cancel()
++            try:
++                await self._task
++            except asyncio.CancelledError:
++                pass
++
++    async def _loop(self) -> None:
++        while not self._stop_event.is_set():
++            try:
++                job = await asyncio.to_thread(_claim_next_queued_job)
++                if job:
++                    await _execute_job(job)
++                    continue
++            except sqlite3.OperationalError:
++                # DB may not be migrated yet in unit tests
++                pass
++            except asyncio.CancelledError:
++                break
++            except Exception as exc:
++                logger.warning(f"[JobWorker] Poll iteration error: {exc}")
++
++            try:
++                await asyncio.wait_for(self._stop_event.wait(), timeout=self.poll_interval)
++            except asyncio.TimeoutError:
++                continue
++
++
++job_worker = BackgroundJobWorker()
+diff --git a/backend/infra/llm_gateway.py b/backend/infra/llm_gateway.py
+index 1ec51c7..884ac8d 100644
+--- a/backend/infra/llm_gateway.py
++++ b/backend/infra/llm_gateway.py
+@@ -1,3 +1,4 @@
++import os
+ """Unified async LLM Gateway with header auth, user-configured models, 429 retry/backoff, and Ollama support."""
+ 
+ import asyncio
+@@ -8,7 +9,7 @@ from typing import Any, Dict, Optional, Tuple
+ import httpx
+ 
+ from backend.config import get_settings
+-from backend.infra.net_guard import validate_ollama_url
++from backend.infra.net_guard import validate_ollama_url, validate_public_url
+ 
+ logger = logging.getLogger("learn_lms.llm_gateway")
+ 
+@@ -143,7 +144,7 @@ class LLMGateway:
+ 
+             # 4. Local Ollama fallback (loopback-only)
+             try:
+-                ollama_base = validate_ollama_url(s.OLLAMA_BASE_URL)
++                ollama_base = validate_ollama_url(s.OLLAMA_BASE_URL, auth_mode=os.getenv("AUTH_MODE", "local"))
+                 model = s.OLLAMA_MODEL
+                 messages = []
+                 if system_instruction:
+diff --git a/backend/infra/rate_limit.py b/backend/infra/rate_limit.py
+index 82de4cb..5c204d9 100644
+--- a/backend/infra/rate_limit.py
++++ b/backend/infra/rate_limit.py
+@@ -7,19 +7,39 @@ from typing import Deque, Dict, Tuple
+ 
+ 
+ class SlidingWindowRateLimiter:
+-    """Thread-safe per-key sliding-window rate limiter."""
++    """Thread-safe per-key sliding-window rate limiter with bounded memory eviction."""
+ 
+-    def __init__(self, max_requests: int = 60, window_seconds: int = 60):
++    def __init__(self, max_requests: int = 60, window_seconds: int = 60, max_keys: int = 10000):
+         self.max_requests = max_requests
+         self.window_seconds = window_seconds
++        self.max_keys = max_keys
+         self._buckets: Dict[str, Deque[float]] = defaultdict(deque)
+         self._lock = threading.Lock()
++        self._calls = 0
++
++    def _prune_stale_locked(self, cutoff: float) -> None:
++        empty_keys = []
++        for k, q in self._buckets.items():
++            while q and q[0] <= cutoff:
++                q.popleft()
++            if not q:
++                empty_keys.append(k)
++        for k in empty_keys:
++            del self._buckets[k]
++        # Hard cap safeguard against IP-flood DoS
++        if len(self._buckets) > self.max_keys:
++            overflow = len(self._buckets) - self.max_keys
++            for k in list(self._buckets.keys())[:overflow]:
++                del self._buckets[k]
+ 
+     def allow(self, key: str) -> Tuple[bool, int]:
+         """Return (allowed, retry_after_seconds)."""
+         now = time.monotonic()
+         cutoff = now - self.window_seconds
+         with self._lock:
++            self._calls += 1
++            if self._calls % 500 == 0 or len(self._buckets) > self.max_keys:
++                self._prune_stale_locked(cutoff)
+             q = self._buckets[key]
+             while q and q[0] <= cutoff:
+                 q.popleft()
+@@ -27,4 +47,6 @@ class SlidingWindowRateLimiter:
+                 retry_after = max(1, int(self.window_seconds - (now - q[0])))
+                 return False, retry_after
+             q.append(now)
++            if len(self._buckets) > self.max_keys:
++                self._prune_stale_locked(cutoff)
+             return True, 0
+diff --git a/backend/main.py b/backend/main.py
+index ab884c9..e7ae62e 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -65,7 +65,12 @@ async def lifespan(_app: FastAPI):
+                 pass
+     except Exception:
+         pass
+-    yield
++    from backend.infra.job_worker import job_worker
++    job_worker.start()
++    try:
++        yield
++    finally:
++        await job_worker.stop()
+ 
+ 
+ app = FastAPI(
+@@ -87,6 +92,8 @@ app.add_middleware(
+         "http://127.0.0.1:8008",
+         "http://localhost:7860",
+         "http://127.0.0.1:7860",
++        "http://localhost:5173",
++        "http://127.0.0.1:5173",
+     ],
+     allow_credentials=False,
+     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+@@ -119,6 +126,15 @@ async def security_and_logging_middleware(request: Request, call_next):
+         response.headers["X-Frame-Options"] = "DENY"
+         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
++        response.headers["Content-Security-Policy"] = (
++            "default-src 'self'; "
++            "script-src 'self' https://www.youtube.com https://s.ytimg.com; "
++            "style-src 'self' 'unsafe-inline'; "
++            "frame-src https://www.youtube.com https://www.youtube-nocookie.com; "
++            "img-src 'self' data: blob: https://i.ytimg.com https://img.youtube.com; "
++            "font-src 'self' data:; "
++            "connect-src 'self';"
++        )
+ 
+         if not request.url.path.startswith("/static"):
+             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+@@ -198,6 +214,12 @@ def health_check(db: sqlite3.Connection = Depends(get_db)):
+         )
+ 
+ 
++@app.get("/api/auth/me")
++def get_auth_me(user: CurrentUser = Depends(get_current_user)):
++    """Returns the authenticated user context (local owner in AUTH_MODE=local, JWT user in hosted mode)."""
++    return {"id": user.id, "email": user.email, "role": user.role}
++
++
+ def export_openapi_spec(output_path: Path = BASE_DIR / "openapi.json"):
+     """Dumps locked OpenAPI specification to openapi.json."""
+     spec = app.openapi()
+@@ -208,9 +230,3 @@ def export_openapi_spec(output_path: Path = BASE_DIR / "openapi.json"):
+ if __name__ == "__main__":
+     export_openapi_spec()
+     print("Locked openapi.json generated successfully.")
+-
+-
+-@app.get("/api/auth/me")
+-def get_auth_me(user: CurrentUser = Depends(get_current_user)):
+-    """Returns the authenticated user context (local owner in AUTH_MODE=local, JWT user in hosted mode)."""
+-    return {"id": user.id, "email": user.email, "role": user.role}
+diff --git a/backend/migrations/runner.py b/backend/migrations/runner.py
+index e17ddb1..07be217 100644
+--- a/backend/migrations/runner.py
++++ b/backend/migrations/runner.py
+@@ -112,7 +112,7 @@ def apply_migrations(db_path: Path = DB_PATH) -> int:
+         if not pending:
+             return 0
+ 
+-        backup_db_before_migration(db_path, current_version)
++        backup_db_before_migration(db_path, current_version, backups_dir=db_path.parent / "backups")
+ 
+         applied_count = 0
+         # Use manual transaction control so multi-statement migrations are truly atomic
+diff --git a/backend/migrations/versions/013_schema_consolidation.sql b/backend/migrations/versions/013_schema_consolidation.sql
+new file mode 100644
+index 0000000..aa0f2da
+--- /dev/null
++++ b/backend/migrations/versions/013_schema_consolidation.sql
+@@ -0,0 +1,15 @@
++-- Migration 013: FTS5 INSERT sync trigger + qa_threads lesson_id/scope columns
++
++-- 1. Automatic FTS5 sync trigger on chunk inserts
++CREATE TRIGGER IF NOT EXISTS trg_chunks_insert_fts
++AFTER INSERT ON chunks
++BEGIN
++    INSERT INTO chunks_fts(id, course_id, lesson_id, content)
++    VALUES (NEW.id, NEW.course_id, NEW.lesson_id, NEW.content);
++END;
++
++-- 2. Add lesson_id and scope columns to qa_threads so Lesson vs Notebook history stays cleanly separated
++ALTER TABLE qa_threads ADD COLUMN lesson_id TEXT REFERENCES lessons(id) ON DELETE SET NULL;
++ALTER TABLE qa_threads ADD COLUMN scope TEXT NOT NULL DEFAULT 'course';
++
++CREATE INDEX IF NOT EXISTS idx_qa_course_lesson ON qa_threads(course_id, lesson_id);
+diff --git a/backend/routers/courses.py b/backend/routers/courses.py
+index c219fc5..2fb8f41 100644
+--- a/backend/routers/courses.py
++++ b/backend/routers/courses.py
+@@ -40,7 +40,8 @@ from backend.services.notes import get_or_generate_lesson_notes
+ from backend.services.syllabus_matcher import match_syllabus_to_course
+ 
+ logger = logging.getLogger("learn_lms.courses")
+-router = APIRouter(prefix="/api/courses", tags=["courses"])
++from backend.deps import CurrentUser, get_current_user
++router = APIRouter(prefix="/api/courses", tags=["courses"], dependencies=[Depends(get_current_user)])
+ 
+ @contextlib.contextmanager
+ def _get_background_db(db: Optional[sqlite3.Connection] = None):
+@@ -148,8 +149,14 @@ def create_course(
+     return get_course(course_id, db)
+ 
+ @router.get("", response_model=List[CourseResponse])
+-def list_courses(db: sqlite3.Connection = Depends(get_db)):
+-    rows = db.execute("SELECT * FROM courses ORDER BY created_at DESC;").fetchall()
++def list_courses(
++    user: CurrentUser = Depends(get_current_user),
++    db: sqlite3.Connection = Depends(get_db),
++):
++    if user.auth_mode != "local":
++        rows = db.execute("SELECT * FROM courses WHERE owner_id = ? ORDER BY created_at DESC;", (user.id,)).fetchall()
++    else:
++        rows = db.execute("SELECT * FROM courses ORDER BY created_at DESC;").fetchall()
+     if not rows:
+         return []
+ 
+@@ -1154,7 +1161,6 @@ def import_manual_transcript(
+             """,
+             (cid, course_id, source_id, lesson_id, idx, c, len(c.split())),
+         )
+-        db.execute("INSERT INTO chunks_fts (id, course_id, lesson_id, content) VALUES (?, ?, ?, ?);", (cid, course_id, lesson_id, c))
+ 
+     # Save note
+     note_id = str(uuid.uuid4())
+diff --git a/backend/routers/cram_sheet.py b/backend/routers/cram_sheet.py
+index ac0c7f6..067f2d0 100644
+--- a/backend/routers/cram_sheet.py
++++ b/backend/routers/cram_sheet.py
+@@ -3,6 +3,7 @@ from pathlib import Path
+ 
+ import logging
+ from typing import Dict, Any, Optional
++from backend.deps import get_current_user
+ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
+ import sqlite3
+ 
+@@ -11,7 +12,7 @@ from backend.models.schemas import CramSheetGenerateRequest, CramSheetResponse
+ from backend.services.cram_sheet_engine import get_or_create_cram_sheet
+ 
+ logger = logging.getLogger("learn_lms.api.cram_sheet")
+-router = APIRouter(prefix="/api/courses", tags=["cram_sheet"])
++router = APIRouter(prefix="/api/courses", tags=["cram_sheet"], dependencies=[Depends(get_current_user)])
+ 
+ 
+ @router.post("/{course_id}/cram-sheet/generate", response_model=CramSheetResponse)
+diff --git a/backend/routers/flashcards.py b/backend/routers/flashcards.py
+index 9686a8b..5465f25 100644
+--- a/backend/routers/flashcards.py
++++ b/backend/routers/flashcards.py
+@@ -3,6 +3,7 @@
+ import sqlite3
+ import logging
+ from typing import List, Dict, Any, Optional
++from backend.deps import get_current_user
+ from fastapi import APIRouter, Depends, HTTPException
+ 
+ from backend.database import get_db
+@@ -22,7 +23,7 @@ from backend.services.fsrs_engine import (
+ )
+ 
+ logger = logging.getLogger("learn_lms.flashcards_router")
+-router = APIRouter(prefix="/api/courses/{course_id}/flashcards", tags=["flashcards"])
++router = APIRouter(prefix="/api/courses/{course_id}/flashcards", tags=["flashcards"], dependencies=[Depends(get_current_user)])
+ 
+ 
+ @router.get("/due", response_model=List[FlashcardResponse])
+@@ -177,7 +178,8 @@ def update_flashcard(
+     as_of = datetime.datetime.now(timezone.utc)
+     fsrs_card = card_to_fsrs(row_dict)
+     intervals = preview_intervals(fsrs_card, scheduler, as_of)
+-    state_enum = fsrs.State(row_dict.get("state", 1))
++    _raw_state = int(row_dict.get("state") or 0)
++    state_enum = fsrs.State(_raw_state) if _raw_state in (1, 2, 3) else fsrs.State.Learning
+ 
+     return {
+         "id": row_dict["id"],
+@@ -203,8 +205,10 @@ def delete_card(
+     card_id: str,
+     db: sqlite3.Connection = Depends(get_db),
+ ):
+-    db.execute("DELETE FROM flashcards WHERE id = ? AND course_id = ?;", (card_id, course_id))
++    cur = db.execute("DELETE FROM flashcards WHERE id = ? AND course_id = ?;", (card_id, course_id))
+     db.commit()
++    if cur.rowcount == 0:
++        raise HTTPException(status_code=404, detail="Flashcard not found")
+     return {"success": True, "deleted_id": card_id}
+ 
+ 
+diff --git a/backend/routers/jobs.py b/backend/routers/jobs.py
+index 404baff..6e426fc 100644
+--- a/backend/routers/jobs.py
++++ b/backend/routers/jobs.py
+@@ -5,13 +5,14 @@ import sqlite3
+ from typing import Optional
+ import asyncio
+ import json
+-from fastapi import APIRouter, Depends, HTTPException
++from backend.deps import get_current_user
++from fastapi import APIRouter, Depends, HTTPException, Request
+ from fastapi.responses import StreamingResponse
+ 
+ from backend.database import get_db
+ from backend.infra.job_queue import cancel_job, get_job, list_jobs
+ 
+-router = APIRouter(prefix="/api/jobs", tags=["jobs"])
++router = APIRouter(prefix="/api/jobs", tags=["jobs"], dependencies=[Depends(get_current_user)])
+ 
+ 
+ @router.get("")
+@@ -43,8 +44,8 @@ def cancel_background_job(job_id: str, db: sqlite3.Connection = Depends(get_db))
+ 
+ 
+ @router.get("/{job_id}/events")
+-async def stream_job_events(job_id: str, db: sqlite3.Connection = Depends(get_db)):
+-    """Server-Sent Events (SSE) stream for live background job progress."""
++async def stream_job_events(job_id: str, request: Request, db: sqlite3.Connection = Depends(get_db)):
++    """Server-Sent Events (SSE) stream for live background job progress until terminal status or disconnect."""
+     initial = get_job(db, job_id)
+     if not initial:
+         raise HTTPException(status_code=404, detail="Job not found")
+@@ -54,7 +55,10 @@ async def stream_job_events(job_id: str, db: sqlite3.Connection = Depends(get_db
+ 
+     async def _event_gen():
+         from backend.database import get_db_context
+-        for _ in range(120):
++        ticks = 0
++        while True:
++            if await request.is_disconnected():
++                break
+             ctx = get_db_context(db_file) if db_file else get_db_context()
+             with ctx as conn:
+                 current = get_job(conn, job_id)
+@@ -63,6 +67,9 @@ async def stream_job_events(job_id: str, db: sqlite3.Connection = Depends(get_db
+             yield f"data: {json.dumps(current, default=str)}\n\n"
+             if current.get("status") in ("completed", "failed", "cancelled"):
+                 break
+-            await asyncio.sleep(0.5)
++            ticks += 1
++            if ticks % 15 == 0:
++                yield ": keep-alive\n\n"
++            await asyncio.sleep(1.0)
+ 
+     return StreamingResponse(_event_gen(), media_type="text/event-stream")
+diff --git a/backend/routers/notes.py b/backend/routers/notes.py
+index 4582fa4..5f396d0 100644
+--- a/backend/routers/notes.py
++++ b/backend/routers/notes.py
+@@ -2,6 +2,7 @@
+ 
+ import logging
+ from typing import Dict, Any
++from backend.deps import get_current_user
+ from fastapi import APIRouter, Depends, HTTPException
+ import sqlite3
+ 
+@@ -10,7 +11,7 @@ from backend.models.schemas import PersonalNotesUpdate, NoteResponse
+ from backend.services.notes import get_or_generate_lesson_notes, save_personal_notes
+ 
+ logger = logging.getLogger("learn_lms.api.notes")
+-router = APIRouter(prefix="/api/lessons", tags=["notes"])
++router = APIRouter(prefix="/api/lessons", tags=["notes"], dependencies=[Depends(get_current_user)])
+ 
+ 
+ @router.get("/{lesson_id}/notes", response_model=NoteResponse)
+diff --git a/backend/routers/pyq.py b/backend/routers/pyq.py
+index 15d9b0d..b3dbc4b 100644
+--- a/backend/routers/pyq.py
++++ b/backend/routers/pyq.py
+@@ -2,6 +2,7 @@
+ 
+ import logging
+ from typing import Dict, Any, Optional, List
++from backend.deps import get_current_user
+ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body
+ import sqlite3
+ 
+@@ -16,7 +17,7 @@ from backend.services.pyq_engine import (
+ )
+ 
+ logger = logging.getLogger("learn_lms.api.pyq")
+-router = APIRouter(prefix="/api/courses", tags=["pyq"])
++router = APIRouter(prefix="/api/courses", tags=["pyq"], dependencies=[Depends(get_current_user)])
+ 
+ 
+ @router.post("/{course_id}/pyq/upload-file", response_model=PYQUploadResponse)
+diff --git a/backend/routers/qa.py b/backend/routers/qa.py
+index 51221dc..863848f 100644
+--- a/backend/routers/qa.py
++++ b/backend/routers/qa.py
+@@ -2,6 +2,7 @@
+ 
+ import logging
+ from typing import List, Dict, Any
++from backend.deps import get_current_user
+ from fastapi import APIRouter, Depends, HTTPException
+ import sqlite3
+ 
+@@ -10,7 +11,7 @@ from backend.models.schemas import QARequest, QAResponse
+ from backend.services.qa_engine import answer_course_question, get_course_qa_history
+ 
+ logger = logging.getLogger("learn_lms.api.qa")
+-router = APIRouter(prefix="/api/courses", tags=["qa"])
++router = APIRouter(prefix="/api/courses", tags=["qa"], dependencies=[Depends(get_current_user)])
+ 
+ 
+ @router.post("/{course_id}/qa", response_model=QAResponse)
+@@ -41,3 +42,19 @@ def get_qa_history(
+         raise HTTPException(status_code=404, detail="Course not found")
+ 
+     return get_course_qa_history(db, course_id)
++
++@router.delete("/{course_id}/qa/{thread_id}")
++def delete_qa_thread(
++    course_id: str,
++    thread_id: str,
++    db: sqlite3.Connection = Depends(get_db),
++):
++    """Delete a single Q&A history thread for this course."""
++    cur = db.execute(
++        "DELETE FROM qa_threads WHERE id = ? AND course_id = ?;",
++        (thread_id, course_id),
++    )
++    db.commit()
++    if cur.rowcount == 0:
++        raise HTTPException(status_code=404, detail="Q&A thread not found")
++    return {"success": True, "deleted_thread_id": thread_id}
+diff --git a/backend/routers/quizzes.py b/backend/routers/quizzes.py
+index 7a1a5c3..a7c27b5 100644
+--- a/backend/routers/quizzes.py
++++ b/backend/routers/quizzes.py
+@@ -4,6 +4,7 @@ import json
+ import sqlite3
+ import logging
+ from typing import List, Dict, Any, Optional
++from backend.deps import get_current_user
+ from fastapi import APIRouter, Depends, HTTPException
+ 
+ from backend.database import get_db
+@@ -18,7 +19,7 @@ from backend.services.quiz_engine import create_and_store_quiz, grade_and_apply_
+ from backend.routers.schedule import trigger_course_reflow
+ 
+ logger = logging.getLogger("learn_lms.quizzes_router")
+-router = APIRouter(prefix="/api/courses/{course_id}/quizzes", tags=["quizzes"])
++router = APIRouter(prefix="/api/courses/{course_id}/quizzes", tags=["quizzes"], dependencies=[Depends(get_current_user)])
+ 
+ 
+ @router.post("/generate", response_model=QuizResponse)
+diff --git a/backend/routers/schedule.py b/backend/routers/schedule.py
+index 178bd66..5276356 100644
+--- a/backend/routers/schedule.py
++++ b/backend/routers/schedule.py
+@@ -6,6 +6,7 @@ import sqlite3
+ import logging
+ from datetime import datetime, date, timedelta
+ from typing import List, Dict, Any, Optional
++from backend.deps import get_current_user
+ from fastapi import APIRouter, Depends, HTTPException
+ from backend.database import get_db
+ from backend.models.schemas import (
+@@ -29,7 +30,7 @@ from backend.scheduler.engine import (
+ )
+ 
+ logger = logging.getLogger("learn_lms.schedule")
+-router = APIRouter(prefix="/api/courses/{course_id}/schedule", tags=["schedule"])
++router = APIRouter(prefix="/api/courses/{course_id}/schedule", tags=["schedule"], dependencies=[Depends(get_current_user)])
+ 
+ @router.post("/generate", response_model=ScheduleResponse)
+ def generate_course_schedule(
+diff --git a/backend/routers/screenshots.py b/backend/routers/screenshots.py
+index 53317e3..4ad1130 100644
+--- a/backend/routers/screenshots.py
++++ b/backend/routers/screenshots.py
+@@ -1,8 +1,10 @@
+ """Screenshots API Router."""
+ 
+ import logging
++import mimetypes
+ from pathlib import Path
+ from typing import List, Dict, Any
++from backend.deps import get_current_user
+ from fastapi import APIRouter, Depends, HTTPException
+ from fastapi.responses import FileResponse
+ import sqlite3
+@@ -13,7 +15,7 @@ from backend.services.screenshots import capture_lesson_keyframes, get_lesson_sc
+ from backend.config import get_settings
+ 
+ logger = logging.getLogger("learn_lms.api.screenshots")
+-router = APIRouter(tags=["screenshots"])
++router = APIRouter(tags=["screenshots"], dependencies=[Depends(get_current_user)])
+ settings = get_settings()
+ 
+ 
+@@ -88,4 +90,5 @@ def serve_screenshot(
+     if not file_path.exists() or not file_path.is_file():
+         raise HTTPException(status_code=404, detail="Screenshot image not found")
+ 
+-    return FileResponse(path=file_path, media_type="image/jpeg")
++    mime, _ = mimetypes.guess_type(str(file_path))
++    return FileResponse(path=file_path, media_type=mime or "image/jpeg")
+diff --git a/backend/routers/settings.py b/backend/routers/settings.py
+index 459bd9c..be48c51 100644
+--- a/backend/routers/settings.py
++++ b/backend/routers/settings.py
+@@ -15,12 +15,14 @@ import httpx
+ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+ from fastapi.responses import FileResponse
+ from backend.database import get_db
++from backend.deps import get_current_user, require_local_admin
++from backend.infra.net_guard import validate_public_url
+ from backend.config import DATA_DIR, DB_PATH, TIMEZONE_STR, ENV_VARS, update_env_file
+ import json
+ from backend.models.schemas import SystemSettingsResponse, UpdateSettingsRequest, TestConnectionRequest, TestConnectionResponse
+ from backend.services.youtube import get_ytdlp_version, update_ytdlp_package
+ 
+-router = APIRouter(prefix="/api/settings", tags=["settings"])
++router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(get_current_user)])
+ 
+ def get_dir_size(path: Path) -> int:
+     """Calculates total size in bytes of a directory."""
+@@ -152,7 +154,12 @@ def update_settings(
+     if req.gemini_model: env_updates["GEMINI_MODEL"] = req.gemini_model
+     if req.groq_model: env_updates["GROQ_MODEL"] = req.groq_model
+     if req.openrouter_model: env_updates["OPENROUTER_MODEL"] = req.openrouter_model
+-    if req.openrouter_base_url: env_updates["OPENROUTER_BASE_URL"] = req.openrouter_base_url
++    if req.openrouter_base_url:
++        try:
++            validate_public_url(req.openrouter_base_url.strip())
++        except ValueError as ve:
++            raise HTTPException(status_code=400, detail=f"Invalid OpenRouter base URL: {ve}")
++        env_updates["OPENROUTER_BASE_URL"] = req.openrouter_base_url.strip()
+     if req.ollama_base_url: env_updates["OLLAMA_BASE_URL"] = req.ollama_base_url
+     if req.ollama_model: env_updates["OLLAMA_MODEL"] = req.ollama_model
+     if env_updates:
+@@ -180,7 +187,7 @@ async def test_connection(req: TestConnectionRequest):
+             async with httpx.AsyncClient(timeout=8.0) as client:
+                 r = await client.get(
+                     "https://generativelanguage.googleapis.com/v1beta/models",
+-                    params={"key": key}
++                    headers={"x-goog-api-key": key}
+                 )
+                 if r.status_code == 200:
+                     return TestConnectionResponse(
+@@ -289,13 +296,13 @@ async def test_connection(req: TestConnectionRequest):
+     else:
+         raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider}")
+ 
+-@router.post("/update-ytdlp")
++@router.post("/update-ytdlp", dependencies=[Depends(require_local_admin)])
+ def update_ytdlp():
+     """One-click update of yt-dlp to latest PyPI version."""
+     result = update_ytdlp_package()
+     return result
+ 
+-@router.post("/cleanup-cache")
++@router.post("/cleanup-cache", dependencies=[Depends(require_local_admin)])
+ def cleanup_cache(db: sqlite3.Connection = Depends(get_db)):
+     """Cleans cached transcripts, captions, screenshots (synced with SQLite), and expired LLM cache."""
+     from backend.services.llm_cache import prune_expired_cache
+@@ -324,7 +331,7 @@ def cleanup_cache(db: sqlite3.Connection = Depends(get_db)):
+         "message": f"Cleaned {round(cleaned_bytes / (1024 * 1024), 2)} MB of cached media.",
+     }
+ 
+-@router.post("/keys")
++@router.post("/keys", dependencies=[Depends(require_local_admin)])
+ def update_api_keys(keys: Dict[str, str]):
+     """Safely writes API keys and LLM model presets into .env only (never in SQLite)."""
+     allowed_keys = {
+@@ -341,7 +348,7 @@ def update_api_keys(keys: Dict[str, str]):
+     return {"success": True, "message": "API keys and model configurations updated securely in .env"}
+ 
+ 
+-@router.get("/backup")
++@router.get("/backup", dependencies=[Depends(require_local_admin)])
+ def download_sqlite_backup(request: Request):
+     """One-click download of the raw SQLite database for offline backup and portability.
+     
+@@ -367,7 +374,7 @@ def download_sqlite_backup(request: Request):
+     )
+ 
+ 
+-@router.post("/vacuum")
++@router.post("/vacuum", dependencies=[Depends(require_local_admin)])
+ def vacuum_database(db: sqlite3.Connection = Depends(get_db)):
+     """Runs SQLite VACUUM to reclaim free space on disk."""
+     try:
+@@ -387,7 +394,7 @@ def vacuum_database(db: sqlite3.Connection = Depends(get_db)):
+ 
+ 
+ 
+-@router.post("/restore")
++@router.post("/restore", dependencies=[Depends(require_local_admin)])
+ async def restore_sqlite_backup(request: Request, file: UploadFile = File(...)):
+     """Localhost-only validated SQLite database restore with automatic pre-restore backup."""
+     from backend.migrations.runner import backup_db_before_migration, get_current_schema_version
+@@ -411,8 +418,13 @@ async def restore_sqlite_backup(request: Request, file: UploadFile = File(...)):
+             res = check_conn.execute("PRAGMA integrity_check;").fetchone()
+             if not res or res[0] != "ok":
+                 raise HTTPException(status_code=400, detail="Uploaded SQLite backup failed integrity check.")
++            tables = {r[0] for r in check_conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()}
++            if "courses" not in tables:
++                raise HTTPException(status_code=400, detail="Uploaded SQLite file is missing required Study LMS tables.")
+         finally:
+             check_conn.close()
++        from backend.migrations.runner import apply_migrations
++        apply_migrations(Path(tmp_path))
+ 
+         if DB_PATH.exists():
+             cur_conn = sqlite3.connect(str(DB_PATH))
+diff --git a/backend/routers/sources.py b/backend/routers/sources.py
+index 163689b..45eebfa 100644
+--- a/backend/routers/sources.py
++++ b/backend/routers/sources.py
+@@ -2,6 +2,7 @@
+ 
+ import logging
+ from typing import Dict, Any, Optional
++from backend.deps import get_current_user
+ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+ import sqlite3
+ 
+@@ -11,7 +12,7 @@ from backend.services.pdf_ingest import ingest_pdf_source
+ from backend.services.web_ingest import ingest_web_page
+ 
+ logger = logging.getLogger("learn_lms.api.sources")
+-router = APIRouter(prefix="/api/courses", tags=["sources"])
++router = APIRouter(prefix="/api/courses", tags=["sources"], dependencies=[Depends(get_current_user)])
+ 
+ 
+ @router.post("/{course_id}/sources/pdf")
+@@ -27,7 +28,11 @@ async def upload_pdf_source(
+     if not cur.fetchone():
+         raise HTTPException(status_code=404, detail="Course not found")
+ 
+-    pdf_bytes = await file.read()
++    pdf_bytes = await file.read(25 * 1024 * 1024 + 1)
++    if len(pdf_bytes) > 25 * 1024 * 1024:
++        raise HTTPException(status_code=413, detail="Uploaded PDF exceeds 25 MB limit.")
++    if pdf_bytes and not pdf_bytes.startswith(b"%PDF-"):
++        raise HTTPException(status_code=400, detail="Uploaded file is not a valid PDF document.")
+     if len(pdf_bytes) == 0:
+         raise HTTPException(status_code=400, detail="Uploaded PDF file is empty")
+ 
+diff --git a/backend/routers/transcripts.py b/backend/routers/transcripts.py
+index 6b9c2c3..b035ddc 100644
+--- a/backend/routers/transcripts.py
++++ b/backend/routers/transcripts.py
+@@ -2,6 +2,7 @@
+ 
+ import logging
+ from typing import Dict, Any, List
++from backend.deps import get_current_user
+ from fastapi import APIRouter, Depends, HTTPException
+ import sqlite3
+ 
+@@ -9,7 +10,7 @@ from backend.database import get_db
+ from backend.services.transcription import ingest_lesson_transcript
+ 
+ logger = logging.getLogger("learn_lms.api.transcripts")
+-router = APIRouter(prefix="/api/lessons", tags=["transcripts"])
++router = APIRouter(prefix="/api/lessons", tags=["transcripts"], dependencies=[Depends(get_current_user)])
+ 
+ 
+ @router.post("/{lesson_id}/transcribe")
+diff --git a/backend/services/cram_sheet_engine.py b/backend/services/cram_sheet_engine.py
+index 6e95254..43a71af 100644
+--- a/backend/services/cram_sheet_engine.py
++++ b/backend/services/cram_sheet_engine.py
+@@ -475,7 +475,7 @@ async def generate_cram_sheet_with_llm(
+         "2. Preserve clickable `[MM:SS]` timestamp pills from the source material next to each major concept and formula.\n"
+         "3. Organize into these exact high-yield sections:\n"
+         "   - `# <Subject> — Last-Night Exam Cram Sheet` + Exam Date callout\n"
+-        "   - `## ⚡ High-Yield Topic Matrix` (compact table: Topic | Priority | Key Exam Angle | Jump `[MM:SS]`)\n"
++        "   - `## ⚡ High-Yield Exam Weightage Matrix` (compact table: Topic | Priority | Key Exam Angle | Jump `[MM:SS]`)\n"
+         "   - `## 📐 Core Formulas, Formal Definitions & Complexities` (use clean LaTeX `$...$` where helpful)\n"
+         "   - `## 📊 Must-Know Comparison & Distinction Tables` (at least 1–2 crisp Markdown tables contrasting key concepts from the syllabus)\n"
+         "   - `## 🧠 Step-by-Step Algorithms, Worked Patterns & Common Exam Traps` (concise numbered steps + `> [!IMPORTANT]` traps)\n"
+diff --git a/backend/services/pdf_ingest.py b/backend/services/pdf_ingest.py
+index 84b6134..a780627 100644
+--- a/backend/services/pdf_ingest.py
++++ b/backend/services/pdf_ingest.py
+@@ -122,13 +122,6 @@ async def ingest_pdf_source(
+             """,
+             (chunk_id, course_id, source_id, chunk["chunk_index"], chunk["token_count"], content_with_page)
+         )
+-        db_conn.execute(
+-            """
+-            INSERT INTO chunks_fts (id, course_id, lesson_id, content)
+-            VALUES (?, ?, NULL, ?);
+-            """,
+-            (chunk_id, course_id, content_with_page)
+-        )
+ 
+     db_conn.commit()
+     logger.info(f"Ingested PDF source {source_id} with {len(chunks)} chunks")
+diff --git a/backend/services/transcription.py b/backend/services/transcription.py
+index ba2e707..8391f4e 100644
+--- a/backend/services/transcription.py
++++ b/backend/services/transcription.py
+@@ -567,13 +567,6 @@ async def ingest_lesson_transcript(
+                 chunk["content"]
+             )
+         )
+-        db_conn.execute(
+-            """
+-            INSERT INTO chunks_fts (id, course_id, lesson_id, content)
+-            VALUES (?, ?, ?, ?);
+-            """,
+-            (chunk_id, course_id, lesson_id, chunk["content"])
+-        )
+ 
+     # 4. Update Lesson Status
+     db_conn.execute(
+diff --git a/backend/services/web_ingest.py b/backend/services/web_ingest.py
+index 1d41165..699405a 100644
+--- a/backend/services/web_ingest.py
++++ b/backend/services/web_ingest.py
+@@ -132,13 +132,6 @@ async def ingest_web_page(
+             """,
+             (chunk_id, course_id, source_id, chunk["chunk_index"], chunk["token_count"], chunk["content"])
+         )
+-        db_conn.execute(
+-            """
+-            INSERT INTO chunks_fts (id, course_id, lesson_id, content)
+-            VALUES (?, ?, NULL, ?);
+-            """,
+-            (chunk_id, course_id, chunk["content"])
+-        )
+ 
+     db_conn.commit()
+     logger.info(f"Ingested web source {source_id} ({page_title}) with {len(chunks)} chunks")
+diff --git a/openapi.json b/openapi.json
+index 0aa5a9c..16c3449 100644
+--- a/openapi.json
++++ b/openapi.json
+@@ -28,7 +28,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       },
+       "post": {
+         "tags": [
+@@ -67,7 +72,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}": {
+@@ -109,7 +119,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       },
+       "put": {
+         "tags": [
+@@ -159,7 +174,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       },
+       "delete": {
+         "tags": [
+@@ -198,7 +218,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       },
+       "patch": {
+         "tags": [
+@@ -248,7 +273,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/discover": {
+@@ -299,7 +329,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/sources/import": {
+@@ -351,7 +386,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/sources/confirm": {
+@@ -407,7 +447,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/sources/approve": {
+@@ -463,7 +508,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/lessons/filter": {
+@@ -520,7 +570,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/lessons/{lesson_id}/toggle-exclude": {
+@@ -571,7 +626,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/syllabus/match": {
+@@ -624,7 +684,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/syllabus/apply": {
+@@ -677,7 +742,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/syllabus": {
+@@ -720,7 +790,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/lessons/{lesson_id}": {
+@@ -781,7 +856,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       },
+       "patch": {
+         "tags": [
+@@ -840,7 +920,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/lessons/{lesson_id}/notes": {
+@@ -901,7 +986,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/sources": {
+@@ -947,7 +1037,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/lessons": {
+@@ -993,7 +1088,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/export": {
+@@ -1034,7 +1134,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/export-markdown": {
+@@ -1075,7 +1180,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/sources/manual-transcript": {
+@@ -1126,7 +1236,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/sources/discover-web": {
+@@ -1167,7 +1282,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/sources/{source_id}": {
+@@ -1217,7 +1337,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/topics/cluster": {
+@@ -1258,7 +1383,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/schedule/generate": {
+@@ -1300,7 +1430,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/schedule": {
+@@ -1342,7 +1477,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/schedule/allocations/{allocation_id}/toggle": {
+@@ -1393,7 +1533,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/schedule/allocations/{allocation_id}/complete": {
+@@ -1445,7 +1590,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/schedule/allocations/{allocation_id}/skip": {
+@@ -1496,7 +1646,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/schedule/allocations/{allocation_id}/reschedule": {
+@@ -1557,7 +1712,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/schedule/replan": {
+@@ -1609,7 +1769,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/schedule/undo": {
+@@ -1652,7 +1817,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/settings": {
+@@ -1673,7 +1843,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       },
+       "post": {
+         "tags": [
+@@ -1710,7 +1885,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/settings/test-connection": {
+@@ -1752,7 +1932,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/settings/update-ytdlp": {
+@@ -1772,7 +1957,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/settings/cleanup-cache": {
+@@ -1792,7 +1982,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/settings/keys": {
+@@ -1836,7 +2031,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/settings/backup": {
+@@ -1856,7 +2056,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/settings/vacuum": {
+@@ -1876,7 +2081,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/settings/restore": {
+@@ -1916,7 +2126,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/lessons/{lesson_id}/transcribe": {
+@@ -1960,7 +2175,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/lessons/{lesson_id}/chunks": {
+@@ -2007,7 +2227,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/lessons/{lesson_id}/status": {
+@@ -2051,7 +2276,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/lessons/{lesson_id}/notes": {
+@@ -2094,7 +2324,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       },
+       "put": {
+         "tags": [
+@@ -2145,7 +2380,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/lessons/{lesson_id}/notes/regenerate": {
+@@ -2188,7 +2428,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/lessons/{lesson_id}/notes/personal": {
+@@ -2242,7 +2487,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/lessons/{lesson_id}/screenshots": {
+@@ -2289,7 +2539,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       },
+       "post": {
+         "tags": [
+@@ -2334,7 +2589,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/screenshots/{course_id}/{lesson_id}/{filename}": {
+@@ -2393,7 +2653,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/sources/pdf": {
+@@ -2444,7 +2709,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/sources/web": {
+@@ -2495,7 +2765,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/qa": {
+@@ -2542,7 +2817,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       },
+       "post": {
+         "tags": [
+@@ -2593,7 +2873,67 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
++      }
++    },
++    "/api/courses/{course_id}/qa/{thread_id}": {
++      "delete": {
++        "tags": [
++          "qa"
++        ],
++        "summary": "Delete Qa Thread",
++        "description": "Delete a single Q&A history thread for this course.",
++        "operationId": "delete_qa_thread_api_courses__course_id__qa__thread_id__delete",
++        "parameters": [
++          {
++            "required": true,
++            "schema": {
++              "title": "Course Id",
++              "type": "string"
++            },
++            "name": "course_id",
++            "in": "path"
++          },
++          {
++            "required": true,
++            "schema": {
++              "title": "Thread Id",
++              "type": "string"
++            },
++            "name": "thread_id",
++            "in": "path"
++          }
++        ],
++        "responses": {
++          "200": {
++            "description": "Successful Response",
++            "content": {
++              "application/json": {
++                "schema": {}
++              }
++            }
++          },
++          "422": {
++            "description": "Validation Error",
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            }
++          }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/quizzes/generate": {
+@@ -2645,7 +2985,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/quizzes/{quiz_id}": {
+@@ -2696,7 +3041,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/quizzes/{quiz_id}/submit": {
+@@ -2757,7 +3107,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/quizzes": {
+@@ -2821,7 +3176,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/flashcards/due": {
+@@ -2886,7 +3246,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/flashcards/counts": {
+@@ -2928,7 +3293,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/flashcards": {
+@@ -3004,7 +3374,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       },
+       "post": {
+         "tags": [
+@@ -3054,7 +3429,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/flashcards/{card_id}/review": {
+@@ -3115,7 +3495,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/flashcards/{card_id}": {
+@@ -3176,7 +3561,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       },
+       "delete": {
+         "tags": [
+@@ -3223,7 +3613,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/flashcards/lessons/{lesson_id}/generate": {
+@@ -3279,7 +3674,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/jobs": {
+@@ -3330,7 +3730,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/jobs/{job_id}": {
+@@ -3371,7 +3776,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/jobs/{job_id}/cancel": {
+@@ -3412,7 +3822,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/jobs/{job_id}/events": {
+@@ -3421,7 +3836,7 @@
+           "jobs"
+         ],
+         "summary": "Stream Job Events",
+-        "description": "Server-Sent Events (SSE) stream for live background job progress.",
++        "description": "Server-Sent Events (SSE) stream for live background job progress until terminal status or disconnect.",
+         "operationId": "stream_job_events_api_jobs__job_id__events_get",
+         "parameters": [
+           {
+@@ -3453,7 +3868,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/pyq/upload-file": {
+@@ -3506,7 +3926,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/pyq/upload-text": {
+@@ -3559,7 +3984,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/pyq": {
+@@ -3600,7 +4030,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/lessons/{lesson_id}/pyq": {
+@@ -3650,7 +4085,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/pyq/papers/{paper_id}": {
+@@ -3700,7 +4140,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/cram-sheet/generate": {
+@@ -3761,7 +4206,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/cram-sheet/generate-full": {
+@@ -3804,7 +4254,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/cram-sheet": {
+@@ -3847,7 +4302,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/cram-sheet/download": {
+@@ -3888,7 +4348,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/api/courses/{course_id}/cram-sheet/generate-full-async": {
+@@ -3929,7 +4394,12 @@
+               }
+             }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     },
+     "/": {
+@@ -3992,17 +4462,6 @@
+         "summary": "Get Auth Me",
+         "description": "Returns the authenticated user context (local owner in AUTH_MODE=local, JWT user in hosted mode).",
+         "operationId": "get_auth_me_api_auth_me_get",
+-        "parameters": [
+-          {
+-            "required": false,
+-            "schema": {
+-              "title": "Authorization",
+-              "type": "string"
+-            },
+-            "name": "authorization",
+-            "in": "header"
+-          }
+-        ],
+         "responses": {
+           "200": {
+             "description": "Successful Response",
+@@ -4011,18 +4470,13 @@
+                 "schema": {}
+               }
+             }
+-          },
+-          "422": {
+-            "description": "Validation Error",
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/HTTPValidationError"
+-                }
+-              }
+-            }
+           }
+-        }
++        },
++        "security": [
++          {
++            "HTTPBearer": []
++          }
++        ]
+       }
+     }
+   },
+@@ -6336,6 +6790,12 @@
+           }
+         }
+       }
++    },
++    "securitySchemes": {
++      "HTTPBearer": {
++        "type": "http",
++        "scheme": "bearer"
++      }
+     }
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/run.py b/run.py
+index f331ec8..1db881d 100755
+--- a/run.py
++++ b/run.py
+@@ -118,10 +118,8 @@ def ensure_port_available(host: str = "127.0.0.1", port: int = 8000):
+                 out = subprocess.check_output(["lsof", "-ti", f":{port}"]).decode().strip()
+                 pids = [p.strip() for p in out.splitlines() if p.strip() and p.strip() != str(os.getpid())]
+                 for pid in pids:
+-                    print(f"🔄 Terminating stale server process {pid} on port {port}...")
+-                    print(f'Port {port} is in use by PID {pid}. Stop it manually or set APP_PORT to another port.')
+-                time.sleep(1)
+-                print(f"✅ Port {port} freed successfully.")
++                    print(f"❌ Port {port} is in use by PID {pid}. Run: kill {pid} (or set APP_PORT=8001 python run.py)")
++                sys.exit(1)
+             except Exception as e:
+                 print(f"⚠️ Could not auto-terminate process on port {port}: {e}")
+ 
+diff --git a/tests/test_audit_hardening.py b/tests/test_audit_hardening.py
+new file mode 100644
+index 0000000..b0c9e0d
+--- /dev/null
++++ b/tests/test_audit_hardening.py
+@@ -0,0 +1,186 @@
++"""Regression tests for all verified security, stability, and architecture audit fixes."""
++
++import base64
++import hashlib
++import hmac
++import json
++import sqlite3
++import time
++from pathlib import Path
++
++import pytest
++from fastapi.testclient import TestClient
++
++from backend.database import get_db
++from backend.infra.crypto import decrypt_secret, encrypt_secret
++from backend.infra.rate_limit import SlidingWindowRateLimiter
++from backend.main import app, export_openapi_spec
++from backend.migrations.runner import apply_migrations
++
++
++def _make_hs256_jwt(payload: dict, secret: str, alg: str = "HS256") -> str:
++    def _b64(obj: dict) -> str:
++        raw = json.dumps(obj, separators=(",", ":")).encode("utf-8")
++        return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
++
++    h = _b64({"alg": alg, "typ": "JWT"})
++    p = _b64(payload)
++    sig = hmac.new(secret.encode("utf-8"), f"{h}.{p}".encode("ascii"), hashlib.sha256).digest()
++    s = base64.urlsafe_b64encode(sig).rstrip(b"=").decode("ascii")
++    return f"{h}.{p}.{s}"
++
++
++@pytest.fixture
++def hardened_client(tmp_path, monkeypatch):
++    db_path = tmp_path / "hardened_audit.db"
++    apply_migrations(str(db_path))
++
++    def _get_test_db():
++        conn = sqlite3.connect(str(db_path), check_same_thread=False)
++        conn.row_factory = sqlite3.Row
++        conn.execute("PRAGMA foreign_keys = ON;")
++        try:
++            yield conn
++            conn.commit()
++        finally:
++            conn.close()
++
++    app.dependency_overrides[get_db] = _get_test_db
++    monkeypatch.setattr("backend.database.DB_PATH", str(db_path))
++    client = TestClient(app)
++    yield client, str(db_path)
++    app.dependency_overrides.clear()
++
++
++def test_aes256_gcm_hkdf_crypto_roundtrip_and_tamper():
++    master = "production-grade-master-secret-key-2026"
++    ct1, n1 = encrypt_secret("sk-live-secret-1", master)
++    ct2, n2 = encrypt_secret("sk-live-secret-1", master)
++    assert ct1 != ct2
++    assert n1 != n2
++    assert decrypt_secret(ct1, n1, master) == "sk-live-secret-1"
++    with pytest.raises(ValueError):
++        decrypt_secret(ct1, n1, "wrong-master-secret-key-0000")
++
++
++def test_hosted_auth_enforcement_and_jwt_hardening(hardened_client, monkeypatch):
++    client, _ = hardened_client
++    secret = "super-secret-jwt-signing-key-2026"
++    monkeypatch.setenv("AUTH_MODE", "supabase")
++    monkeypatch.setenv("SUPABASE_JWT_SECRET", secret)
++
++    # 1. Anonymous requests must be rejected with 401 across routers
++    assert client.get("/api/courses").status_code == 401
++    assert client.get("/api/jobs").status_code == 401
++    assert client.get("/api/auth/me").status_code == 401
++
++    # 2. Host-level admin endpoints must return 403/401 in hosted mode
++    assert client.post("/api/settings/update-ytdlp").status_code in (401, 403)
++
++    # 3. alg:none and missing-exp tokens must be rejected
++    none_tok = _make_hs256_jwt({"sub": "u1", "exp": time.time() + 300}, secret, alg="none")
++    assert client.get("/api/courses", headers={"Authorization": f"Bearer {none_tok}"}).status_code == 401
++
++    no_exp_tok = _make_hs256_jwt({"sub": "u1"}, secret)
++    assert client.get("/api/courses", headers={"Authorization": f"Bearer {no_exp_tok}"}).status_code == 401
++
++    # 4. Valid HS256 JWT with exp + sub succeeds
++    valid_tok = _make_hs256_jwt({"sub": "user-alpha", "email": "a@example.com", "exp": time.time() + 300}, secret)
++    r = client.get("/api/auth/me", headers={"Authorization": f"Bearer {valid_tok}"})
++    assert r.status_code == 200
++    assert r.json()["id"] == "user-alpha"
++    assert client.get("/api/courses", headers={"Authorization": f"Bearer {valid_tok}"}).status_code == 200
++    # Even with a valid JWT, host-level admin endpoints remain 403 in hosted mode
++    assert client.post("/api/settings/update-ytdlp", headers={"Authorization": f"Bearer {valid_tok}"}).status_code == 403
++
++
++def test_ssrf_openrouter_and_no_gemini_query_key(hardened_client):
++    client, _ = hardened_client
++    r = client.post("/api/settings", json={"openrouter_base_url": "http://127.0.0.1:9999/steal"})
++    assert r.status_code == 400
++    r2 = client.post("/api/settings", json={"openrouter_base_url": "http://169.254.169.254/latest/meta-data"})
++    assert r2.status_code == 400
++
++    settings_src = Path("backend/routers/settings.py").read_text(encoding="utf-8")
++    assert 'params={"key":' not in settings_src
++
++
++def test_flashcard_state0_edit_and_delete_404(hardened_client):
++    client, _ = hardened_client
++    c = client.post(
++        "/api/courses",
++        json={"title": "DBMS", "goal_query": "DBMS", "target_date": "2027-01-01", "minutes_per_day": 60},
++    ).json()
++    cid = c["id"]
++
++    card = client.post(f"/api/courses/{cid}/flashcards", json={"front": "What is ACID?", "back": "Atomicity..."}).json()
++    upd = client.put(
++        f"/api/courses/{cid}/flashcards/{card['id']}",
++        json={"front": "What is ACID in DBMS?", "back": "Atomicity, Consistency, Isolation, Durability"},
++    )
++    assert upd.status_code == 200
++    assert "intervals" in upd.json()
++
++    missing_del = client.delete(f"/api/courses/{cid}/flashcards/nonexistent-card-id")
++    assert missing_del.status_code == 404
++
++
++def test_pdf_magic_byte_validation(hardened_client):
++    client, _ = hardened_client
++    c = client.post(
++        "/api/courses",
++        json={"title": "OS", "goal_query": "OS", "target_date": "2027-01-01", "minutes_per_day": 60},
++    ).json()
++    cid = c["id"]
++
++    r = client.post(
++        f"/api/courses/{cid}/sources/pdf",
++        files={"file": ("fake.pdf", b"NOT A REAL PDF FILE", "application/pdf")},
++    )
++    assert r.status_code == 400
++
++
++def test_migration_013_fts5_insert_trigger_and_qa_columns(hardened_client):
++    _, db_path = hardened_client
++    conn = sqlite3.connect(db_path)
++    conn.execute("PRAGMA foreign_keys = ON;")
++
++    # Verify qa_threads has lesson_id and scope
++    qa_cols = {r[1] for r in conn.execute("PRAGMA table_info(qa_threads)").fetchall()}
++    assert "lesson_id" in qa_cols
++    assert "scope" in qa_cols
++
++    # Verify inserting into chunks automatically syncs chunks_fts via trg_chunks_insert_fts
++    conn.execute(
++        "INSERT INTO courses (id, title, goal_query, target_date, minutes_per_day) VALUES ('c1', 'TOC', 'TOC', '2027-01-01', 60);"
++    )
++    conn.execute(
++        "INSERT INTO sources (id, course_id, source_type, title, url, is_approved) VALUES ('s1', 'c1', 'youtube_video', 'V1', 'https://youtu.be/x', 1);"
++    )
++    conn.execute(
++        "INSERT INTO chunks (id, course_id, source_id, chunk_index, start_sec, end_sec, content, token_count) VALUES ('ch1', 'c1', 's1', 0, 0, 60, 'Pushdown automata use a LIFO stack', 6);"
++    )
++    conn.commit()
++    hits = conn.execute("SELECT id FROM chunks_fts WHERE chunks_fts MATCH 'Pushdown';").fetchall()
++    conn.close()
++    assert len(hits) == 1
++    assert hits[0][0] == "ch1"
++
++
++def test_csp_header_and_openapi_includes_auth_me(hardened_client):
++    client, _ = hardened_client
++    r = client.get("/healthz")
++    assert r.status_code == 200
++    assert "Content-Security-Policy" in r.headers
++    spec = export_openapi_spec(Path("/tmp/test_openapi_audit.json"))
++    assert "/api/auth/me" in spec["paths"]
++
++
++def test_rate_limiter_evicts_stale_keys():
++    rl = SlidingWindowRateLimiter(max_requests=5, window_seconds=0.05, max_keys=10)
++    for i in range(15):
++        rl.allow(f"ip-{i}")
++    assert len(rl._buckets) <= 10
++    time.sleep(0.08)
++    rl._prune_stale_locked(time.monotonic() - 0.05)
++    assert len(rl._buckets) == 0
+diff --git a/tests/test_master_plan_final.py b/tests/test_master_plan_final.py
+index 5d211ab..995d796 100644
+--- a/tests/test_master_plan_final.py
++++ b/tests/test_master_plan_final.py
+@@ -64,7 +64,7 @@ def test_migration_012_users_and_secrets_tables(isolated_client):
+     assert "users" in tables
+     assert "user_secrets" in tables
+     version_count = conn.execute("SELECT COUNT(*) FROM schema_migrations;").fetchone()[0]
+-    assert version_count == 12
++    assert version_count == 13
+     conn.close()
+ 
+ 
+diff --git a/tests/test_migrations.py b/tests/test_migrations.py
+index f1d5e1a..fa50336 100644
+--- a/tests/test_migrations.py
++++ b/tests/test_migrations.py
+@@ -54,7 +54,6 @@ def test_fts5_cleanup_trigger():
+         conn.execute("INSERT INTO courses (id, title, goal_query, target_date) VALUES ('c1', 'T', 'G', '2026-12-31');")
+         conn.execute("INSERT INTO sources (id, course_id, source_type, title) VALUES ('s1', 'c1', 'web', 'S');")
+         conn.execute("INSERT INTO chunks (id, course_id, source_id, chunk_index, token_count, content) VALUES ('chk1', 'c1', 's1', 0, 10, 'Automata Theory');")
+-        conn.execute("INSERT INTO chunks_fts (id, course_id, lesson_id, content) VALUES ('chk1', 'c1', NULL, 'Automata Theory');")
+         conn.commit()
+ 
+         assert conn.execute("SELECT COUNT(*) FROM chunks_fts;").fetchone()[0] == 1
+diff --git a/tests/test_security_and_fixes.py b/tests/test_security_and_fixes.py
+index 4022c3d..fc99c07 100644
+--- a/tests/test_security_and_fixes.py
++++ b/tests/test_security_and_fixes.py
+@@ -32,7 +32,7 @@ class TestPhase0To2Fixes(unittest.TestCase):
+ 
+         runner_mod.BACKUPS_DIR = self.backups_dir
+         applied = apply_migrations(self.db_path)
+-        self.assertEqual(applied, 12)
++        self.assertEqual(applied, 13)
+         reapplied = apply_migrations(self.db_path)
+         self.assertEqual(reapplied, 0)
+ 

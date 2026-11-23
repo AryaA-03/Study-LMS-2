@@ -567,13 +567,6 @@ async def ingest_lesson_transcript(
                 chunk["content"]
             )
         )
-        db_conn.execute(
-            """
-            INSERT INTO chunks_fts (id, course_id, lesson_id, content)
-            VALUES (?, ?, ?, ?);
-            """,
-            (chunk_id, course_id, lesson_id, chunk["content"])
-        )
 
     # 4. Update Lesson Status
     db_conn.execute(

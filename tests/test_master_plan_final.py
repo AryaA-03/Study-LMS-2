@@ -64,7 +64,7 @@ def test_migration_012_users_and_secrets_tables(isolated_client):
     assert "users" in tables
     assert "user_secrets" in tables
     version_count = conn.execute("SELECT COUNT(*) FROM schema_migrations;").fetchone()[0]
-    assert version_count == 12
+    assert version_count == 13
     conn.close()
 
 

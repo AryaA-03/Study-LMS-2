@@ -32,7 +32,7 @@ class TestPhase0To2Fixes(unittest.TestCase):
 
         runner_mod.BACKUPS_DIR = self.backups_dir
         applied = apply_migrations(self.db_path)
-        self.assertEqual(applied, 12)
+        self.assertEqual(applied, 13)
         reapplied = apply_migrations(self.db_path)
         self.assertEqual(reapplied, 0)
 

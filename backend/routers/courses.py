@@ -40,7 +40,8 @@ from backend.services.notes import get_or_generate_lesson_notes
 from backend.services.syllabus_matcher import match_syllabus_to_course
 
 logger = logging.getLogger("learn_lms.courses")
-router = APIRouter(prefix="/api/courses", tags=["courses"])
+from backend.deps import CurrentUser, get_current_user
+router = APIRouter(prefix="/api/courses", tags=["courses"], dependencies=[Depends(get_current_user)])
 
 @contextlib.contextmanager
 def _get_background_db(db: Optional[sqlite3.Connection] = None):
@@ -148,8 +149,14 @@ def create_course(
     return get_course(course_id, db)
 
 @router.get("", response_model=List[CourseResponse])
-def list_courses(db: sqlite3.Connection = Depends(get_db)):
-    rows = db.execute("SELECT * FROM courses ORDER BY created_at DESC;").fetchall()
+def list_courses(
+    user: CurrentUser = Depends(get_current_user),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    if user.auth_mode != "local":
+        rows = db.execute("SELECT * FROM courses WHERE owner_id = ? ORDER BY created_at DESC;", (user.id,)).fetchall()
+    else:
+        rows = db.execute("SELECT * FROM courses ORDER BY created_at DESC;").fetchall()
     if not rows:
         return []
 
@@ -1154,7 +1161,6 @@ def import_manual_transcript(
             """,
             (cid, course_id, source_id, lesson_id, idx, c, len(c.split())),
         )
-        db.execute("INSERT INTO chunks_fts (id, course_id, lesson_id, content) VALUES (?, ?, ?, ?);", (cid, course_id, lesson_id, c))
 
     # Save note
     note_id = str(uuid.uuid4())

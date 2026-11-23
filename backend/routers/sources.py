@@ -2,6 +2,7 @@
 
 import logging
 from typing import Dict, Any, Optional
+from backend.deps import get_current_user
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 import sqlite3
 
@@ -11,7 +12,7 @@ from backend.services.pdf_ingest import ingest_pdf_source
 from backend.services.web_ingest import ingest_web_page
 
 logger = logging.getLogger("learn_lms.api.sources")
-router = APIRouter(prefix="/api/courses", tags=["sources"])
+router = APIRouter(prefix="/api/courses", tags=["sources"], dependencies=[Depends(get_current_user)])
 
 
 @router.post("/{course_id}/sources/pdf")
@@ -27,7 +28,11 @@ async def upload_pdf_source(
     if not cur.fetchone():
         raise HTTPException(status_code=404, detail="Course not found")
 
-    pdf_bytes = await file.read()
+    pdf_bytes = await file.read(25 * 1024 * 1024 + 1)
+    if len(pdf_bytes) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Uploaded PDF exceeds 25 MB limit.")
+    if pdf_bytes and not pdf_bytes.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="Uploaded file is not a valid PDF document.")
     if len(pdf_bytes) == 0:
         raise HTTPException(status_code=400, detail="Uploaded PDF file is empty")
 

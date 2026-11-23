@@ -2,6 +2,7 @@
 
 import logging
 from typing import Dict, Any, Optional, List
+from backend.deps import get_current_user
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body
 import sqlite3
 
@@ -16,7 +17,7 @@ from backend.services.pyq_engine import (
 )
 
 logger = logging.getLogger("learn_lms.api.pyq")
-router = APIRouter(prefix="/api/courses", tags=["pyq"])
+router = APIRouter(prefix="/api/courses", tags=["pyq"], dependencies=[Depends(get_current_user)])
 
 
 @router.post("/{course_id}/pyq/upload-file", response_model=PYQUploadResponse)

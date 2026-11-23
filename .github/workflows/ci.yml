@@ -26,3 +26,9 @@ jobs:
         run: pytest -m "not e2e and not live" -q
       - name: Verify JS syntax
         run: node --check frontend/static/js/app.js
+
+      - name: Build React/TypeScript Frontend
+        run: |
+          cd frontend-app
+          npm ci
+          npm run build

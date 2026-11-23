@@ -133,13 +133,6 @@ async def ingest_web_page(
             """,
             (chunk_id, course_id, source_id, chunk["chunk_index"], chunk["token_count"], chunk["content"])
         )
-        db_conn.execute(
-            """
-            INSERT INTO chunks_fts (id, course_id, lesson_id, content)
-            VALUES (?, ?, NULL, ?);
-            """,
-            (chunk_id, course_id, chunk["content"])
-        )
 
     db_conn.commit()
     logger.info(f"Ingested web source {source_id} ({page_title}) with {len(chunks)} chunks")

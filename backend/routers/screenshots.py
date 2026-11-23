@@ -1,8 +1,10 @@
 """Screenshots API Router."""
 
 import logging
+import mimetypes
 from pathlib import Path
 from typing import List, Dict, Any
+from backend.deps import get_current_user
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 import sqlite3
@@ -13,7 +15,7 @@ from backend.services.screenshots import capture_lesson_keyframes, get_lesson_sc
 from backend.config import get_settings
 
 logger = logging.getLogger("learn_lms.api.screenshots")
-router = APIRouter(tags=["screenshots"])
+router = APIRouter(tags=["screenshots"], dependencies=[Depends(get_current_user)])
 settings = get_settings()
 
 
@@ -88,4 +90,5 @@ def serve_screenshot(
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="Screenshot image not found")
 
-    return FileResponse(path=file_path, media_type="image/jpeg")
+    mime, _ = mimetypes.guess_type(str(file_path))
+    return FileResponse(path=file_path, media_type=mime or "image/jpeg")

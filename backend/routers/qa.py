@@ -2,6 +2,7 @@
 
 import logging
 from typing import List, Dict, Any
+from backend.deps import get_current_user
 from fastapi import APIRouter, Depends, HTTPException
 import sqlite3
 
@@ -10,7 +11,7 @@ from backend.models.schemas import QARequest, QAResponse
 from backend.services.qa_engine import answer_course_question, get_course_qa_history
 
 logger = logging.getLogger("learn_lms.api.qa")
-router = APIRouter(prefix="/api/courses", tags=["qa"])
+router = APIRouter(prefix="/api/courses", tags=["qa"], dependencies=[Depends(get_current_user)])
 
 
 @router.post("/{course_id}/qa", response_model=QAResponse)
@@ -41,3 +42,19 @@ def get_qa_history(
         raise HTTPException(status_code=404, detail="Course not found")
 
     return get_course_qa_history(db, course_id)
+
+@router.delete("/{course_id}/qa/{thread_id}")
+def delete_qa_thread(
+    course_id: str,
+    thread_id: str,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Delete a single Q&A history thread for this course."""
+    cur = db.execute(
+        "DELETE FROM qa_threads WHERE id = ? AND course_id = ?;",
+        (thread_id, course_id),
+    )
+    db.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Q&A thread not found")
+    return {"success": True, "deleted_thread_id": thread_id}

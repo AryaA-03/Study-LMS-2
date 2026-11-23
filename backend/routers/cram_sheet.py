@@ -3,6 +3,7 @@ from pathlib import Path
 
 import logging
 from typing import Dict, Any, Optional
+from backend.deps import get_current_user
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 import sqlite3
 
@@ -11,7 +12,7 @@ from backend.models.schemas import CramSheetGenerateRequest, CramSheetResponse
 from backend.services.cram_sheet_engine import get_or_create_cram_sheet
 
 logger = logging.getLogger("learn_lms.api.cram_sheet")
-router = APIRouter(prefix="/api/courses", tags=["cram_sheet"])
+router = APIRouter(prefix="/api/courses", tags=["cram_sheet"], dependencies=[Depends(get_current_user)])
 
 
 @router.post("/{course_id}/cram-sheet/generate", response_model=CramSheetResponse)
