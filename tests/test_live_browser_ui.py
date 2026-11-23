@@ -1,3 +1,5 @@
+import pytest
+pytestmark = pytest.mark.e2e
 """Playwright Live Browser Test Suite for UI/UX, Themes, Date Alignment & Collapsible Studio.
 
 Runs against an ephemeral FastAPI server with a seeded SQLite database.
@@ -25,7 +27,7 @@ import threading
 from pathlib import Path
 import pytest
 import uvicorn
-from playwright.sync_api import sync_playwright
+sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
 
 from backend.main import app
 from backend.database import get_db, init_connection

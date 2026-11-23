@@ -476,7 +476,8 @@ function playVideoSlice(videoId, startSec, endSec) {
   Logger.player('Seek & Play Slice', { videoId, startSec, endSec });
 
   if (isYtReady && ytPlayer && ytPlayer.loadVideoById) {
-    ytPlayer.loadVideoById({
+    if (currentCourse && currentCourse.playback_speed && typeof ytPlayer.setPlaybackRate === 'function') { try { ytPlayer.setPlaybackRate(Number(currentCourse.playback_speed)); } catch (_) {} }
+        ytPlayer.loadVideoById({
       videoId: videoId,
       startSeconds: startSec || 0,
       endSeconds: endSec || undefined,
@@ -564,8 +565,8 @@ function setupEventListeners() {
 
   // Preset Cards & Chips
   const populatePreset = (title, query) => {
-    inputCourseTitle.value = title;
-    inputGoalQuery.value = query;
+    document.getElementById('input-course-title').value = title;
+    document.getElementById('input-goal-query').value = query;
     inputCourseTitle.scrollIntoView({ behavior: 'smooth', block: 'center' });
     inputCourseTitle.classList.add('ring-2', 'ring-blue-500');
     setTimeout(() => inputCourseTitle.classList.remove('ring-2', 'ring-blue-500'), 1500);
@@ -1187,7 +1188,7 @@ function showToast(message, type = 'info') {
   toast.className = `px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-semibold ${bg} transition-all duration-300 transform translate-y-4 opacity-0 pointer-events-auto border border-white/20`;
   toast.innerHTML = `
     <span>${type === 'success' ? '✓' : type === 'error' ? '✕' : '⚡'}</span>
-    <span>${message}</span>
+    <span>${escapeHtml(message)}</span>
   `;
   toastContainer.appendChild(toast);
   requestAnimationFrame(() => {
@@ -1480,7 +1481,7 @@ async function handleDeleteCardFromModal() {
     editCardModal.classList.add('hidden');
     showToast('Flashcard deleted!', 'info');
     await updateFlashcardCounts();
-    await loadDueFlashcards(currentCourseId);
+    await loadFlashcards();
   } catch (err) {
     Logger.error('Failed to delete card', err);
     showToast('Error deleting card: ' + err.message, 'error');
@@ -2382,7 +2383,7 @@ function renderApprovalGate(discovery) {
   } else {
     playlists.forEach(pl => {
       const item = document.createElement('label');
-      item.className = 'flex items-start gap-2.5 p-2 rounded-xl bg-surface-900 border border-slate-700/60 cursor-pointer hover:bg-surface-850 text-xs';
+      item.className = 'flex items-start gap-2.5 p-2 rounded-xl bg-bg-card border border-border-subtle border border-slate-700/60 cursor-pointer hover:bg-bg-card border border-border-subtle text-xs';
       item.innerHTML = `
         <input type="checkbox" name="approved_source" value="${pl.source_id}" checked class="mt-0.5 text-accent rounded">
         <div>
@@ -2399,7 +2400,7 @@ function renderApprovalGate(discovery) {
   } else {
     videos.forEach(v => {
       const item = document.createElement('label');
-      item.className = 'flex items-start gap-2.5 p-2 rounded-xl bg-surface-900 border border-slate-700/60 cursor-pointer hover:bg-surface-850 text-xs';
+      item.className = 'flex items-start gap-2.5 p-2 rounded-xl bg-bg-card border border-border-subtle border border-slate-700/60 cursor-pointer hover:bg-bg-card border border-border-subtle text-xs';
       item.innerHTML = `
         <input type="checkbox" name="approved_source" value="${v.source_id}" checked class="mt-0.5 text-accent rounded">
         <div>
@@ -3835,7 +3836,7 @@ async function openSyllabusModal() {
       }
     }
   } catch (err) {
-    Logger.warn('Could not load course syllabus', err);
+    Logger.error('Could not load course syllabus', err);
   }
 }
 
@@ -4515,10 +4516,10 @@ function renderQuiz(quiz) {
     const evalItem = (quiz.short_answer_evaluations || []).find(e => e.question_id === q.id);
 
     return `
-      <div class="p-3.5 bg-surface-900 rounded-xl border border-slate-800 space-y-2.5">
+      <div class="p-3.5 bg-bg-card border border-border-subtle rounded-xl border border-slate-800 space-y-2.5">
         <div class="flex items-start justify-between gap-2">
           <div class="flex items-center gap-2 flex-wrap">
-            <span class="w-5 h-5 rounded-full bg-surface-800 text-slate-300 text-[10px] font-bold flex items-center justify-center font-mono">${idx + 1}</span>
+            <span class="w-5 h-5 rounded-full bg-bg-sidebar text-slate-300 text-[10px] font-bold flex items-center justify-center font-mono">${idx + 1}</span>
             <span class="text-xs font-semibold text-white leading-relaxed">${escapeHtml(q.question)}</span>
             ${isShortAnswer ? `
               <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
@@ -4532,13 +4533,13 @@ function renderQuiz(quiz) {
         </div>
 
         <!-- Cited quote evidence preview -->
-        <div class="px-2.5 py-1.5 rounded-lg bg-surface-950/80 border border-slate-800/80 text-[11px] text-slate-400 italic">
+        <div class="px-2.5 py-1.5 rounded-lg bg-bg-canvas/80 border border-slate-800/80 text-[11px] text-slate-400 italic">
           &ldquo;${escapeHtml(q.quote)}&rdquo;
         </div>
 
         ${isShortAnswer ? `
           <!-- 5-Mark Subjective Rubric & Answer Box -->
-          <div class="px-2.5 py-2 rounded-lg bg-surface-950/90 border border-slate-800/90 text-[11px] text-slate-400 space-y-1">
+          <div class="px-2.5 py-2 rounded-lg bg-bg-canvas/90 border border-slate-800/90 text-[11px] text-slate-400 space-y-1">
             <span class="font-semibold text-slate-300">Exam Rubric (Max 5.0 Marks):</span>
             <ul class="list-disc list-inside space-y-0.5 text-[10.5px]">
               ${(q.rubric || [
@@ -4550,11 +4551,11 @@ function renderQuiz(quiz) {
           </div>
 
           <div class="pt-1">
-            <textarea name="quiz_sa_${q.id}" class="w-full h-24 p-2.5 rounded-lg bg-surface-850 border border-slate-700/60 text-slate-200 text-xs focus:ring-1 focus:ring-amber-500 resize-y placeholder:text-slate-500" placeholder="Write your structured 5-mark answer covering: 1) Definition & intuition, 2) Technical mechanism & steps, 3) Practical example..." ${isCompleted ? 'disabled' : ''}>${escapeHtml(q.user_answer || '')}</textarea>
+            <textarea name="quiz_sa_${q.id}" class="w-full h-24 p-2.5 rounded-lg bg-bg-card border border-border-subtle border border-slate-700/60 text-slate-200 text-xs focus:ring-1 focus:ring-amber-500 resize-y placeholder:text-slate-500" placeholder="Write your structured 5-mark answer covering: 1) Definition & intuition, 2) Technical mechanism & steps, 3) Practical example..." ${isCompleted ? 'disabled' : ''}>${escapeHtml(q.user_answer || '')}</textarea>
           </div>
 
           ${evalItem ? `
-            <div class="mt-2 p-2.5 rounded-lg bg-surface-950 border border-amber-800/60 text-xs space-y-1.5">
+            <div class="mt-2 p-2.5 rounded-lg bg-bg-canvas border border-amber-800/60 text-xs space-y-1.5">
               <div class="flex items-center justify-between font-semibold text-amber-300">
                 <span>Awarded: ${evalItem.marks_awarded} / ${q.max_marks || 5.0} Marks</span>
                 <span class="text-[10px] font-mono text-slate-400">Def: ${evalItem.breakdown?.definition ?? 0} | Mech: ${evalItem.breakdown?.mechanism ?? 0} | Ex: ${evalItem.breakdown?.example ?? 0}</span>
@@ -4572,7 +4573,7 @@ function renderQuiz(quiz) {
           <!-- Multiple Choice Options -->
           <div class="space-y-1.5 pt-1">
             ${(q.options || []).map((opt, optIdx) => {
-              let optClass = 'bg-surface-850 hover:bg-surface-800 border-slate-700/60 text-slate-300';
+              let optClass = 'bg-bg-card border border-border-subtle hover:bg-bg-sidebar border-slate-700/60 text-slate-300';
               const isUserChoice = (q.user_answer !== undefined && q.user_answer !== null && parseInt(q.user_answer, 10) === optIdx);
               if (isCompleted) {
                 if (optIdx === q.correct_index) {
@@ -4596,7 +4597,7 @@ function renderQuiz(quiz) {
                 💡 ${escapeHtml(q.explanation)}
               </div>
               <button type="button" onclick="window.seekToSeconds(${q.timestamp_sec !== undefined && q.timestamp_sec !== null ? q.timestamp_sec : (q.start_sec || 0)})" class="replay-explanation-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-accent-soft text-accent-soft-text hover:bg-blue-200 dark:hover:bg-blue-900 border border-border-subtle font-mono text-[11px] font-semibold cursor-pointer transition active:scale-95 shadow-sm shrink-0" title="Replay Explanation in video">
-                <span>▶</span> Replay Explanation [${q.timestamp_str || (q.timestamp_sec ? formatSeconds(q.timestamp_sec) : '00:00')}]
+                <span>▶</span> Replay Explanation [${q.timestamp_str || (q.timestamp_sec ? formatDurationSec(q.timestamp_sec) : '00:00')}]
               </button>
             </div>
           ` : ''}
@@ -5127,14 +5128,14 @@ async function openMockExam() {
     mockAnsweredCount.textContent = '0';
 
     mockExamContent.innerHTML = mockExamQuiz.questions.map((q, idx) => `
-      <div class="p-3.5 bg-surface-850 rounded-xl border border-slate-700/80 space-y-2">
+      <div class="p-3.5 bg-bg-card border border-border-subtle rounded-xl border border-slate-700/80 space-y-2">
         <div class="flex items-center justify-between">
           <span class="text-xs font-bold text-white">${idx + 1}. ${escapeHtml(q.question)}</span>
           <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">[${escapeHtml(q.chunk_id)}]</span>
         </div>
         <div class="space-y-1.5 pt-1">
           ${q.options.map((opt, optIdx) => `
-            <label class="diagnostic-option flex items-center gap-2 p-2 rounded-lg border border-slate-700 text-xs text-slate-300 hover:bg-surface-800 cursor-pointer">
+            <label class="diagnostic-option flex items-center gap-2 p-2 rounded-lg border border-slate-700 text-xs text-slate-300 hover:bg-bg-sidebar cursor-pointer">
               <input type="radio" name="mock_q_${q.id}" value="${optIdx}" onchange="updateMockAnsweredCount()" class="text-emerald-500 focus:ring-0">
               <span>${escapeHtml(opt)}</span>
             </label>
@@ -5365,7 +5366,7 @@ async function handleVacuumDb() {
     const data = await res.json();
     Logger.api('POST', '/api/settings/vacuum', res.status, Math.round(performance.now() - t0), data);
     alert(data.message || 'SQLite database vacuumed successfully.');
-    loadSettingsData();
+    loadSettings();
   } catch (err) {
     Logger.error('Vacuum failed', err);
     alert('Vacuum failed: ' + err.message);
@@ -5376,7 +5377,7 @@ async function handleVacuumDb() {
 
 function handleDownloadDbBackup() {
   Logger.api('GET', '/api/settings/backup', 200, 0, 'Downloading SQLite backup');
-  window.open('/api/settings/backup', '_blank');
+  window.open('/api/settings/backup', '_blank', 'noopener,noreferrer');
 }
 
 async function handleExportCourseBundle() {
@@ -5425,3 +5426,14 @@ window.learnLMS = {
   logger: Logger,
 };
 
+
+// Phase 1 fix: wire collapsed rail settings button
+document.addEventListener('DOMContentLoaded', () => {
+    const collapsedSettingsBtn = document.getElementById('btn-collapsed-settings');
+    if (collapsedSettingsBtn) {
+        collapsedSettingsBtn.addEventListener('click', () => {
+            const mainSettingsBtn = document.getElementById('btn-settings');
+            if (mainSettingsBtn) mainSettingsBtn.click();
+        });
+    }
+});

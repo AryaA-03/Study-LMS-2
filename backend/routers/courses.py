@@ -1,3 +1,4 @@
+from backend.infra.net_guard import validate_youtube_url_or_id
 """Course and source management router."""
 
 import uuid
@@ -386,6 +387,11 @@ def import_source(
     logger.info(f"[Courses] Importing manual URL: {req.url} into course {course_id}")
     cookie_row = db.execute("SELECT value FROM system_settings WHERE key = 'cookies_browser';").fetchone()
     cookies_browser = cookie_row["value"] if cookie_row else None
+
+    try:
+        validate_youtube_url_or_id(req.url)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
 
     try:
         meta = extract_metadata(req.url, cookies_browser=cookies_browser)

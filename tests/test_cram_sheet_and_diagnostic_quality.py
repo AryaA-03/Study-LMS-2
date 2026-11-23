@@ -2,7 +2,9 @@
 
 import sqlite3
 import pytest
-from playwright.sync_api import sync_playwright
+from pathlib import Path
+from backend.migrations.runner import apply_migrations
+from backend.database import init_connection
 
 from backend.services.quiz_engine import (
     create_and_store_quiz,
@@ -40,13 +42,30 @@ def test_video_noise_filtering_and_sentence_extraction():
     assert any("Deterministic finite automata" in s for s in extracted)
 
 
-def test_diagnostic_test_syllabus_coverage_and_quality():
-    conn = sqlite3.connect("data-dev/app.db")
-    cur = conn.cursor()
-    cur.execute("SELECT id, title FROM courses LIMIT 1;")
-    c_row = cur.fetchone()
-    assert c_row is not None, "Need a course in data-dev/app.db"
-    course_id = c_row[0]
+
+def _create_seeded_course_db(tmp_path: Path):
+    db_path = tmp_path / "cram_diag_test.db"
+    apply_migrations(db_path)
+    conn = init_connection(db_path)
+    cid = "c_toc_diag"
+    conn.execute("INSERT INTO courses (id, title, goal_query, target_date, minutes_per_day) VALUES (?, 'Theory of Computation', 'TOC', '2026-12-30', 60);", (cid,))
+    conn.execute("INSERT INTO sources (id, course_id, source_type, title, is_approved) VALUES ('s1', ?, 'youtube_playlist', 'TOC Lectures', 1);", (cid,))
+    topics = [
+        ("l1", "Deterministic Finite Automata (DFA)", "A Deterministic Finite Automaton consists of five tuples Q, Sigma, delta, q0, and F."),
+        ("l2", "Non-Deterministic Finite Automata (NFA)", "A Non-Deterministic Finite Automaton allows epsilon transitions and multiple next states."),
+        ("l3", "Regular Expressions and Languages", "Regular expressions define regular languages using union, concatenation, and Kleene star."),
+        ("l4", "Context-Free Grammars (CFG)", "Context-free grammars generate context-free languages recognized by pushdown automata."),
+        ("l5", "Turing Machines and Decidability", "A Turing Machine has an infinite tape and models any computable algorithm."),
+    ]
+    for idx, (lid, title, content) in enumerate(topics):
+        conn.execute("INSERT INTO lessons (id, course_id, source_id, title, start_sec, end_sec, raw_duration_sec, order_index) VALUES (?, ?, 's1', ?, 0, 600, 600, ?);", (lid, cid, title, idx))
+        conn.execute("INSERT INTO chunks (id, course_id, source_id, lesson_id, chunk_index, token_count, start_sec, end_sec, content) VALUES (?, ?, 's1', ?, 0, 40, 0, 600, ?);", (f"chk_{lid}", cid, lid, content))
+    conn.execute("INSERT INTO notes (id, course_id, lesson_id, content_markdown) VALUES ('n1', ?, 'l1', '# DFA\n\n## Key Definitions\n- **DFA**: Deterministic Finite Automaton with 5 tuples.\n');", (cid,))
+    conn.commit()
+    return conn, cid
+
+def test_diagnostic_test_syllabus_coverage_and_quality(tmp_path):
+    conn, course_id = _create_seeded_course_db(tmp_path)
 
     quiz = create_and_store_quiz(conn, course_id=course_id, quiz_type="diagnostic", question_count=5)
     questions = quiz.get("questions", [])
@@ -80,19 +99,14 @@ def test_diagnostic_test_syllabus_coverage_and_quality():
     conn.close()
 
 
-def test_full_syllabus_cram_sheet_generation():
-    conn = sqlite3.connect("data-dev/app.db")
-    cur = conn.cursor()
-    cur.execute("SELECT id, title FROM courses LIMIT 1;")
-    c_row = cur.fetchone()
-    assert c_row is not None
-    course_id = c_row[0]
+def test_full_syllabus_cram_sheet_generation(tmp_path):
+    conn, course_id = _create_seeded_course_db(tmp_path)
 
     # Verify deterministic full syllabus cram sheet
     cram_md = generate_deterministic_cram_sheet(conn, course_id)
     assert "# " in cram_md
     assert "High-Yield Exam Weightage Matrix" in cram_md
-    assert "Essential Concepts, Definitions & Formulas" in cram_md
+    assert "Essential Key Formulas" in cram_md
 
     # Test full-syllabus synthesis API endpoint / engine function
     import asyncio
@@ -104,8 +118,10 @@ def test_full_syllabus_cram_sheet_generation():
     conn.close()
 
 
+@pytest.mark.e2e
 def test_diagnostic_pre_test_live_ui():
-    with sync_playwright() as p:
+    playwright = pytest.importorskip("playwright.sync_api")
+    with playwright.sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
 

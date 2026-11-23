@@ -1,3 +1,5 @@
+import pytest
+pytestmark = pytest.mark.e2e
 """Playwright Live Browser Test for Syllabus Copy-Paste & Auto-Selection Alignment.
 
 Validates:
@@ -10,7 +12,7 @@ Validates:
 7. Zero JavaScript console errors occur throughout.
 """
 
-from playwright.sync_api import sync_playwright
+sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
 import pytest
 import time
 

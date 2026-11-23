@@ -158,7 +158,7 @@ def test_ai_semantic_sliding_window_mocked(monkeypatch):
         ]
 
     monkeypatch.setattr("backend.services.concept_partitioner._call_llm_for_window", mock_call_llm)
-    monkeypatch.setattr("backend.config.get_settings", lambda: type("Settings", (), {
+    monkeypatch.setattr("backend.services.concept_partitioner.get_settings", lambda: type("Settings", (), {
         "GEMINI_API_KEY": "fake-key",
         "GROQ_API_KEY": None,
         "OPENROUTER_API_KEY": None,

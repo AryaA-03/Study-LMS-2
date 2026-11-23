@@ -92,7 +92,7 @@ def parse_and_deduplicate_json3(
 
     if not in_range_words:
         # Fallback if boundaries were slightly offset
-        in_range_words = words_timed
+        in_range_words = []  # Never bleed full video captions into a single slice
 
     return _group_words_into_chunks(in_range_words, target_chunk_tokens)
 

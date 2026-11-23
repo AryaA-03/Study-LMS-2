@@ -1,3 +1,5 @@
+import pytest
+pytestmark = pytest.mark.live
 """Live Smoke Tests for Milestone 2 against user-specified YouTube anchors.
 
 Anchors:

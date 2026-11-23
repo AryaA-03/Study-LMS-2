@@ -1,3 +1,5 @@
+import pytest
+pytestmark = pytest.mark.e2e
 """Playwright E2E tests for M1 golden path.
 
 Runs against an ephemeral database and server instance.

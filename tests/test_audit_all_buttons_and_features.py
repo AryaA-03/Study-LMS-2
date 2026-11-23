@@ -1,3 +1,5 @@
+import pytest
+pytestmark = pytest.mark.e2e
 """Comprehensive UI Feature & Button Audit Test.
 
 Iterates through every interactive button, modal, drawer, tab, and slider control
@@ -8,7 +10,7 @@ in the application to verify that:
 4. Zero JavaScript console errors occur during any interaction.
 """
 
-from playwright.sync_api import sync_playwright
+sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
 import pytest
 import time
 

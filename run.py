@@ -119,7 +119,7 @@ def ensure_port_available(host: str = "127.0.0.1", port: int = 8000):
                 pids = [p.strip() for p in out.splitlines() if p.strip() and p.strip() != str(os.getpid())]
                 for pid in pids:
                     print(f"🔄 Terminating stale server process {pid} on port {port}...")
-                    os.kill(int(pid), 9)
+                    print(f'Port {port} is in use by PID {pid}. Stop it manually or set APP_PORT to another port.')
                 time.sleep(1)
                 print(f"✅ Port {port} freed successfully.")
             except Exception as e:

@@ -1,14 +1,16 @@
 """Main FastAPI application for Learn LMS & Exam Prep."""
 
 import json
-import time
 import logging
+import time
+import uuid
 from pathlib import Path
-from fastapi import FastAPI, Request
+import sqlite3
+from fastapi import Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 
 # Configure Rich Terminal Logging
 logging.basicConfig(
@@ -19,28 +21,29 @@ logging.basicConfig(
 logger = logging.getLogger("learn_lms")
 
 from backend.config import BASE_DIR
+from backend.database import get_db
 from backend.routers import (
     courses,
-    schedule,
-    settings,
-    transcripts,
+    cram_sheet,
+    flashcards,
     notes,
-    screenshots,
-    sources,
+    pyq,
     qa,
     quizzes,
-    flashcards,
-    pyq,
-    cram_sheet,
+    schedule,
+    screenshots,
+    settings,
+    sources,
+    transcripts,
 )
 
 app = FastAPI(
     title="Learn LMS & Exam Prep API",
     description="Local-first autonomous personal LMS and exam-prep platform.",
-    version="0.6.1",
+    version="0.8.0",
 )
 
-# Enable CORS for local client development (restricted to local origins, no invalid wildcard+credentials)
+# Restrict CORS to explicit local origins and methods
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -54,32 +57,28 @@ app.add_middleware(
         "http://127.0.0.1:7860",
     ],
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
-# Request Logging Middleware for Terminal Observability
+
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
+async def security_and_logging_middleware(request: Request, call_next):
     start_time = time.time()
     try:
         response = await call_next(request)
         duration_ms = round((time.time() - start_time) * 1000, 1)
         if not request.url.path.startswith("/static"):
             code = response.status_code
-            if code < 300:
-                status_badge = f"\033[92m[{code} OK]\033[0m"
-            elif code < 400:
-                status_badge = f"\033[94m[{code} REDIRECT]\033[0m"
-            elif code < 500:
-                status_badge = f"\033[93m[{code} CLIENT_ERR]\033[0m"
-            else:
-                status_badge = f"\033[91m[{code} SERVER_ERR]\033[0m"
-            
             query = f"?{request.url.query}" if request.url.query else ""
-            logger.info(f"{request.method} {request.url.path}{query} -> {status_badge} ({duration_ms}ms)")
-        
-        # Only no-cache API/HTML responses; let static assets benefit from HTTP caching
+            logger.info(f"{request.method} {request.url.path}{query} -> [{code}] ({duration_ms}ms)")
+
+        # Security headers
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+
         if not request.url.path.startswith("/static"):
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             response.headers["Pragma"] = "no-cache"
@@ -87,8 +86,16 @@ async def log_requests(request: Request, call_next):
         return response
     except Exception as exc:
         duration_ms = round((time.time() - start_time) * 1000, 1)
-        logger.error(f"\033[91m[EXCEPTION]\033[0m {request.method} {request.url.path} ({duration_ms}ms): {exc}", exc_info=True)
-        return JSONResponse(status_code=500, content={"detail": f"Internal Server Error: {str(exc)}"})
+        error_id = uuid.uuid4().hex[:12]
+        logger.error(
+            f"[EXCEPTION error_id={error_id}] {request.method} {request.url.path} ({duration_ms}ms): {exc}",
+            exc_info=True,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Internal server error (ref: {error_id})", "error_id": error_id},
+        )
+
 
 # Include Routers
 app.include_router(courses.router)
@@ -113,20 +120,39 @@ TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+
 @app.get("/", response_class=HTMLResponse)
 def index_page(request: Request):
     """Renders main single-page application shell."""
     return templates.TemplateResponse(request=request, name="index.html")
 
+
 @app.get("/healthz")
-def health_check():
-    return {"status": "ok", "version": "0.6.1"}
+def health_check(db: sqlite3.Connection = Depends(get_db)):
+    """Verifies database connectivity and reports active schema version."""
+    try:
+        db.execute("SELECT 1;").fetchone()
+        schema_version = 0
+        try:
+            row = db.execute("SELECT MAX(version) FROM schema_migrations;").fetchone()
+            schema_version = int(row[0]) if (row and row[0] is not None) else 0
+        except sqlite3.OperationalError:
+            schema_version = 0
+        return {"status": "ok", "db": "ok", "version": "0.8.0", "schema_version": schema_version}
+    except Exception as exc:
+        logger.error(f"Health check DB failure: {exc}")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "db": "error", "version": "0.8.0"},
+        )
+
 
 def export_openapi_spec(output_path: Path = BASE_DIR / "openapi.json"):
     """Dumps locked OpenAPI specification to openapi.json."""
     spec = app.openapi()
     output_path.write_text(json.dumps(spec, indent=2), encoding="utf-8")
     return spec
+
 
 if __name__ == "__main__":
     export_openapi_spec()

@@ -121,13 +121,14 @@ Output pure JSON adhering to this exact schema:
     async with httpx.AsyncClient(timeout=25.0) as client:
         if api_key:
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+                _gemini_headers = {"x-goog-api-key": api_key}
                 payload = {
                     "contents": [{"parts": [{"text": prompt}]}],
                     "systemInstruction": {"parts": [{"text": system_instruction}]},
                     "generationConfig": {"responseMimeType": "application/json", "temperature": 0.1}
                 }
-                resp = await client.post(url, json=payload)
+                resp = await client.post(url, json=payload, headers=_gemini_headers)
                 if resp.status_code == 200:
                     raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
                     return json.loads(raw_text)
@@ -608,7 +609,8 @@ Output pure JSON adhering to this schema:
             if api_key:
                 try:
                     model_used = "gemini-2.5-flash"
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent?key={api_key}"
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent"
+                    _gemini_headers = {"x-goog-api-key": api_key}
                     payload = {
                         "contents": [{"parts": [{"text": prompt}]}],
                         "systemInstruction": {"parts": [{"text": system_instruction}]},
@@ -617,7 +619,7 @@ Output pure JSON adhering to this schema:
                             "temperature": 0.2
                         }
                     }
-                    resp = await client.post(url, json=payload)
+                    resp = await client.post(url, json=payload, headers=_gemini_headers)
                     if resp.status_code == 200:
                         data = resp.json()
                         raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -805,13 +807,14 @@ async def _generate_diagnostic_questions_llm(
     async with httpx.AsyncClient(timeout=25.0) as client:
         if api_key:
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+                _gemini_headers = {"x-goog-api-key": api_key}
                 payload = {
                     "contents": [{"parts": [{"text": user_prompt}]}],
                     "systemInstruction": {"parts": [{"text": system_instruction}]},
                     "generationConfig": {"responseMimeType": "application/json", "temperature": 0.15}
                 }
-                resp = await client.post(url, json=payload)
+                resp = await client.post(url, json=payload, headers=_gemini_headers)
                 if resp.status_code == 200:
                     raw_response = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
                     model_used = "gemini-2.5-flash"

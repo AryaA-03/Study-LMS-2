@@ -1,3 +1,5 @@
+import pytest
+pytestmark = pytest.mark.e2e
 """Playwright E2E tests for Milestone 4 features:
 - Grounded Citation Quiz with score calculation and mastery test-out
 - FSRS Spaced Repetition Flashcards with 3D card flip and interval ratings

@@ -163,18 +163,27 @@ def test_instant_repack_zero_llm_and_content_preservation(temp_db, monkeypatch):
     """Verifies that editing exam date (14d -> 7d -> 20d), minutes_per_day, or playback speed
     makes ZERO LLM calls, preserves notes, quizzes, and completed status, and supports 1-click Undo.
     """
-    import requests
-    orig_post = requests.post
+    import httpx
+    orig_sync_post = httpx.Client.post
+    orig_async_post = httpx.AsyncClient.post
     llm_call_count = [0]
 
-    def mock_post(*args, **kwargs):
+    def mock_sync_post(self, *args, **kwargs):
         url = args[0] if args else kwargs.get("url", "")
         if any(h in str(url) for h in ["groq.com", "googleapis.com", "openai.com"]):
             llm_call_count[0] += 1
             raise RuntimeError(f"LLM network call attempted to {url} during deterministic schedule repack!")
-        return orig_post(*args, **kwargs)
+        return orig_sync_post(self, *args, **kwargs)
 
-    monkeypatch.setattr("requests.post", mock_post)
+    async def mock_async_post(self, *args, **kwargs):
+        url = args[0] if args else kwargs.get("url", "")
+        if any(h in str(url) for h in ["groq.com", "googleapis.com", "openai.com"]):
+            llm_call_count[0] += 1
+            raise RuntimeError(f"LLM network call attempted to {url} during deterministic schedule repack!")
+        return await orig_async_post(self, *args, **kwargs)
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", mock_async_post)
+    monkeypatch.setattr(httpx.Client, "post", mock_sync_post)
 
     client = TestClient(app)
     today = date.today()

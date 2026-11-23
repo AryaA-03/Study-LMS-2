@@ -213,7 +213,8 @@ async def generate_llm_grounded_answer(
         async with httpx.AsyncClient(timeout=30.0) as client:
             if key and not raw_answer:
                 try:
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+                    _gemini_headers = {"x-goog-api-key": key}
                     payload = {
                         "contents": [{
                             "parts": [{
@@ -225,7 +226,7 @@ async def generate_llm_grounded_answer(
                             "maxOutputTokens": 1024,
                         }
                     }
-                    resp = await client.post(url, json=payload)
+                    resp = await client.post(url, json=payload, headers=_gemini_headers)
                     if resp.status_code == 200:
                         result = resp.json()
                         candidates = result.get("candidates", [])

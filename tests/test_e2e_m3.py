@@ -1,3 +1,5 @@
+import pytest
+pytestmark = pytest.mark.e2e
 """Playwright E2E tests for Milestone 3 features:
 - Multi-source pills in Sources Tray (YouTube, PDF, Web)
 - Add Source Modal

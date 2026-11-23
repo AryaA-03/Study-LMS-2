@@ -266,14 +266,15 @@ async def generate_cram_sheet_with_llm(
             # Each is tried independently so a quota/rate-limit error on one falls through to the next
             if gemini_key:
                 try:
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+                    _gemini_headers = {"x-goog-api-key": gemini_key}
                     payload = {
                         "contents": [
                             {"role": "user", "parts": [{"text": f"{system_instruction}\n\n{user_prompt}"}]}
                         ],
                         "generationConfig": {"temperature": 0.2, "maxOutputTokens": 3000}
                     }
-                    resp = await client.post(url, json=payload)
+                    resp = await client.post(url, json=payload, headers=_gemini_headers)
                     if resp.status_code == 200:
                         data = resp.json()
                         candidates = data.get("candidates", [])

@@ -1,3 +1,5 @@
+import pytest
+pytestmark = pytest.mark.e2e
 """Playwright and API test suite for the 3-Way Lesson Filter (All vs Concepts vs Examples/Applications).
 
 Validates:
@@ -16,7 +18,7 @@ import urllib.request
 from pathlib import Path
 import pytest
 import uvicorn
-from playwright.sync_api import sync_playwright
+sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
 
 from backend.main import app
 from backend.database import get_db, init_connection

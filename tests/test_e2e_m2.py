@@ -1,3 +1,5 @@
+import pytest
+pytestmark = pytest.mark.e2e
 """Playwright E2E tests for Milestone 2 features:
 - Grounded Study Notes with clickable [MM:SS] player seek links
 - Personal editable notes with auto-save

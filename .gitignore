@@ -11,9 +11,11 @@
 *.sqlite
 *.sqlite3
 
-# Runtime Data Directories
+# Runtime Data & Verification Directories
 data/
 data-dev/
+data-test/
+preview_screenshots/
 
 # Python Virtual Environments & Bytecode
 .venv/

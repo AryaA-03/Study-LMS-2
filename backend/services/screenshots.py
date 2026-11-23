@@ -55,7 +55,7 @@ def extract_frame_ffmpeg(
     """Extracts a single 480p JPEG frame at timestamp_sec via ffmpeg."""
     cmd = [
         ffmpeg_bin,
-        "-ss", str(timestamp_sec),
+        "-protocol_whitelist", "https,tls,tcp", "-ss", str(timestamp_sec),
         "-i", stream_url,
         "-frames:v", "1",
         "-vf", "scale=480:-1",

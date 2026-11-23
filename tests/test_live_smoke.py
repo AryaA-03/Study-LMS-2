@@ -1,3 +1,5 @@
+import pytest
+pytestmark = pytest.mark.live
 """Live smoke test for user-specified YouTube anchors:
 
 1. TOC Playlist: https://youtube.com/playlist?list=PLBlnK6fEyqRgp46KUv4ZY69yXmpwKOIev

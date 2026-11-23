@@ -1,3 +1,5 @@
+import pytest
+pytestmark = pytest.mark.e2e
 """Playwright UI verification test for Concept Partitioning, Instant Deterministic Day Repacking,
 Timestamp Seeking in Notes, Quiz Replay, and Whole-Video Master Cheat Sheet.
 
@@ -17,7 +19,7 @@ from pathlib import Path
 from datetime import date, timedelta
 import pytest
 import uvicorn
-from playwright.sync_api import sync_playwright
+sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
 
 from backend.main import app
 from backend.database import get_db, init_connection

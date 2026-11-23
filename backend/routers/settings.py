@@ -1,3 +1,8 @@
+import os
+import tempfile
+from starlette.background import BackgroundTask
+from backend.infra.net_guard import validate_ollama_url
+from backend.migrations.runner import create_verified_online_backup
 """System settings, yt-dlp maintenance, and storage guard router."""
 
 import os
@@ -95,6 +100,8 @@ def update_settings(
     db: sqlite3.Connection = Depends(get_db),
 ):
     if req.cookies_browser is not None:
+        if req.cookies_browser not in ("", "chrome", "firefox", "safari", "edge", "brave", "chromium"):
+            raise HTTPException(status_code=422, detail="Unsupported cookies_browser value.")
         db.execute(
             """
             INSERT INTO system_settings (key, value, updated_at)
@@ -149,7 +156,10 @@ def update_settings(
     if req.ollama_base_url: env_updates["OLLAMA_BASE_URL"] = req.ollama_base_url
     if req.ollama_model: env_updates["OLLAMA_MODEL"] = req.ollama_model
     if env_updates:
-        update_env_file(env_updates)
+        try:
+            update_env_file(env_updates)
+        except ValueError as ve:
+            raise HTTPException(status_code=422, detail=str(ve))
 
     return {"success": True, "message": "Settings updated successfully."}
 
@@ -256,7 +266,11 @@ async def test_connection(req: TestConnectionRequest):
             )
 
     elif provider == "ollama":
-        base_url = req.base_url or ENV_VARS.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        raw_ollama = req.base_url or ENV_VARS.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        try:
+            base_url = validate_ollama_url(raw_ollama)
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=str(ve))
         try:
             async with httpx.AsyncClient(timeout=8.0) as client:
                 r = await client.get(f"{base_url.rstrip('/')}/api/tags")
@@ -311,7 +325,10 @@ def update_api_keys(keys: Dict[str, str]):
     }
     filtered_updates = {k: v for k, v in keys.items() if k in allowed_keys}
     if filtered_updates:
-        update_env_file(filtered_updates)
+        try:
+            update_env_file(filtered_updates)
+        except ValueError as ve:
+            raise HTTPException(status_code=422, detail=str(ve))
     return {"success": True, "message": "API keys and model configurations updated securely in .env"}
 
 
@@ -330,10 +347,14 @@ def download_sqlite_backup(request: Request):
     if not DB_PATH.exists():
         raise HTTPException(status_code=404, detail="Database file not found")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    tmp_fd, tmp_backup = tempfile.mkstemp(prefix="learn_lms_backup_", suffix=".db")
+    os.close(tmp_fd)
+    create_verified_online_backup(DB_PATH, Path(tmp_backup))
     return FileResponse(
-        path=str(DB_PATH),
+        path=tmp_backup,
         filename=f"learn_lms_backup_{ts}.db",
         media_type="application/vnd.sqlite3",
+        background=BackgroundTask(lambda p=tmp_backup: os.path.exists(p) and os.unlink(p)),
     )
 
 
@@ -341,7 +362,11 @@ def download_sqlite_backup(request: Request):
 def vacuum_database(db: sqlite3.Connection = Depends(get_db)):
     """Runs SQLite VACUUM to reclaim free space on disk."""
     try:
-        db.execute("VACUUM;")
+        vconn = sqlite3.connect(str(DB_PATH), isolation_level=None, timeout=60.0)
+        try:
+            vconn.execute("VACUUM;")
+        finally:
+            vconn.close()
         db_size = DB_PATH.stat().st_size if DB_PATH.exists() else 0
         return {
             "success": True,

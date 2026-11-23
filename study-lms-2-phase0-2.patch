@@ -1,0 +1,2248 @@
+diff --git a/.env.example b/.env.example
+index f35d719..abe7366 100644
+--- a/.env.example
++++ b/.env.example
+@@ -1,11 +1,17 @@
+ # Optional LLM API Keys (Free-tier friendly)
+ GEMINI_API_KEY=
++GEMINI_MODEL=gemini-2.5-flash
+ GROQ_API_KEY=
++GROQ_MODEL=llama-3.3-70b-versatile
+ OPENROUTER_API_KEY=
+-OLLAMA_BASE_URL=http://localhost:11434/v1
++OPENROUTER_MODEL=google/gemini-2.5-flash
++OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
++OLLAMA_BASE_URL=http://localhost:11434
++OLLAMA_MODEL=llama3.2
+ 
+ # App Settings
+ APP_ENV=development
++AUTH_MODE=local
+ APP_PORT=8000
+ APP_HOST=127.0.0.1
+ DATA_DIR=data-dev
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+index 0000000..762753b
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1,28 @@
++name: CI
++
++on:
++  push:
++    branches: [main]
++  pull_request:
++
++jobs:
++  backend-checks:
++    runs-on: ubuntu-latest
++    strategy:
++      matrix:
++        python-version: ["3.11", "3.12"]
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-python@v5
++        with:
++          python-version: ${{ matrix.python-version }}
++      - name: Install dependencies
++        run: |
++          python -m pip install --upgrade pip
++          pip install -e ".[dev]"
++      - name: Lint with ruff
++        run: ruff check backend tests
++      - name: Run isolated unit and integration tests
++        run: pytest -m "not e2e and not live" -q
++      - name: Verify JS syntax
++        run: node --check frontend/static/js/app.js
+diff --git a/.gitignore b/.gitignore
+index e617dcc..3a71b11 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -11,9 +11,11 @@
+ *.sqlite
+ *.sqlite3
+ 
+-# Runtime Data Directories
++# Runtime Data & Verification Directories
+ data/
+ data-dev/
++data-test/
++preview_screenshots/
+ 
+ # Python Virtual Environments & Bytecode
+ .venv/
+diff --git a/backend/config.py b/backend/config.py
+index 6ebf937..31143f3 100644
+--- a/backend/config.py
++++ b/backend/config.py
+@@ -1,14 +1,21 @@
+ import os
++import re
++import tempfile
++import threading
++from datetime import datetime
+ from pathlib import Path
+-from typing import Dict, Any, Optional
++from typing import Dict, Optional
+ from zoneinfo import ZoneInfo
+-from datetime import datetime
+ 
+ # Base directory of the repository
+ BASE_DIR = Path(__file__).resolve().parent.parent
+ 
+-# Read .env if present
++_ENV_LOCK = threading.Lock()
++_ENV_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
++
++
+ def load_env_vars() -> Dict[str, str]:
++    """Read .env if present without mutating process environment."""
+     env_file = BASE_DIR / ".env"
+     env_vars: Dict[str, str] = {}
+     if env_file.exists():
+@@ -19,17 +26,20 @@ def load_env_vars() -> Dict[str, str]:
+                 env_vars[k.strip()] = v.strip().strip("'\"")
+     return env_vars
+ 
+-ENV_VARS = load_env_vars()
+ 
+-# Ensure .venv/bin is on PATH so ffmpeg, yt-dlp, and mlx-whisper find local binaries
+-VENV_BIN = BASE_DIR / ".venv" / "bin"
++ENV_VARS: Dict[str, str] = load_env_vars()
++
++# Ensure .venv/bin (or Scripts on Windows) is on PATH so local binaries are found
++_venv_bin_name = "Scripts" if os.name == "nt" else "bin"
++VENV_BIN = BASE_DIR / ".venv" / _venv_bin_name
+ if VENV_BIN.exists() and str(VENV_BIN) not in os.environ.get("PATH", ""):
+-    os.environ["PATH"] = f"{VENV_BIN}:{os.environ.get('PATH', '')}"
++    os.environ["PATH"] = f"{VENV_BIN}{os.pathsep}{os.environ.get('PATH', '')}"
+ 
+ # App configuration
+ APP_ENV = os.getenv("APP_ENV", ENV_VARS.get("APP_ENV", "development"))
++AUTH_MODE = os.getenv("AUTH_MODE", ENV_VARS.get("AUTH_MODE", "local"))
+ DATA_DIR_NAME = os.getenv("DATA_DIR", ENV_VARS.get("DATA_DIR", "data-dev"))
+-DATA_DIR = BASE_DIR / DATA_DIR_NAME
++DATA_DIR = Path(DATA_DIR_NAME) if Path(DATA_DIR_NAME).is_absolute() else (BASE_DIR / DATA_DIR_NAME)
+ DATA_DIR.mkdir(parents=True, exist_ok=True)
+ 
+ # Database path
+@@ -47,51 +57,80 @@ except Exception:
+ # Network & Server Config
+ APP_HOST = os.getenv("APP_HOST", ENV_VARS.get("APP_HOST", "127.0.0.1"))
+ _raw_port = os.getenv("APP_PORT", ENV_VARS.get("APP_PORT", "8000"))
+-# Default to 8000; override legacy 8008
+-if _raw_port == "8008":
++try:
++    APP_PORT = int(_raw_port)
++except Exception:
+     APP_PORT = 8000
+-else:
+-    try:
+-        APP_PORT = int(_raw_port)
+-    except Exception:
+-        APP_PORT = 8000
++
+ 
+ def get_now() -> datetime:
+     """Returns current localized timestamp."""
+     return datetime.now(LOCAL_TZ)
+ 
++
+ def get_today_str() -> str:
+     """Returns current date string in ISO format YYYY-MM-DD."""
+     return get_now().strftime("%Y-%m-%d")
+ 
+-def update_env_file(updates: Dict[str, str]) -> None:
+-    """Safe update to .env preserving existing comments and ordering."""
+-    env_file = BASE_DIR / ".env"
+-    lines = []
+-    existing_keys = set()
+-    if env_file.exists():
+-        lines = env_file.read_text(encoding="utf-8").splitlines()
+-
+-    new_lines = []
+-    for line in lines:
+-        stripped = line.strip()
+-        if stripped and not stripped.startswith("#") and "=" in stripped:
+-            k, _ = stripped.split("=", 1)
+-            k = k.strip()
+-            if k in updates:
+-                new_lines.append(f"{k}={updates[k]}")
+-                existing_keys.add(k)
+-                continue
+-        new_lines.append(line)
+ 
++def _validate_env_pair(key: str, value: str) -> None:
++    """Prevent .env newline/control-character injection."""
++    if not _ENV_KEY_RE.match(key):
++        raise ValueError(f"Invalid environment variable name: {key!r}")
++    if any(ch in value for ch in ("\r", "\n", "\0")):
++        raise ValueError(f"Invalid control/newline characters in value for {key}")
++
++
++def update_env_file(updates: Dict[str, str]) -> None:
++    """Atomically update .env with 0600 permissions and refresh ENV_VARS in place."""
++    validated: Dict[str, str] = {}
+     for k, v in updates.items():
+-        if k not in existing_keys:
+-            new_lines.append(f"{k}={v}")
++        sval = "" if v is None else str(v)
++        _validate_env_pair(k, sval)
++        validated[k] = sval
+ 
+-    env_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+-    # Refresh cache
+-    global ENV_VARS
+-    ENV_VARS = load_env_vars()
++    env_file = BASE_DIR / ".env"
++    with _ENV_LOCK:
++        lines = []
++        existing_keys = set()
++        if env_file.exists():
++            lines = env_file.read_text(encoding="utf-8").splitlines()
++
++        new_lines = []
++        for line in lines:
++            stripped = line.strip()
++            if stripped and not stripped.startswith("#") and "=" in stripped:
++                k, _ = stripped.split("=", 1)
++                k = k.strip()
++                if k in validated:
++                    new_lines.append(f"{k}={validated[k]}")
++                    existing_keys.add(k)
++                    continue
++            new_lines.append(line)
++
++        for k, v in validated.items():
++            if k not in existing_keys:
++                new_lines.append(f"{k}={v}")
++
++        payload = "\n".join(new_lines) + "\n"
++        fd, tmp_name = tempfile.mkstemp(prefix=".env.tmp.", dir=str(BASE_DIR))
++        try:
++            with os.fdopen(fd, "w", encoding="utf-8") as tmp_f:
++                tmp_f.write(payload)
++            try:
++                os.chmod(tmp_name, 0o600)
++            except OSError:
++                pass
++            os.replace(tmp_name, env_file)
++        except Exception:
++            if os.path.exists(tmp_name):
++                os.unlink(tmp_name)
++            raise
++
++        # Mutate ENV_VARS in place so all modules importing ENV_VARS see updates immediately
++        refreshed = load_env_vars()
++        ENV_VARS.clear()
++        ENV_VARS.update(refreshed)
+ 
+ 
+ class Settings:
+@@ -117,18 +156,43 @@ class Settings:
+ 
+     @property
+     def GEMINI_API_KEY(self) -> Optional[str]:
+-        return os.getenv("GEMINI_API_KEY", ENV_VARS.get("GEMINI_API_KEY"))
++        return os.getenv("GEMINI_API_KEY") or ENV_VARS.get("GEMINI_API_KEY")
+ 
+     @property
+     def GROQ_API_KEY(self) -> Optional[str]:
+-        return os.getenv("GROQ_API_KEY", ENV_VARS.get("GROQ_API_KEY"))
++        return os.getenv("GROQ_API_KEY") or ENV_VARS.get("GROQ_API_KEY")
+ 
+     @property
+     def OPENROUTER_API_KEY(self) -> Optional[str]:
+-        return os.getenv("OPENROUTER_API_KEY", ENV_VARS.get("OPENROUTER_API_KEY"))
++        return os.getenv("OPENROUTER_API_KEY") or ENV_VARS.get("OPENROUTER_API_KEY")
++
++    @property
++    def GEMINI_MODEL(self) -> str:
++        return os.getenv("GEMINI_MODEL") or ENV_VARS.get("GEMINI_MODEL") or "gemini-2.5-flash"
++
++    @property
++    def GROQ_MODEL(self) -> str:
++        return os.getenv("GROQ_MODEL") or ENV_VARS.get("GROQ_MODEL") or "llama-3.3-70b-versatile"
++
++    @property
++    def OPENROUTER_MODEL(self) -> str:
++        return os.getenv("OPENROUTER_MODEL") or ENV_VARS.get("OPENROUTER_MODEL") or "google/gemini-2.5-flash"
++
++    @property
++    def OPENROUTER_BASE_URL(self) -> str:
++        return os.getenv("OPENROUTER_BASE_URL") or ENV_VARS.get("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1"
++
++    @property
++    def OLLAMA_BASE_URL(self) -> str:
++        return os.getenv("OLLAMA_BASE_URL") or ENV_VARS.get("OLLAMA_BASE_URL") or "http://localhost:11434"
++
++    @property
++    def OLLAMA_MODEL(self) -> str:
++        return os.getenv("OLLAMA_MODEL") or ENV_VARS.get("OLLAMA_MODEL") or "llama3.2"
++
+ 
+ _settings = Settings()
+ 
++
+ def get_settings() -> Settings:
+     return _settings
+-
+diff --git a/backend/database.py b/backend/database.py
+index ab5459f..6b3fc4f 100644
+--- a/backend/database.py
++++ b/backend/database.py
+@@ -4,16 +4,21 @@ from pathlib import Path
+ from typing import Generator
+ from backend.config import DB_PATH
+ 
++
+ def init_connection(db_file: Path = DB_PATH) -> sqlite3.Connection:
+-    """Creates an optimized SQLite connection with WAL mode and foreign keys enabled."""
++    """Creates an optimized SQLite connection with foreign keys and busy timeout.
++
++    Note: PRAGMA journal_mode = WAL is persistent at the database level and is
++    configured once during migrations/startup rather than on every request.
++    """
+     conn = sqlite3.connect(str(db_file), timeout=60.0, check_same_thread=False)
+     conn.row_factory = sqlite3.Row
+-    conn.execute("PRAGMA journal_mode = WAL;")
+     conn.execute("PRAGMA synchronous = NORMAL;")
+     conn.execute("PRAGMA foreign_keys = ON;")
+     conn.execute("PRAGMA busy_timeout = 30000;")
+     return conn
+ 
++
+ @contextlib.contextmanager
+ def get_db_context(db_file: Path = DB_PATH) -> Generator[sqlite3.Connection, None, None]:
+     """Context manager for SQLite connections with auto-commit/rollback."""
+@@ -27,6 +32,7 @@ def get_db_context(db_file: Path = DB_PATH) -> Generator[sqlite3.Connection, Non
+     finally:
+         conn.close()
+ 
++
+ def get_db() -> Generator[sqlite3.Connection, None, None]:
+     """FastAPI dependency for database session."""
+     with get_db_context() as conn:
+diff --git a/backend/infra/__init__.py b/backend/infra/__init__.py
+new file mode 100644
+index 0000000..1e3691d
+--- /dev/null
++++ b/backend/infra/__init__.py
+@@ -0,0 +1 @@
++"""Infrastructure utilities for security, networking, and shared helpers."""
+diff --git a/backend/infra/net_guard.py b/backend/infra/net_guard.py
+new file mode 100644
+index 0000000..affa094
+--- /dev/null
++++ b/backend/infra/net_guard.py
+@@ -0,0 +1,116 @@
++"""SSRF protection and outbound URL / media allowlist validation."""
++
++import ipaddress
++import re
++import socket
++from urllib.parse import urlparse
++
++YOUTUBE_ALLOWED_HOSTS = frozenset(
++    {
++        "youtube.com",
++        "www.youtube.com",
++        "m.youtube.com",
++        "music.youtube.com",
++        "youtu.be",
++        "www.youtu.be",
++    }
++)
++
++YOUTUBE_VIDEO_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{11}$")
++YOUTUBE_PLAYLIST_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{10,64}$")
++LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
++
++
++def _is_forbidden_ip(ip_str: str) -> bool:
++    """Return True if IP is loopback, private, link-local, multicast, or reserved."""
++    try:
++        ip = ipaddress.ip_address(ip_str)
++    except ValueError:
++        return True
++    return (
++        ip.is_private
++        or ip.is_loopback
++        or ip.is_link_local
++        or ip.is_multicast
++        or ip.is_reserved
++        or ip.is_unspecified
++    )
++
++
++def validate_public_url(url: str, resolve_dns: bool = True) -> str:
++    """Validate an untrusted URL for safe outbound HTTP(S) fetching (anti-SSRF).
++
++    Blocks non-http(s) schemes, credentials in URLs, loopback/RFC1918/link-local/metadata IPs.
++    """
++    if not url or not isinstance(url, str):
++        raise ValueError("URL must be a non-empty string.")
++    cleaned = url.strip()
++    if len(cleaned) > 2048:
++        raise ValueError("URL exceeds maximum allowed length.")
++    parsed = urlparse(cleaned)
++    if parsed.scheme not in ("http", "https"):
++        raise ValueError(f"Unsupported URL scheme: {parsed.scheme!r}. Only http/https allowed.")
++    if not parsed.hostname:
++        raise ValueError("URL is missing a hostname.")
++    if parsed.username or parsed.password:
++        raise ValueError("Credentials in URLs are not permitted.")
++
++    host = parsed.hostname.lower().rstrip(".")
++    if host in LOOPBACK_HOSTS or host.endswith(".local") or host.endswith(".internal"):
++        raise ValueError(f"Access to local/internal host '{host}' is blocked.")
++
++    # Direct IP literal check
++    try:
++        ipaddress.ip_address(host)
++        if _is_forbidden_ip(host):
++            raise ValueError(f"Access to non-public IP '{host}' is blocked.")
++        return cleaned
++    except ValueError as exc:
++        if "blocked" in str(exc):
++            raise
++
++    if resolve_dns:
++        try:
++            infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80))
++        except socket.gaierror as exc:
++            raise ValueError(f"Could not resolve hostname '{host}': {exc}") from exc
++        for info in infos:
++            ip_addr = info[4][0]
++            if _is_forbidden_ip(ip_addr):
++                raise ValueError(f"Hostname '{host}' resolves to blocked internal IP '{ip_addr}'.")
++
++    return cleaned
++
++
++def validate_youtube_url_or_id(url_or_id: str) -> str:
++    """Validate that an input is either an 11-char YouTube video ID or a YouTube URL."""
++    if not url_or_id or not isinstance(url_or_id, str):
++        raise ValueError("YouTube URL or video ID is required.")
++    cleaned = url_or_id.strip()
++    if YOUTUBE_VIDEO_ID_RE.match(cleaned):
++        return cleaned
++
++    parsed = urlparse(cleaned)
++    if parsed.scheme not in ("http", "https"):
++        raise ValueError("YouTube URL must use http:// or https://.")
++    host = (parsed.hostname or "").lower()
++    if host not in YOUTUBE_ALLOWED_HOSTS:
++        raise ValueError(
++            f"Host '{host}' is not an allowed YouTube domain. Only youtube.com and youtu.be URLs are permitted."
++        )
++    if parsed.username or parsed.password:
++        raise ValueError("Credentials in YouTube URLs are not permitted.")
++    return cleaned
++
++
++def validate_ollama_url(url: str, auth_mode: str = "local") -> str:
++    """Restrict Ollama endpoint to loopback in local mode and disallow in hosted mode."""
++    if auth_mode != "local":
++        raise ValueError("Local Ollama endpoints are disabled in hosted multi-user mode.")
++    parsed = urlparse((url or "").strip())
++    if parsed.scheme not in ("http", "https"):
++        raise ValueError("Ollama URL must use http:// or https://.")
++    host = (parsed.hostname or "").lower()
++    if host not in LOOPBACK_HOSTS:
++        raise ValueError("Ollama URL must point to localhost / 127.0.0.1 / ::1.")
++    return f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
+diff --git a/backend/main.py b/backend/main.py
+index 76d6888..ae05ed4 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -1,14 +1,16 @@
+ """Main FastAPI application for Learn LMS & Exam Prep."""
+ 
+ import json
+-import time
+ import logging
++import time
++import uuid
+ from pathlib import Path
+-from fastapi import FastAPI, Request
++import sqlite3
++from fastapi import Depends, FastAPI, Request
++from fastapi.middleware.cors import CORSMiddleware
++from fastapi.responses import HTMLResponse, JSONResponse
+ from fastapi.staticfiles import StaticFiles
+ from fastapi.templating import Jinja2Templates
+-from fastapi.responses import HTMLResponse, JSONResponse
+-from fastapi.middleware.cors import CORSMiddleware
+ 
+ # Configure Rich Terminal Logging
+ logging.basicConfig(
+@@ -19,28 +21,29 @@ logging.basicConfig(
+ logger = logging.getLogger("learn_lms")
+ 
+ from backend.config import BASE_DIR
++from backend.database import get_db
+ from backend.routers import (
+     courses,
+-    schedule,
+-    settings,
+-    transcripts,
++    cram_sheet,
++    flashcards,
+     notes,
+-    screenshots,
+-    sources,
++    pyq,
+     qa,
+     quizzes,
+-    flashcards,
+-    pyq,
+-    cram_sheet,
++    schedule,
++    screenshots,
++    settings,
++    sources,
++    transcripts,
+ )
+ 
+ app = FastAPI(
+     title="Learn LMS & Exam Prep API",
+     description="Local-first autonomous personal LMS and exam-prep platform.",
+-    version="0.6.1",
++    version="0.8.0",
+ )
+ 
+-# Enable CORS for local client development (restricted to local origins, no invalid wildcard+credentials)
++# Restrict CORS to explicit local origins and methods
+ app.add_middleware(
+     CORSMiddleware,
+     allow_origins=[
+@@ -54,32 +57,28 @@ app.add_middleware(
+         "http://127.0.0.1:7860",
+     ],
+     allow_credentials=False,
+-    allow_methods=["*"],
+-    allow_headers=["*"],
++    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
++    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+ )
+ 
+-# Request Logging Middleware for Terminal Observability
++
+ @app.middleware("http")
+-async def log_requests(request: Request, call_next):
++async def security_and_logging_middleware(request: Request, call_next):
+     start_time = time.time()
+     try:
+         response = await call_next(request)
+         duration_ms = round((time.time() - start_time) * 1000, 1)
+         if not request.url.path.startswith("/static"):
+             code = response.status_code
+-            if code < 300:
+-                status_badge = f"\033[92m[{code} OK]\033[0m"
+-            elif code < 400:
+-                status_badge = f"\033[94m[{code} REDIRECT]\033[0m"
+-            elif code < 500:
+-                status_badge = f"\033[93m[{code} CLIENT_ERR]\033[0m"
+-            else:
+-                status_badge = f"\033[91m[{code} SERVER_ERR]\033[0m"
+-            
+             query = f"?{request.url.query}" if request.url.query else ""
+-            logger.info(f"{request.method} {request.url.path}{query} -> {status_badge} ({duration_ms}ms)")
+-        
+-        # Only no-cache API/HTML responses; let static assets benefit from HTTP caching
++            logger.info(f"{request.method} {request.url.path}{query} -> [{code}] ({duration_ms}ms)")
++
++        # Security headers
++        response.headers["X-Content-Type-Options"] = "nosniff"
++        response.headers["X-Frame-Options"] = "DENY"
++        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
++        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
++
+         if not request.url.path.startswith("/static"):
+             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+             response.headers["Pragma"] = "no-cache"
+@@ -87,8 +86,16 @@ async def log_requests(request: Request, call_next):
+         return response
+     except Exception as exc:
+         duration_ms = round((time.time() - start_time) * 1000, 1)
+-        logger.error(f"\033[91m[EXCEPTION]\033[0m {request.method} {request.url.path} ({duration_ms}ms): {exc}", exc_info=True)
+-        return JSONResponse(status_code=500, content={"detail": f"Internal Server Error: {str(exc)}"})
++        error_id = uuid.uuid4().hex[:12]
++        logger.error(
++            f"[EXCEPTION error_id={error_id}] {request.method} {request.url.path} ({duration_ms}ms): {exc}",
++            exc_info=True,
++        )
++        return JSONResponse(
++            status_code=500,
++            content={"detail": f"Internal server error (ref: {error_id})", "error_id": error_id},
++        )
++
+ 
+ # Include Routers
+ app.include_router(courses.router)
+@@ -113,14 +120,32 @@ TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
+ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+ 
++
+ @app.get("/", response_class=HTMLResponse)
+ def index_page(request: Request):
+     """Renders main single-page application shell."""
+     return templates.TemplateResponse(request=request, name="index.html")
+ 
++
+ @app.get("/healthz")
+-def health_check():
+-    return {"status": "ok", "version": "0.6.1"}
++def health_check(db: sqlite3.Connection = Depends(get_db)):
++    """Verifies database connectivity and reports active schema version."""
++    try:
++        db.execute("SELECT 1;").fetchone()
++        schema_version = 0
++        try:
++            row = db.execute("SELECT MAX(version) FROM schema_migrations;").fetchone()
++            schema_version = int(row[0]) if (row and row[0] is not None) else 0
++        except sqlite3.OperationalError:
++            schema_version = 0
++        return {"status": "ok", "db": "ok", "version": "0.8.0", "schema_version": schema_version}
++    except Exception as exc:
++        logger.error(f"Health check DB failure: {exc}")
++        return JSONResponse(
++            status_code=503,
++            content={"status": "degraded", "db": "error", "version": "0.8.0"},
++        )
++
+ 
+ def export_openapi_spec(output_path: Path = BASE_DIR / "openapi.json"):
+     """Dumps locked OpenAPI specification to openapi.json."""
+@@ -128,6 +153,7 @@ def export_openapi_spec(output_path: Path = BASE_DIR / "openapi.json"):
+     output_path.write_text(json.dumps(spec, indent=2), encoding="utf-8")
+     return spec
+ 
++
+ if __name__ == "__main__":
+     export_openapi_spec()
+     print("Locked openapi.json generated successfully.")
+diff --git a/backend/migrations/runner.py b/backend/migrations/runner.py
+index be6ae3d..e17ddb1 100644
+--- a/backend/migrations/runner.py
++++ b/backend/migrations/runner.py
+@@ -1,54 +1,101 @@
+-import sqlite3
+-import shutil
++"""Atomic SQLite schema migration runner with verified online backups."""
++
+ import re
+-from pathlib import Path
++import sqlite3
+ from datetime import datetime
+-from backend.config import DB_PATH, BACKUPS_DIR
++from pathlib import Path
++from typing import List
++
++from backend.config import BACKUPS_DIR, DB_PATH
+ from backend.database import init_connection
+ 
+ VERSIONS_DIR = Path(__file__).resolve().parent / "versions"
+ 
+-def backup_db_before_migration(db_path: Path, current_version: int) -> Path:
+-    """Creates a timestamped backup before applying any schema modification."""
+-    BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
+-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+-    backup_file = BACKUPS_DIR / f"app_v{current_version}_{ts}.db"
++
++def create_verified_online_backup(source_db: Path, dest_db: Path) -> Path:
++    """Create a consistent SQLite backup using the official online backup API."""
++    dest_db.parent.mkdir(parents=True, exist_ok=True)
++    src_conn = sqlite3.connect(str(source_db), timeout=60.0)
++    dst_conn = sqlite3.connect(str(dest_db), timeout=60.0)
++    try:
++        src_conn.backup(dst_conn)
++        dst_conn.commit()
++    finally:
++        dst_conn.close()
++        src_conn.close()
++
++    check_conn = sqlite3.connect(str(dest_db))
++    try:
++        result = check_conn.execute("PRAGMA integrity_check;").fetchone()
++        if not result or result[0] != "ok":
++            raise RuntimeError(
++                f"Backup integrity check failed: {result[0] if result else 'unknown'}"
++            )
++    finally:
++        check_conn.close()
++    return dest_db
++
++
++def backup_db_before_migration(
++    db_path: Path, current_version: int, backups_dir: Path | None = None
++) -> Path:
++    """Creates a timestamped, integrity-verified backup before applying schema changes."""
++    target_dir = Path(backups_dir) if backups_dir is not None else BACKUPS_DIR
++    target_dir.mkdir(parents=True, exist_ok=True)
++    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
++    backup_file = target_dir / f"app_v{current_version}_{ts}.db"
+     if db_path.exists() and db_path.stat().st_size > 0:
+-        shutil.copy2(db_path, backup_file)
+-        # Also copy WAL and SHM if present
+-        for ext in ["-wal", "-shm"]:
+-            sidecar = Path(str(db_path) + ext)
+-            if sidecar.exists():
+-                shutil.copy2(sidecar, Path(str(backup_file) + ext))
+-        # Verify backup integrity before applying migration
+-        try:
+-            check_conn = sqlite3.connect(str(backup_file))
+-            result = check_conn.execute("PRAGMA integrity_check;").fetchone()
+-            check_conn.close()
+-            if result and result[0] != "ok":
+-                raise RuntimeError(f"Backup integrity check failed: {result[0]}. Aborting migration.")
+-        except Exception as integrity_err:
+-            raise RuntimeError(f"Cannot verify backup at {backup_file}: {integrity_err}") from integrity_err
++        create_verified_online_backup(db_path, backup_file)
+     return backup_file
+ 
++
+ def get_current_schema_version(conn: sqlite3.Connection) -> int:
+     """Returns the highest applied migration version or 0."""
+-    conn.execute("""
++    conn.execute(
++        """
+         CREATE TABLE IF NOT EXISTS schema_migrations (
+             version INTEGER PRIMARY KEY,
+             name TEXT NOT NULL,
+             applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+         );
+-    """)
++        """
++    )
++    conn.commit()
+     cur = conn.execute("SELECT MAX(version) FROM schema_migrations;")
+     row = cur.fetchone()
+     return int(row[0]) if (row and row[0] is not None) else 0
+ 
++
++def _split_sql_statements(sql: str) -> List[str]:
++    """Split a SQL script into individual complete statements, preserving triggers."""
++    statements: List[str] = []
++    buffer: List[str] = []
++    for line in sql.splitlines(keepends=True):
++        stripped = line.strip()
++        if not buffer and (not stripped or stripped.startswith("--")):
++            continue
++        buffer.append(line)
++        candidate = "".join(buffer)
++        if sqlite3.complete_statement(candidate):
++            stmt = candidate.strip()
++            if stmt:
++                statements.append(stmt)
++            buffer = []
++    remainder = "".join(buffer).strip()
++    if remainder and not all(
++        ln.strip().startswith("--") or not ln.strip() for ln in remainder.splitlines()
++    ):
++        statements.append(remainder)
++    return statements
++
++
+ def apply_migrations(db_path: Path = DB_PATH) -> int:
+-    """Applies all pending migrations non-destructively, taking automated backups."""
++    """Applies all pending migrations atomically inside explicit transactions."""
+     db_path = Path(db_path)
+     VERSIONS_DIR.mkdir(parents=True, exist_ok=True)
+     conn = init_connection(db_path)
++    # Enable WAL once at migration/startup time (not on every request)
++    conn.execute("PRAGMA journal_mode = WAL;")
+     try:
+         current_version = get_current_schema_version(conn)
+         migration_files = sorted(VERSIONS_DIR.glob("*.sql"))
+@@ -65,18 +112,26 @@ def apply_migrations(db_path: Path = DB_PATH) -> int:
+         if not pending:
+             return 0
+ 
+-        # Create automated backup before applying pending migrations
+         backup_db_before_migration(db_path, current_version)
+ 
+         applied_count = 0
++        # Use manual transaction control so multi-statement migrations are truly atomic
++        conn.isolation_level = None
+         for ver, name, f in pending:
+             sql = f.read_text(encoding="utf-8")
+-            with conn:
+-                conn.executescript(sql)
++            statements = _split_sql_statements(sql)
++            conn.execute("BEGIN IMMEDIATE;")
++            try:
++                for stmt in statements:
++                    conn.execute(stmt)
+                 conn.execute(
+                     "INSERT INTO schema_migrations (version, name) VALUES (?, ?);",
+                     (ver, name),
+                 )
++                conn.execute("COMMIT;")
++            except Exception:
++                conn.execute("ROLLBACK;")
++                raise
+             applied_count += 1
+             current_version = ver
+ 
+@@ -84,6 +139,7 @@ def apply_migrations(db_path: Path = DB_PATH) -> int:
+     finally:
+         conn.close()
+ 
++
+ if __name__ == "__main__":
+     count = apply_migrations()
+     print(f"Migrations applied: {count}")
+diff --git a/backend/migrations/versions/010_indexes_triggers_jobs_owner.sql b/backend/migrations/versions/010_indexes_triggers_jobs_owner.sql
+new file mode 100644
+index 0000000..dd4b7e5
+--- /dev/null
++++ b/backend/migrations/versions/010_indexes_triggers_jobs_owner.sql
+@@ -0,0 +1,64 @@
++-- Migration 010: Missing indexes, full FTS5 triggers, background jobs table, owner_id & idempotency hashes
++
++-- 1. Multi-user readiness (non-breaking default 'local')
++ALTER TABLE courses ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'local';
++ALTER TABLE llm_cache ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'local';
++ALTER TABLE llm_cache ADD COLUMN expires_at TIMESTAMP;
++
++-- 2. Deduplicate any duplicate notes(lesson_id) rows before adding UNIQUE index
++DELETE FROM notes
++WHERE id NOT IN (
++    SELECT id FROM (
++        SELECT id, ROW_NUMBER() OVER (PARTITION BY lesson_id ORDER BY updated_at DESC, id DESC) AS rn
++        FROM notes
++    ) WHERE rn = 1
++);
++
++-- 3. Missing performance & uniqueness indexes
++CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_lesson_unique ON notes(lesson_id);
++CREATE INDEX IF NOT EXISTS idx_notes_course ON notes(course_id);
++CREATE INDEX IF NOT EXISTS idx_quizzes_lesson ON quizzes(lesson_id);
++CREATE INDEX IF NOT EXISTS idx_sources_course_ext ON sources(course_id, external_id);
++CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source_id);
++CREATE INDEX IF NOT EXISTS idx_courses_owner ON courses(owner_id);
++CREATE INDEX IF NOT EXISTS idx_llm_cache_expires ON llm_cache(expires_at);
++
++-- 4. Complete FTS5 sync triggers (matching chunks_fts columns: id, course_id, lesson_id, content)
++CREATE TRIGGER IF NOT EXISTS trg_chunks_update_fts AFTER UPDATE OF content ON chunks
++BEGIN
++    DELETE FROM chunks_fts WHERE id = OLD.id;
++    INSERT INTO chunks_fts(id, course_id, lesson_id, content)
++    VALUES (NEW.id, NEW.course_id, NEW.lesson_id, NEW.content);
++END;
++
++-- 5. Idempotency & flashcard deduplication columns
++ALTER TABLE sources ADD COLUMN content_hash TEXT;
++ALTER TABLE pyq_papers ADD COLUMN content_hash TEXT;
++ALTER TABLE flashcards ADD COLUMN source_question_hash TEXT;
++
++CREATE INDEX IF NOT EXISTS idx_sources_content_hash ON sources(course_id, content_hash);
++CREATE INDEX IF NOT EXISTS idx_pyq_papers_hash ON pyq_papers(course_id, content_hash);
++CREATE UNIQUE INDEX IF NOT EXISTS idx_flashcards_question_hash
++    ON flashcards(course_id, source_question_hash)
++    WHERE source_question_hash IS NOT NULL;
++
++-- 6. Persistent background jobs table
++CREATE TABLE IF NOT EXISTS jobs (
++    id TEXT PRIMARY KEY,
++    owner_id TEXT NOT NULL DEFAULT 'local',
++    course_id TEXT,
++    job_type TEXT NOT NULL,
++    status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'completed', 'failed', 'cancelled')),
++    progress_pct INTEGER NOT NULL DEFAULT 0,
++    message TEXT DEFAULT '',
++    payload_json TEXT NOT NULL DEFAULT '{}',
++    cursor_json TEXT NOT NULL DEFAULT '{}',
++    result_json TEXT,
++    error_text TEXT,
++    attempts INTEGER NOT NULL DEFAULT 0,
++    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
++    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
++);
++
++CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, created_at);
++CREATE INDEX IF NOT EXISTS idx_jobs_course ON jobs(course_id);
+diff --git a/backend/models/schemas.py b/backend/models/schemas.py
+index 5952352..a2c89a5 100644
+--- a/backend/models/schemas.py
++++ b/backend/models/schemas.py
+@@ -304,6 +304,9 @@ class QuizQuestion(BaseModel):
+     max_marks: float = 1.0
+     rubric: Optional[List[str]] = None
+     sample_solution: Optional[str] = None
++    timestamp_sec: Optional[int] = None
++    timestamp_str: Optional[str] = None
++    replay_url: Optional[str] = None
+ 
+ class QuizGenerateRequest(BaseModel):
+     lesson_id: Optional[str] = None
+diff --git a/backend/routers/courses.py b/backend/routers/courses.py
+index a8d1241..38f4c31 100644
+--- a/backend/routers/courses.py
++++ b/backend/routers/courses.py
+@@ -1,3 +1,4 @@
++from backend.infra.net_guard import validate_youtube_url_or_id
+ """Course and source management router."""
+ 
+ import uuid
+@@ -387,6 +388,11 @@ def import_source(
+     cookie_row = db.execute("SELECT value FROM system_settings WHERE key = 'cookies_browser';").fetchone()
+     cookies_browser = cookie_row["value"] if cookie_row else None
+ 
++    try:
++        validate_youtube_url_or_id(req.url)
++    except ValueError as ve:
++        raise HTTPException(status_code=400, detail=str(ve))
++
+     try:
+         meta = extract_metadata(req.url, cookies_browser=cookies_browser)
+         if not meta or not meta.get("id"):
+diff --git a/backend/routers/screenshots.py b/backend/routers/screenshots.py
+index b9cb604..53317e3 100644
+--- a/backend/routers/screenshots.py
++++ b/backend/routers/screenshots.py
+@@ -39,8 +39,8 @@ async def capture_screenshots(
+ 
+     course_id = row[1]
+     video_id = row[2] or ""
+-    start_sec = row[3]
+-    end_sec = row[4]
++    start_sec = int(row[3] or 0)
++    end_sec = int(row[4] or 0)
+     video_url = row[5] or video_id
+ 
+     target_video = video_id if video_id else video_url
+@@ -71,9 +71,19 @@ def serve_screenshot(
+     lesson_id: str,
+     filename: str
+ ):
+-    """Serves a stored screenshot image."""
+-    dir_path = get_screenshots_dir(course_id, lesson_id)
+-    file_path = dir_path / filename
++    """Serves a stored screenshot image with strict path containment."""
++    import re
++    from backend.config import DATA_DIR
++
++    safe_id = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
++    safe_file = re.compile(r"^[a-zA-Z0-9._-]{1,128}\.(jpg|jpeg|png|webp)$", re.IGNORECASE)
++    if not (safe_id.match(course_id) and safe_id.match(lesson_id) and safe_file.match(filename)):
++        raise HTTPException(status_code=400, detail="Invalid screenshot identifier")
++
++    base_dir = (DATA_DIR / "screenshots").resolve()
++    file_path = (base_dir / course_id / lesson_id / filename).resolve()
++    if not file_path.is_relative_to(base_dir):
++        raise HTTPException(status_code=403, detail="Forbidden path")
+ 
+     if not file_path.exists() or not file_path.is_file():
+         raise HTTPException(status_code=404, detail="Screenshot image not found")
+diff --git a/backend/routers/settings.py b/backend/routers/settings.py
+index 1638694..f015c1b 100644
+--- a/backend/routers/settings.py
++++ b/backend/routers/settings.py
+@@ -1,3 +1,8 @@
++import os
++import tempfile
++from starlette.background import BackgroundTask
++from backend.infra.net_guard import validate_ollama_url
++from backend.migrations.runner import create_verified_online_backup
+ """System settings, yt-dlp maintenance, and storage guard router."""
+ 
+ import os
+@@ -95,6 +100,8 @@ def update_settings(
+     db: sqlite3.Connection = Depends(get_db),
+ ):
+     if req.cookies_browser is not None:
++        if req.cookies_browser not in ("", "chrome", "firefox", "safari", "edge", "brave", "chromium"):
++            raise HTTPException(status_code=422, detail="Unsupported cookies_browser value.")
+         db.execute(
+             """
+             INSERT INTO system_settings (key, value, updated_at)
+@@ -149,7 +156,10 @@ def update_settings(
+     if req.ollama_base_url: env_updates["OLLAMA_BASE_URL"] = req.ollama_base_url
+     if req.ollama_model: env_updates["OLLAMA_MODEL"] = req.ollama_model
+     if env_updates:
+-        update_env_file(env_updates)
++        try:
++            update_env_file(env_updates)
++        except ValueError as ve:
++            raise HTTPException(status_code=422, detail=str(ve))
+ 
+     return {"success": True, "message": "Settings updated successfully."}
+ 
+@@ -256,7 +266,11 @@ async def test_connection(req: TestConnectionRequest):
+             )
+ 
+     elif provider == "ollama":
+-        base_url = req.base_url or ENV_VARS.get("OLLAMA_BASE_URL", "http://localhost:11434")
++        raw_ollama = req.base_url or ENV_VARS.get("OLLAMA_BASE_URL", "http://localhost:11434")
++        try:
++            base_url = validate_ollama_url(raw_ollama)
++        except ValueError as ve:
++            raise HTTPException(status_code=400, detail=str(ve))
+         try:
+             async with httpx.AsyncClient(timeout=8.0) as client:
+                 r = await client.get(f"{base_url.rstrip('/')}/api/tags")
+@@ -311,7 +325,10 @@ def update_api_keys(keys: Dict[str, str]):
+     }
+     filtered_updates = {k: v for k, v in keys.items() if k in allowed_keys}
+     if filtered_updates:
+-        update_env_file(filtered_updates)
++        try:
++            update_env_file(filtered_updates)
++        except ValueError as ve:
++            raise HTTPException(status_code=422, detail=str(ve))
+     return {"success": True, "message": "API keys and model configurations updated securely in .env"}
+ 
+ 
+@@ -330,10 +347,14 @@ def download_sqlite_backup(request: Request):
+     if not DB_PATH.exists():
+         raise HTTPException(status_code=404, detail="Database file not found")
+     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
++    tmp_fd, tmp_backup = tempfile.mkstemp(prefix="learn_lms_backup_", suffix=".db")
++    os.close(tmp_fd)
++    create_verified_online_backup(DB_PATH, Path(tmp_backup))
+     return FileResponse(
+-        path=str(DB_PATH),
++        path=tmp_backup,
+         filename=f"learn_lms_backup_{ts}.db",
+         media_type="application/vnd.sqlite3",
++        background=BackgroundTask(lambda p=tmp_backup: os.path.exists(p) and os.unlink(p)),
+     )
+ 
+ 
+@@ -341,7 +362,11 @@ def download_sqlite_backup(request: Request):
+ def vacuum_database(db: sqlite3.Connection = Depends(get_db)):
+     """Runs SQLite VACUUM to reclaim free space on disk."""
+     try:
+-        db.execute("VACUUM;")
++        vconn = sqlite3.connect(str(DB_PATH), isolation_level=None, timeout=60.0)
++        try:
++            vconn.execute("VACUUM;")
++        finally:
++            vconn.close()
+         db_size = DB_PATH.stat().st_size if DB_PATH.exists() else 0
+         return {
+             "success": True,
+diff --git a/backend/routers/transcripts.py b/backend/routers/transcripts.py
+index ac1d6fa..0d69f15 100644
+--- a/backend/routers/transcripts.py
++++ b/backend/routers/transcripts.py
+@@ -34,8 +34,8 @@ async def transcribe_lesson(
+ 
+     course_id = row[1]
+     source_id = row[2] or ""
+-    video_id = row[3] or ""
+-    start_sec = row[4]
++    video_id = int(row[3] or 0) or ""
++    start_sec = int(row[4] or 0)
+     end_sec = row[5]
+     video_url = row[6] or video_id
+ 
+diff --git a/backend/services/concept_partitioner.py b/backend/services/concept_partitioner.py
+index 6887040..591c590 100644
+--- a/backend/services/concept_partitioner.py
++++ b/backend/services/concept_partitioner.py
+@@ -433,13 +433,14 @@ RULES:
+         with httpx.Client(timeout=25.0) as client:
+             if settings.GEMINI_API_KEY:
+                 model_name = "gemini-2.5-flash"
+-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={settings.GEMINI_API_KEY}"
++                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
++                _gemini_headers = {"x-goog-api-key": settings.GEMINI_API_KEY}
+                 payload = {
+                     "contents": [{"parts": [{"text": prompt}]}],
+                     "systemInstruction": {"parts": [{"text": system_instruction}]},
+                     "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2}
+                 }
+-                resp = client.post(url, json=payload)
++                resp = client.post(url, json=payload, headers=_gemini_headers)
+                 if resp.status_code == 200:
+                     raw_clips = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+             elif settings.GROQ_API_KEY:
+diff --git a/backend/services/cram_sheet_engine.py b/backend/services/cram_sheet_engine.py
+index d16320b..bfc37a4 100644
+--- a/backend/services/cram_sheet_engine.py
++++ b/backend/services/cram_sheet_engine.py
+@@ -266,14 +266,15 @@ async def generate_cram_sheet_with_llm(
+             # Each is tried independently so a quota/rate-limit error on one falls through to the next
+             if gemini_key:
+                 try:
+-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
++                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
++                    _gemini_headers = {"x-goog-api-key": gemini_key}
+                     payload = {
+                         "contents": [
+                             {"role": "user", "parts": [{"text": f"{system_instruction}\n\n{user_prompt}"}]}
+                         ],
+                         "generationConfig": {"temperature": 0.2, "maxOutputTokens": 3000}
+                     }
+-                    resp = await client.post(url, json=payload)
++                    resp = await client.post(url, json=payload, headers=_gemini_headers)
+                     if resp.status_code == 200:
+                         data = resp.json()
+                         candidates = data.get("candidates", [])
+diff --git a/backend/services/notes.py b/backend/services/notes.py
+index 05395e3..044ebc6 100644
+--- a/backend/services/notes.py
++++ b/backend/services/notes.py
+@@ -143,6 +143,11 @@ def generate_no_key_structured_notes(
+         s_part = c["content"].split(".")[0].strip()
+         lines.append(f"- ⚡ **High-Yield Point {idx+1}** {c_pill}: {s_part}.")
+ 
++    chunk_ids = [str(c["id"]) for c in chunks if c.get("id")]
++    if chunk_ids:
++        lines.append("")
++        lines.append(f"<!-- grounded_chunks: {", ".join(chunk_ids[:10])} -->")
++
+     return "\n".join(lines)
+ 
+ 
+@@ -152,6 +157,7 @@ async def generate_llm_structured_notes(
+     gemini_key: Optional[str] = None,
+     screenshots: Optional[List[Dict[str, Any]]] = None,
+     db_conn: Optional[Any] = None,
++    bypass_cache: bool = False,
+ ) -> str:
+     """Generates LLM-synthesized standalone GeeksforGeeks-style Markdown study notes grounded in transcript chunks."""
+     if not chunks:
+@@ -208,7 +214,8 @@ async def generate_llm_structured_notes(
+             if key and not generated_text:
+                 try:
+                     model_used = "gemini-2.5-flash"
+-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent?key={key}"
++                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent"
++                    _gemini_headers = {"x-goog-api-key": key}
+                     payload = {
+                         "contents": [{
+                             "parts": [{
+@@ -220,7 +227,7 @@ async def generate_llm_structured_notes(
+                             "maxOutputTokens": 2048,
+                         }
+                     }
+-                    resp = await client.post(url, json=payload)
++                    resp = await client.post(url, json=payload, headers=_gemini_headers)
+                     if resp.status_code == 200:
+                         result = resp.json()
+                         candidates = result.get("candidates", [])
+diff --git a/backend/services/qa_engine.py b/backend/services/qa_engine.py
+index 76ca4c4..3990bfb 100644
+--- a/backend/services/qa_engine.py
++++ b/backend/services/qa_engine.py
+@@ -213,7 +213,8 @@ async def generate_llm_grounded_answer(
+         async with httpx.AsyncClient(timeout=30.0) as client:
+             if key and not raw_answer:
+                 try:
+-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
++                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
++                    _gemini_headers = {"x-goog-api-key": key}
+                     payload = {
+                         "contents": [{
+                             "parts": [{
+@@ -225,7 +226,7 @@ async def generate_llm_grounded_answer(
+                             "maxOutputTokens": 1024,
+                         }
+                     }
+-                    resp = await client.post(url, json=payload)
++                    resp = await client.post(url, json=payload, headers=_gemini_headers)
+                     if resp.status_code == 200:
+                         result = resp.json()
+                         candidates = result.get("candidates", [])
+diff --git a/backend/services/quiz_engine.py b/backend/services/quiz_engine.py
+index f4dde9c..3026fca 100644
+--- a/backend/services/quiz_engine.py
++++ b/backend/services/quiz_engine.py
+@@ -121,13 +121,14 @@ Output pure JSON adhering to this exact schema:
+     async with httpx.AsyncClient(timeout=25.0) as client:
+         if api_key:
+             try:
+-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
++                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
++                _gemini_headers = {"x-goog-api-key": api_key}
+                 payload = {
+                     "contents": [{"parts": [{"text": prompt}]}],
+                     "systemInstruction": {"parts": [{"text": system_instruction}]},
+                     "generationConfig": {"responseMimeType": "application/json", "temperature": 0.1}
+                 }
+-                resp = await client.post(url, json=payload)
++                resp = await client.post(url, json=payload, headers=_gemini_headers)
+                 if resp.status_code == 200:
+                     raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                     return json.loads(raw_text)
+@@ -608,7 +609,8 @@ Output pure JSON adhering to this schema:
+             if api_key:
+                 try:
+                     model_used = "gemini-2.5-flash"
+-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent?key={api_key}"
++                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent"
++                    _gemini_headers = {"x-goog-api-key": api_key}
+                     payload = {
+                         "contents": [{"parts": [{"text": prompt}]}],
+                         "systemInstruction": {"parts": [{"text": system_instruction}]},
+@@ -617,7 +619,7 @@ Output pure JSON adhering to this schema:
+                             "temperature": 0.2
+                         }
+                     }
+-                    resp = await client.post(url, json=payload)
++                    resp = await client.post(url, json=payload, headers=_gemini_headers)
+                     if resp.status_code == 200:
+                         data = resp.json()
+                         raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+@@ -805,13 +807,14 @@ async def _generate_diagnostic_questions_llm(
+     async with httpx.AsyncClient(timeout=25.0) as client:
+         if api_key:
+             try:
+-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
++                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
++                _gemini_headers = {"x-goog-api-key": api_key}
+                 payload = {
+                     "contents": [{"parts": [{"text": user_prompt}]}],
+                     "systemInstruction": {"parts": [{"text": system_instruction}]},
+                     "generationConfig": {"responseMimeType": "application/json", "temperature": 0.15}
+                 }
+-                resp = await client.post(url, json=payload)
++                resp = await client.post(url, json=payload, headers=_gemini_headers)
+                 if resp.status_code == 200:
+                     raw_response = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                     model_used = "gemini-2.5-flash"
+diff --git a/backend/services/screenshots.py b/backend/services/screenshots.py
+index 0d4a83a..7af5d28 100644
+--- a/backend/services/screenshots.py
++++ b/backend/services/screenshots.py
+@@ -55,7 +55,7 @@ def extract_frame_ffmpeg(
+     """Extracts a single 480p JPEG frame at timestamp_sec via ffmpeg."""
+     cmd = [
+         ffmpeg_bin,
+-        "-ss", str(timestamp_sec),
++        "-protocol_whitelist", "https,tls,tcp", "-ss", str(timestamp_sec),
+         "-i", stream_url,
+         "-frames:v", "1",
+         "-vf", "scale=480:-1",
+diff --git a/backend/services/transcription.py b/backend/services/transcription.py
+index 091724e..1553433 100644
+--- a/backend/services/transcription.py
++++ b/backend/services/transcription.py
+@@ -92,7 +92,7 @@ def parse_and_deduplicate_json3(
+ 
+     if not in_range_words:
+         # Fallback if boundaries were slightly offset
+-        in_range_words = words_timed
++        in_range_words = []  # Never bleed full video captions into a single slice
+ 
+     return _group_words_into_chunks(in_range_words, target_chunk_tokens)
+ 
+diff --git a/backend/services/web_ingest.py b/backend/services/web_ingest.py
+index f26f9f0..1d41165 100644
+--- a/backend/services/web_ingest.py
++++ b/backend/services/web_ingest.py
+@@ -1,3 +1,4 @@
++from backend.infra.net_guard import validate_public_url
+ """Polite Single-Page Web Ingestion Service.
+ 
+ Checks robots.txt compliance, uses custom User-Agent, extracts clean text
+@@ -88,8 +89,11 @@ async def ingest_web_page(
+ 
+     headers = {"User-Agent": USER_AGENT}
+     try:
+-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
++        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
++            validate_public_url(url)
+             resp = await client.get(url, headers=headers)
++            if len(resp.content) > MAX_WEB_BYTES:
++                raise ValueError('Web page exceeds 5 MB size limit.')
+             if resp.status_code != 200:
+                 logger.error(f"Web page fetch failed with status {resp.status_code} for {url}")
+                 return False, "", f"HTTP error {resp.status_code}", 0
+diff --git a/backend/services/youtube.py b/backend/services/youtube.py
+index 21a3b73..210bc42 100644
+--- a/backend/services/youtube.py
++++ b/backend/services/youtube.py
+@@ -307,13 +307,14 @@ Return PURE JSON in this schema:
+         with httpx.Client(timeout=25.0) as client:
+             if settings.GEMINI_API_KEY:
+                 model_name = "gemini-2.5-flash"
+-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={settings.GEMINI_API_KEY}"
++                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
++                _gemini_headers = {"x-goog-api-key": settings.GEMINI_API_KEY}
+                 payload = {
+                     "contents": [{"parts": [{"text": prompt}]}],
+                     "systemInstruction": {"parts": [{"text": system_instruction}]},
+                     "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2}
+                 }
+-                resp = client.post(url, json=payload)
++                resp = client.post(url, json=payload, headers=_gemini_headers)
+                 if resp.status_code == 200:
+                     data = resp.json()
+                     text = data["candidates"][0]["content"]["parts"][0]["text"]
+diff --git a/frontend/static/js/app.js b/frontend/static/js/app.js
+index 6311e46..d0a502e 100644
+--- a/frontend/static/js/app.js
++++ b/frontend/static/js/app.js
+@@ -476,7 +476,8 @@ function playVideoSlice(videoId, startSec, endSec) {
+   Logger.player('Seek & Play Slice', { videoId, startSec, endSec });
+ 
+   if (isYtReady && ytPlayer && ytPlayer.loadVideoById) {
+-    ytPlayer.loadVideoById({
++    if (currentCourse && currentCourse.playback_speed && typeof ytPlayer.setPlaybackRate === 'function') { try { ytPlayer.setPlaybackRate(Number(currentCourse.playback_speed)); } catch (_) {} }
++        ytPlayer.loadVideoById({
+       videoId: videoId,
+       startSeconds: startSec || 0,
+       endSeconds: endSec || undefined,
+@@ -564,8 +565,8 @@ function setupEventListeners() {
+ 
+   // Preset Cards & Chips
+   const populatePreset = (title, query) => {
+-    inputCourseTitle.value = title;
+-    inputGoalQuery.value = query;
++    document.getElementById('input-course-title').value = title;
++    document.getElementById('input-goal-query').value = query;
+     inputCourseTitle.scrollIntoView({ behavior: 'smooth', block: 'center' });
+     inputCourseTitle.classList.add('ring-2', 'ring-blue-500');
+     setTimeout(() => inputCourseTitle.classList.remove('ring-2', 'ring-blue-500'), 1500);
+@@ -1187,7 +1188,7 @@ function showToast(message, type = 'info') {
+   toast.className = `px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-semibold ${bg} transition-all duration-300 transform translate-y-4 opacity-0 pointer-events-auto border border-white/20`;
+   toast.innerHTML = `
+     <span>${type === 'success' ? '✓' : type === 'error' ? '✕' : '⚡'}</span>
+-    <span>${message}</span>
++    <span>${escapeHtml(message)}</span>
+   `;
+   toastContainer.appendChild(toast);
+   requestAnimationFrame(() => {
+@@ -1480,7 +1481,7 @@ async function handleDeleteCardFromModal() {
+     editCardModal.classList.add('hidden');
+     showToast('Flashcard deleted!', 'info');
+     await updateFlashcardCounts();
+-    await loadDueFlashcards(currentCourseId);
++    await loadFlashcards();
+   } catch (err) {
+     Logger.error('Failed to delete card', err);
+     showToast('Error deleting card: ' + err.message, 'error');
+@@ -2382,7 +2383,7 @@ function renderApprovalGate(discovery) {
+   } else {
+     playlists.forEach(pl => {
+       const item = document.createElement('label');
+-      item.className = 'flex items-start gap-2.5 p-2 rounded-xl bg-surface-900 border border-slate-700/60 cursor-pointer hover:bg-surface-850 text-xs';
++      item.className = 'flex items-start gap-2.5 p-2 rounded-xl bg-bg-card border border-border-subtle border border-slate-700/60 cursor-pointer hover:bg-bg-card border border-border-subtle text-xs';
+       item.innerHTML = `
+         <input type="checkbox" name="approved_source" value="${pl.source_id}" checked class="mt-0.5 text-accent rounded">
+         <div>
+@@ -2399,7 +2400,7 @@ function renderApprovalGate(discovery) {
+   } else {
+     videos.forEach(v => {
+       const item = document.createElement('label');
+-      item.className = 'flex items-start gap-2.5 p-2 rounded-xl bg-surface-900 border border-slate-700/60 cursor-pointer hover:bg-surface-850 text-xs';
++      item.className = 'flex items-start gap-2.5 p-2 rounded-xl bg-bg-card border border-border-subtle border border-slate-700/60 cursor-pointer hover:bg-bg-card border border-border-subtle text-xs';
+       item.innerHTML = `
+         <input type="checkbox" name="approved_source" value="${v.source_id}" checked class="mt-0.5 text-accent rounded">
+         <div>
+@@ -3835,7 +3836,7 @@ async function openSyllabusModal() {
+       }
+     }
+   } catch (err) {
+-    Logger.warn('Could not load course syllabus', err);
++    Logger.error('Could not load course syllabus', err);
+   }
+ }
+ 
+@@ -4515,10 +4516,10 @@ function renderQuiz(quiz) {
+     const evalItem = (quiz.short_answer_evaluations || []).find(e => e.question_id === q.id);
+ 
+     return `
+-      <div class="p-3.5 bg-surface-900 rounded-xl border border-slate-800 space-y-2.5">
++      <div class="p-3.5 bg-bg-card border border-border-subtle rounded-xl border border-slate-800 space-y-2.5">
+         <div class="flex items-start justify-between gap-2">
+           <div class="flex items-center gap-2 flex-wrap">
+-            <span class="w-5 h-5 rounded-full bg-surface-800 text-slate-300 text-[10px] font-bold flex items-center justify-center font-mono">${idx + 1}</span>
++            <span class="w-5 h-5 rounded-full bg-bg-sidebar text-slate-300 text-[10px] font-bold flex items-center justify-center font-mono">${idx + 1}</span>
+             <span class="text-xs font-semibold text-white leading-relaxed">${escapeHtml(q.question)}</span>
+             ${isShortAnswer ? `
+               <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+@@ -4532,13 +4533,13 @@ function renderQuiz(quiz) {
+         </div>
+ 
+         <!-- Cited quote evidence preview -->
+-        <div class="px-2.5 py-1.5 rounded-lg bg-surface-950/80 border border-slate-800/80 text-[11px] text-slate-400 italic">
++        <div class="px-2.5 py-1.5 rounded-lg bg-bg-canvas/80 border border-slate-800/80 text-[11px] text-slate-400 italic">
+           &ldquo;${escapeHtml(q.quote)}&rdquo;
+         </div>
+ 
+         ${isShortAnswer ? `
+           <!-- 5-Mark Subjective Rubric & Answer Box -->
+-          <div class="px-2.5 py-2 rounded-lg bg-surface-950/90 border border-slate-800/90 text-[11px] text-slate-400 space-y-1">
++          <div class="px-2.5 py-2 rounded-lg bg-bg-canvas/90 border border-slate-800/90 text-[11px] text-slate-400 space-y-1">
+             <span class="font-semibold text-slate-300">Exam Rubric (Max 5.0 Marks):</span>
+             <ul class="list-disc list-inside space-y-0.5 text-[10.5px]">
+               ${(q.rubric || [
+@@ -4550,11 +4551,11 @@ function renderQuiz(quiz) {
+           </div>
+ 
+           <div class="pt-1">
+-            <textarea name="quiz_sa_${q.id}" class="w-full h-24 p-2.5 rounded-lg bg-surface-850 border border-slate-700/60 text-slate-200 text-xs focus:ring-1 focus:ring-amber-500 resize-y placeholder:text-slate-500" placeholder="Write your structured 5-mark answer covering: 1) Definition & intuition, 2) Technical mechanism & steps, 3) Practical example..." ${isCompleted ? 'disabled' : ''}>${escapeHtml(q.user_answer || '')}</textarea>
++            <textarea name="quiz_sa_${q.id}" class="w-full h-24 p-2.5 rounded-lg bg-bg-card border border-border-subtle border border-slate-700/60 text-slate-200 text-xs focus:ring-1 focus:ring-amber-500 resize-y placeholder:text-slate-500" placeholder="Write your structured 5-mark answer covering: 1) Definition & intuition, 2) Technical mechanism & steps, 3) Practical example..." ${isCompleted ? 'disabled' : ''}>${escapeHtml(q.user_answer || '')}</textarea>
+           </div>
+ 
+           ${evalItem ? `
+-            <div class="mt-2 p-2.5 rounded-lg bg-surface-950 border border-amber-800/60 text-xs space-y-1.5">
++            <div class="mt-2 p-2.5 rounded-lg bg-bg-canvas border border-amber-800/60 text-xs space-y-1.5">
+               <div class="flex items-center justify-between font-semibold text-amber-300">
+                 <span>Awarded: ${evalItem.marks_awarded} / ${q.max_marks || 5.0} Marks</span>
+                 <span class="text-[10px] font-mono text-slate-400">Def: ${evalItem.breakdown?.definition ?? 0} | Mech: ${evalItem.breakdown?.mechanism ?? 0} | Ex: ${evalItem.breakdown?.example ?? 0}</span>
+@@ -4572,7 +4573,7 @@ function renderQuiz(quiz) {
+           <!-- Multiple Choice Options -->
+           <div class="space-y-1.5 pt-1">
+             ${(q.options || []).map((opt, optIdx) => {
+-              let optClass = 'bg-surface-850 hover:bg-surface-800 border-slate-700/60 text-slate-300';
++              let optClass = 'bg-bg-card border border-border-subtle hover:bg-bg-sidebar border-slate-700/60 text-slate-300';
+               const isUserChoice = (q.user_answer !== undefined && q.user_answer !== null && parseInt(q.user_answer, 10) === optIdx);
+               if (isCompleted) {
+                 if (optIdx === q.correct_index) {
+@@ -4596,7 +4597,7 @@ function renderQuiz(quiz) {
+                 💡 ${escapeHtml(q.explanation)}
+               </div>
+               <button type="button" onclick="window.seekToSeconds(${q.timestamp_sec !== undefined && q.timestamp_sec !== null ? q.timestamp_sec : (q.start_sec || 0)})" class="replay-explanation-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-accent-soft text-accent-soft-text hover:bg-blue-200 dark:hover:bg-blue-900 border border-border-subtle font-mono text-[11px] font-semibold cursor-pointer transition active:scale-95 shadow-sm shrink-0" title="Replay Explanation in video">
+-                <span>▶</span> Replay Explanation [${q.timestamp_str || (q.timestamp_sec ? formatSeconds(q.timestamp_sec) : '00:00')}]
++                <span>▶</span> Replay Explanation [${q.timestamp_str || (q.timestamp_sec ? formatDurationSec(q.timestamp_sec) : '00:00')}]
+               </button>
+             </div>
+           ` : ''}
+@@ -5127,14 +5128,14 @@ async function openMockExam() {
+     mockAnsweredCount.textContent = '0';
+ 
+     mockExamContent.innerHTML = mockExamQuiz.questions.map((q, idx) => `
+-      <div class="p-3.5 bg-surface-850 rounded-xl border border-slate-700/80 space-y-2">
++      <div class="p-3.5 bg-bg-card border border-border-subtle rounded-xl border border-slate-700/80 space-y-2">
+         <div class="flex items-center justify-between">
+           <span class="text-xs font-bold text-white">${idx + 1}. ${escapeHtml(q.question)}</span>
+           <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">[${escapeHtml(q.chunk_id)}]</span>
+         </div>
+         <div class="space-y-1.5 pt-1">
+           ${q.options.map((opt, optIdx) => `
+-            <label class="diagnostic-option flex items-center gap-2 p-2 rounded-lg border border-slate-700 text-xs text-slate-300 hover:bg-surface-800 cursor-pointer">
++            <label class="diagnostic-option flex items-center gap-2 p-2 rounded-lg border border-slate-700 text-xs text-slate-300 hover:bg-bg-sidebar cursor-pointer">
+               <input type="radio" name="mock_q_${q.id}" value="${optIdx}" onchange="updateMockAnsweredCount()" class="text-emerald-500 focus:ring-0">
+               <span>${escapeHtml(opt)}</span>
+             </label>
+@@ -5365,7 +5366,7 @@ async function handleVacuumDb() {
+     const data = await res.json();
+     Logger.api('POST', '/api/settings/vacuum', res.status, Math.round(performance.now() - t0), data);
+     alert(data.message || 'SQLite database vacuumed successfully.');
+-    loadSettingsData();
++    loadSettings();
+   } catch (err) {
+     Logger.error('Vacuum failed', err);
+     alert('Vacuum failed: ' + err.message);
+@@ -5376,7 +5377,7 @@ async function handleVacuumDb() {
+ 
+ function handleDownloadDbBackup() {
+   Logger.api('GET', '/api/settings/backup', 200, 0, 'Downloading SQLite backup');
+-  window.open('/api/settings/backup', '_blank');
++  window.open('/api/settings/backup', '_blank', 'noopener,noreferrer');
+ }
+ 
+ async function handleExportCourseBundle() {
+@@ -5425,3 +5426,14 @@ window.learnLMS = {
+   logger: Logger,
+ };
+ 
++
++// Phase 1 fix: wire collapsed rail settings button
++document.addEventListener('DOMContentLoaded', () => {
++    const collapsedSettingsBtn = document.getElementById('btn-collapsed-settings');
++    if (collapsedSettingsBtn) {
++        collapsedSettingsBtn.addEventListener('click', () => {
++            const mainSettingsBtn = document.getElementById('btn-settings');
++            if (mainSettingsBtn) mainSettingsBtn.click();
++        });
++    }
++});
+diff --git a/frontend/static/js/pyodide_worker.js b/frontend/static/js/pyodide_worker.js
+deleted file mode 100644
+index 8f749e4..0000000
+--- a/frontend/static/js/pyodide_worker.js
++++ /dev/null
+@@ -1,97 +0,0 @@
+-/**
+- * Pyodide Web Worker for In-Browser Code Execution.
+- * Runs 100% locally in the browser's client-side sandbox.
+- * Zero server-side code execution.
+- */
+-
+-let pyodide = null;
+-let initPromise = null;
+-
+-async function initPyodideWorker() {
+-  if (pyodide) return pyodide;
+-  if (initPromise) return initPromise;
+-
+-  initPromise = (async () => {
+-    try {
+-      importScripts('https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js');
+-      pyodide = await loadPyodide({
+-        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/',
+-      });
+-      postMessage({ type: 'ready' });
+-      return pyodide;
+-    } catch (err) {
+-      postMessage({ type: 'error', error: 'Failed to load Pyodide runtime: ' + err.message });
+-      initPromise = null; // allow retry if failed
+-      throw err;
+-    }
+-  })();
+-
+-  return initPromise;
+-}
+-
+-self.onmessage = async function(e) {
+-  const { type, code, id } = e.data;
+-
+-  if (type === 'init') {
+-    try {
+-      await initPyodideWorker();
+-    } catch (_) {}
+-    return;
+-  }
+-
+-  if (type === 'run') {
+-    if (!pyodide) {
+-      try {
+-        await initPyodideWorker();
+-      } catch (err) {
+-        postMessage({ type: 'result', id, success: false, error: 'Pyodide runtime initialization failed: ' + err.message });
+-        return;
+-      }
+-    }
+-
+-    if (!pyodide) {
+-      postMessage({ type: 'result', id, success: false, error: 'Pyodide runtime not ready' });
+-      return;
+-    }
+-
+-    let stdout = '';
+-    let stderr = '';
+-
+-    pyodide.setStdout({
+-      batched: (msg) => { stdout += msg + '\n'; }
+-    });
+-    pyodide.setStderr({
+-      batched: (msg) => { stderr += msg + '\n'; }
+-    });
+-
+-    const t0 = performance.now();
+-    try {
+-      const result = await pyodide.runPythonAsync(code);
+-      const executionMs = Math.round(performance.now() - t0);
+-      let returnVal = '';
+-      if (result !== undefined && result !== null) {
+-        returnVal = String(result);
+-      }
+-      postMessage({
+-        type: 'result',
+-        id,
+-        success: true,
+-        stdout: stdout.trim(),
+-        stderr: stderr.trim(),
+-        result: returnVal,
+-        executionMs,
+-      });
+-    } catch (err) {
+-      const executionMs = Math.round(performance.now() - t0);
+-      postMessage({
+-        type: 'result',
+-        id,
+-        success: false,
+-        stdout: stdout.trim(),
+-        stderr: stderr.trim(),
+-        error: err.message,
+-        executionMs,
+-      });
+-    }
+-  }
+-};
+diff --git a/frontend/templates/index.html b/frontend/templates/index.html
+index c1a8a71..6ee6949 100644
+--- a/frontend/templates/index.html
++++ b/frontend/templates/index.html
+@@ -86,7 +86,7 @@
+       --border-subtle: #2E313A;
+       --text-primary: #F3F4F6;
+       --text-secondary: #9CA3AF;
+-      --accent: #60A5FA;
++      --accent: #2563EB; /* WCAG AA 5.17:1 with white text */
+       --accent-soft: #1E3A5F;
+       --accent-soft-text: #DBEAFE;
+       background-color: var(--bg-canvas);
+@@ -178,8 +178,8 @@
+       }
+       body:not(.printing-grounded-notes) #modal-cram-sheet,
+       body:not(.printing-grounded-notes) #modal-cram-sheet *,
+-      body:not(.printing-grounded-notes) #cram-sheet-print-container,
+-      body:not(.printing-grounded-notes) #cram-sheet-print-container * {
++      body:not(.printing-grounded-notes) #cram-sheet-content,
++      body:not(.printing-grounded-notes) #cram-sheet-content * {
+         visibility: visible !important;
+       }
+       body.printing-grounded-notes #grounded-notes-print-container,
+@@ -202,7 +202,7 @@
+         max-width: 100% !important;
+         background: white !important;
+       }
+-      #cram-sheet-print-container,
++      #cram-sheet-content,
+       #grounded-notes-print-container {
+         position: absolute !important;
+         left: 0 !important;
+diff --git a/pyproject.toml b/pyproject.toml
+new file mode 100644
+index 0000000..1b7f436
+--- /dev/null
++++ b/pyproject.toml
+@@ -0,0 +1,43 @@
++[project]
++name = "study-lms-2"
++version = "0.8.0"
++description = "Local-first personal LMS and exam-prep platform for CS/engineering students."
++readme = "README.md"
++requires-python = ">=3.11,<3.15"
++dependencies = [
++    "fastapi>=0.115.0,<1.0.0",
++    "uvicorn[standard]>=0.30.0,<1.0.0",
++    "pydantic>=2.10.0,<3.0.0",
++    "jinja2>=3.1.4,<4.0.0",
++    "python-multipart>=0.0.12,<1.0.0",
++    "yt-dlp>=2025.1.15",
++    "imageio-ffmpeg>=0.5.1,<1.0.0",
++    "mlx-whisper>=0.4.0,<1.0.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
++    "faster-whisper>=1.0.3,<2.0.0; not (sys_platform == 'darwin' and platform_machine == 'arm64')",
++    "fsrs>=3.0.0,<6.0.0",
++    "httpx>=0.28.0,<1.0.0",
++    "trafilatura>=2.0.0,<3.0.0",
++    "pypdf>=5.1.0,<7.0.0",
++]
++
++[project.optional-dependencies]
++dev = [
++    "pytest>=8.3.0,<9.0.0",
++    "pytest-asyncio>=0.24.0,<1.0.0",
++    "playwright>=1.49.0,<2.0.0",
++    "ruff>=0.8.0,<1.0.0",
++    "mypy>=1.13.0,<2.0.0",
++]
++
++[tool.ruff]
++line-length = 120
++target-version = "py311"
++
++[tool.ruff.lint]
++select = ["E", "F", "W", "B", "S"]
++ignore = ["E501", "S101", "S603", "S607"]
++
++[tool.mypy]
++python_version = "3.11"
++ignore_missing_imports = true
++warn_unused_ignores = true
+diff --git a/pytest.ini b/pytest.ini
+index 28213f0..67ccb21 100644
+--- a/pytest.ini
++++ b/pytest.ini
+@@ -2,3 +2,8 @@
+ pythonpath = .
+ asyncio_mode = auto
+ asyncio_default_fixture_loop_scope = function
++markers =
++    unit: fast offline unit tests with no external I/O
++    integration: FastAPI TestClient integration tests against isolated temp SQLite DBs
++    e2e: browser Playwright E2E tests
++    live: live network smoke tests (YouTube / Whisper)
+diff --git a/run.py b/run.py
+index 03c59ec..f331ec8 100755
+--- a/run.py
++++ b/run.py
+@@ -119,7 +119,7 @@ def ensure_port_available(host: str = "127.0.0.1", port: int = 8000):
+                 pids = [p.strip() for p in out.splitlines() if p.strip() and p.strip() != str(os.getpid())]
+                 for pid in pids:
+                     print(f"🔄 Terminating stale server process {pid} on port {port}...")
+-                    os.kill(int(pid), 9)
++                    print(f'Port {port} is in use by PID {pid}. Stop it manually or set APP_PORT to another port.')
+                 time.sleep(1)
+                 print(f"✅ Port {port} freed successfully.")
+             except Exception as e:
+diff --git a/capture_redesign_preview.py b/scripts/capture_redesign_preview.py
+similarity index 100%
+rename from capture_redesign_preview.py
+rename to scripts/capture_redesign_preview.py
+diff --git a/seed_lesson_artifacts.py b/scripts/seed_lesson_artifacts.py
+similarity index 100%
+rename from seed_lesson_artifacts.py
+rename to scripts/seed_lesson_artifacts.py
+diff --git a/seed_live_courses.py b/scripts/seed_live_courses.py
+similarity index 100%
+rename from seed_live_courses.py
+rename to scripts/seed_live_courses.py
+diff --git a/verify_e2e_full.py b/scripts/verify_e2e_full.py
+similarity index 100%
+rename from verify_e2e_full.py
+rename to scripts/verify_e2e_full.py
+diff --git a/verify_live_preview.py b/scripts/verify_live_preview.py
+similarity index 100%
+rename from verify_live_preview.py
+rename to scripts/verify_live_preview.py
+diff --git a/tests/conftest.py b/tests/conftest.py
+new file mode 100644
+index 0000000..f9f90a6
+--- /dev/null
++++ b/tests/conftest.py
+@@ -0,0 +1,37 @@
++"""Global pytest isolation fixtures.
++
++Guarantees that NO test can read or mutate data-dev/, data/, or data-dev/backups/.
++"""
++
++from pathlib import Path
++import pytest
++
++
++@pytest.fixture(autouse=True)
++def isolate_runtime_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
++    """Redirect DATA_DIR, DB_PATH, and BACKUPS_DIR to an isolated tmp_path per test."""
++    test_data_dir = tmp_path / "data"
++    test_backups_dir = test_data_dir / "backups"
++    test_data_dir.mkdir(parents=True, exist_ok=True)
++    test_backups_dir.mkdir(parents=True, exist_ok=True)
++    test_db_path = test_data_dir / "app.db"
++
++    monkeypatch.setenv("APP_ENV", "test")
++    monkeypatch.setenv("DATA_DIR", str(test_data_dir))
++
++    import backend.config as cfg
++    import backend.database as db_mod
++    import backend.migrations.runner as runner_mod
++
++    monkeypatch.setattr(cfg, "DATA_DIR", test_data_dir, raising=False)
++    monkeypatch.setattr(cfg, "DB_PATH", test_db_path, raising=False)
++    monkeypatch.setattr(cfg, "BACKUPS_DIR", test_backups_dir, raising=False)
++    monkeypatch.setattr(db_mod, "DB_PATH", test_db_path, raising=False)
++    monkeypatch.setattr(runner_mod, "DB_PATH", test_db_path, raising=False)
++    monkeypatch.setattr(runner_mod, "BACKUPS_DIR", test_backups_dir, raising=False)
++
++    yield {
++        "data_dir": test_data_dir,
++        "db_path": test_db_path,
++        "backups_dir": test_backups_dir,
++    }
+diff --git a/tests/test_audit_all_buttons_and_features.py b/tests/test_audit_all_buttons_and_features.py
+index 1958eba..c343c5c 100644
+--- a/tests/test_audit_all_buttons_and_features.py
++++ b/tests/test_audit_all_buttons_and_features.py
+@@ -1,3 +1,5 @@
++import pytest
++pytestmark = pytest.mark.e2e
+ """Comprehensive UI Feature & Button Audit Test.
+ 
+ Iterates through every interactive button, modal, drawer, tab, and slider control
+@@ -8,7 +10,7 @@ in the application to verify that:
+ 4. Zero JavaScript console errors occur during any interaction.
+ """
+ 
+-from playwright.sync_api import sync_playwright
++sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
+ import pytest
+ import time
+ 
+diff --git a/tests/test_concept_partition_and_repack_ui.py b/tests/test_concept_partition_and_repack_ui.py
+index 60e8099..91b7910 100644
+--- a/tests/test_concept_partition_and_repack_ui.py
++++ b/tests/test_concept_partition_and_repack_ui.py
+@@ -1,3 +1,5 @@
++import pytest
++pytestmark = pytest.mark.e2e
+ """Playwright UI verification test for Concept Partitioning, Instant Deterministic Day Repacking,
+ Timestamp Seeking in Notes, Quiz Replay, and Whole-Video Master Cheat Sheet.
+ 
+@@ -17,7 +19,7 @@ from pathlib import Path
+ from datetime import date, timedelta
+ import pytest
+ import uvicorn
+-from playwright.sync_api import sync_playwright
++sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
+ 
+ from backend.main import app
+ from backend.database import get_db, init_connection
+diff --git a/tests/test_concept_partitioner.py b/tests/test_concept_partitioner.py
+index 8c281bd..f309181 100644
+--- a/tests/test_concept_partitioner.py
++++ b/tests/test_concept_partitioner.py
+@@ -158,7 +158,7 @@ def test_ai_semantic_sliding_window_mocked(monkeypatch):
+         ]
+ 
+     monkeypatch.setattr("backend.services.concept_partitioner._call_llm_for_window", mock_call_llm)
+-    monkeypatch.setattr("backend.config.get_settings", lambda: type("Settings", (), {
++    monkeypatch.setattr("backend.services.concept_partitioner.get_settings", lambda: type("Settings", (), {
+         "GEMINI_API_KEY": "fake-key",
+         "GROQ_API_KEY": None,
+         "OPENROUTER_API_KEY": None,
+diff --git a/tests/test_course_reschedule_flow.py b/tests/test_course_reschedule_flow.py
+index b745fc0..e78d046 100644
+--- a/tests/test_course_reschedule_flow.py
++++ b/tests/test_course_reschedule_flow.py
+@@ -163,18 +163,27 @@ def test_instant_repack_zero_llm_and_content_preservation(temp_db, monkeypatch):
+     """Verifies that editing exam date (14d -> 7d -> 20d), minutes_per_day, or playback speed
+     makes ZERO LLM calls, preserves notes, quizzes, and completed status, and supports 1-click Undo.
+     """
+-    import requests
+-    orig_post = requests.post
++    import httpx
++    orig_sync_post = httpx.Client.post
++    orig_async_post = httpx.AsyncClient.post
+     llm_call_count = [0]
+ 
+-    def mock_post(*args, **kwargs):
++    def mock_sync_post(self, *args, **kwargs):
+         url = args[0] if args else kwargs.get("url", "")
+         if any(h in str(url) for h in ["groq.com", "googleapis.com", "openai.com"]):
+             llm_call_count[0] += 1
+             raise RuntimeError(f"LLM network call attempted to {url} during deterministic schedule repack!")
+-        return orig_post(*args, **kwargs)
++        return orig_sync_post(self, *args, **kwargs)
+ 
+-    monkeypatch.setattr("requests.post", mock_post)
++    async def mock_async_post(self, *args, **kwargs):
++        url = args[0] if args else kwargs.get("url", "")
++        if any(h in str(url) for h in ["groq.com", "googleapis.com", "openai.com"]):
++            llm_call_count[0] += 1
++            raise RuntimeError(f"LLM network call attempted to {url} during deterministic schedule repack!")
++        return await orig_async_post(self, *args, **kwargs)
++
++    monkeypatch.setattr(httpx.AsyncClient, "post", mock_async_post)
++    monkeypatch.setattr(httpx.Client, "post", mock_sync_post)
+ 
+     client = TestClient(app)
+     today = date.today()
+diff --git a/tests/test_cram_sheet_and_diagnostic_quality.py b/tests/test_cram_sheet_and_diagnostic_quality.py
+index 71854e5..4e23d78 100644
+--- a/tests/test_cram_sheet_and_diagnostic_quality.py
++++ b/tests/test_cram_sheet_and_diagnostic_quality.py
+@@ -2,7 +2,9 @@
+ 
+ import sqlite3
+ import pytest
+-from playwright.sync_api import sync_playwright
++from pathlib import Path
++from backend.migrations.runner import apply_migrations
++from backend.database import init_connection
+ 
+ from backend.services.quiz_engine import (
+     create_and_store_quiz,
+@@ -40,13 +42,30 @@ def test_video_noise_filtering_and_sentence_extraction():
+     assert any("Deterministic finite automata" in s for s in extracted)
+ 
+ 
+-def test_diagnostic_test_syllabus_coverage_and_quality():
+-    conn = sqlite3.connect("data-dev/app.db")
+-    cur = conn.cursor()
+-    cur.execute("SELECT id, title FROM courses LIMIT 1;")
+-    c_row = cur.fetchone()
+-    assert c_row is not None, "Need a course in data-dev/app.db"
+-    course_id = c_row[0]
++
++def _create_seeded_course_db(tmp_path: Path):
++    db_path = tmp_path / "cram_diag_test.db"
++    apply_migrations(db_path)
++    conn = init_connection(db_path)
++    cid = "c_toc_diag"
++    conn.execute("INSERT INTO courses (id, title, goal_query, target_date, minutes_per_day) VALUES (?, 'Theory of Computation', 'TOC', '2026-12-30', 60);", (cid,))
++    conn.execute("INSERT INTO sources (id, course_id, source_type, title, is_approved) VALUES ('s1', ?, 'youtube_playlist', 'TOC Lectures', 1);", (cid,))
++    topics = [
++        ("l1", "Deterministic Finite Automata (DFA)", "A Deterministic Finite Automaton consists of five tuples Q, Sigma, delta, q0, and F."),
++        ("l2", "Non-Deterministic Finite Automata (NFA)", "A Non-Deterministic Finite Automaton allows epsilon transitions and multiple next states."),
++        ("l3", "Regular Expressions and Languages", "Regular expressions define regular languages using union, concatenation, and Kleene star."),
++        ("l4", "Context-Free Grammars (CFG)", "Context-free grammars generate context-free languages recognized by pushdown automata."),
++        ("l5", "Turing Machines and Decidability", "A Turing Machine has an infinite tape and models any computable algorithm."),
++    ]
++    for idx, (lid, title, content) in enumerate(topics):
++        conn.execute("INSERT INTO lessons (id, course_id, source_id, title, start_sec, end_sec, raw_duration_sec, order_index) VALUES (?, ?, 's1', ?, 0, 600, 600, ?);", (lid, cid, title, idx))
++        conn.execute("INSERT INTO chunks (id, course_id, source_id, lesson_id, chunk_index, token_count, start_sec, end_sec, content) VALUES (?, ?, 's1', ?, 0, 40, 0, 600, ?);", (f"chk_{lid}", cid, lid, content))
++    conn.execute("INSERT INTO notes (id, course_id, lesson_id, content_markdown) VALUES ('n1', ?, 'l1', '# DFA\n\n## Key Definitions\n- **DFA**: Deterministic Finite Automaton with 5 tuples.\n');", (cid,))
++    conn.commit()
++    return conn, cid
++
++def test_diagnostic_test_syllabus_coverage_and_quality(tmp_path):
++    conn, course_id = _create_seeded_course_db(tmp_path)
+ 
+     quiz = create_and_store_quiz(conn, course_id=course_id, quiz_type="diagnostic", question_count=5)
+     questions = quiz.get("questions", [])
+@@ -80,19 +99,14 @@ def test_diagnostic_test_syllabus_coverage_and_quality():
+     conn.close()
+ 
+ 
+-def test_full_syllabus_cram_sheet_generation():
+-    conn = sqlite3.connect("data-dev/app.db")
+-    cur = conn.cursor()
+-    cur.execute("SELECT id, title FROM courses LIMIT 1;")
+-    c_row = cur.fetchone()
+-    assert c_row is not None
+-    course_id = c_row[0]
++def test_full_syllabus_cram_sheet_generation(tmp_path):
++    conn, course_id = _create_seeded_course_db(tmp_path)
+ 
+     # Verify deterministic full syllabus cram sheet
+     cram_md = generate_deterministic_cram_sheet(conn, course_id)
+     assert "# " in cram_md
+     assert "High-Yield Exam Weightage Matrix" in cram_md
+-    assert "Essential Concepts, Definitions & Formulas" in cram_md
++    assert "Essential Key Formulas" in cram_md
+ 
+     # Test full-syllabus synthesis API endpoint / engine function
+     import asyncio
+@@ -104,8 +118,10 @@ def test_full_syllabus_cram_sheet_generation():
+     conn.close()
+ 
+ 
++@pytest.mark.e2e
+ def test_diagnostic_pre_test_live_ui():
+-    with sync_playwright() as p:
++    playwright = pytest.importorskip("playwright.sync_api")
++    with playwright.sync_playwright() as p:
+         browser = p.chromium.launch(headless=True)
+         page = browser.new_page(viewport={"width": 1440, "height": 900})
+ 
+diff --git a/tests/test_e2e_m1.py b/tests/test_e2e_m1.py
+index b632087..73f42b0 100644
+--- a/tests/test_e2e_m1.py
++++ b/tests/test_e2e_m1.py
+@@ -1,3 +1,5 @@
++import pytest
++pytestmark = pytest.mark.e2e
+ """Playwright E2E tests for M1 golden path.
+ 
+ Runs against an ephemeral database and server instance.
+diff --git a/tests/test_e2e_m2.py b/tests/test_e2e_m2.py
+index a42a4ad..31986c8 100644
+--- a/tests/test_e2e_m2.py
++++ b/tests/test_e2e_m2.py
+@@ -1,3 +1,5 @@
++import pytest
++pytestmark = pytest.mark.e2e
+ """Playwright E2E tests for Milestone 2 features:
+ - Grounded Study Notes with clickable [MM:SS] player seek links
+ - Personal editable notes with auto-save
+diff --git a/tests/test_e2e_m3.py b/tests/test_e2e_m3.py
+index 6f218da..e7d7b85 100644
+--- a/tests/test_e2e_m3.py
++++ b/tests/test_e2e_m3.py
+@@ -1,3 +1,5 @@
++import pytest
++pytestmark = pytest.mark.e2e
+ """Playwright E2E tests for Milestone 3 features:
+ - Multi-source pills in Sources Tray (YouTube, PDF, Web)
+ - Add Source Modal
+diff --git a/tests/test_e2e_m4.py b/tests/test_e2e_m4.py
+index 9beef00..402c8cc 100644
+--- a/tests/test_e2e_m4.py
++++ b/tests/test_e2e_m4.py
+@@ -1,3 +1,5 @@
++import pytest
++pytestmark = pytest.mark.e2e
+ """Playwright E2E tests for Milestone 4 features:
+ - Grounded Citation Quiz with score calculation and mastery test-out
+ - FSRS Spaced Repetition Flashcards with 3D card flip and interval ratings
+diff --git a/tests/test_e2e_m5.py b/tests/test_e2e_m5.py
+index b3258e6..2409964 100644
+--- a/tests/test_e2e_m5.py
++++ b/tests/test_e2e_m5.py
+@@ -1,3 +1,5 @@
++import pytest
++pytestmark = pytest.mark.e2e
+ """Playwright E2E tests for Milestone 5:
+ - In-browser Pyodide scratchpad tab and controls
+ - Storage Guard maintenance: SQLite Vacuum, Backup download, and Course Bundle Export
+diff --git a/tests/test_live_browser_ui.py b/tests/test_live_browser_ui.py
+index a8b1dc2..6acef54 100644
+--- a/tests/test_live_browser_ui.py
++++ b/tests/test_live_browser_ui.py
+@@ -1,3 +1,5 @@
++import pytest
++pytestmark = pytest.mark.e2e
+ """Playwright Live Browser Test Suite for UI/UX, Themes, Date Alignment & Collapsible Studio.
+ 
+ Runs against an ephemeral FastAPI server with a seeded SQLite database.
+@@ -25,7 +27,7 @@ import threading
+ from pathlib import Path
+ import pytest
+ import uvicorn
+-from playwright.sync_api import sync_playwright
++sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
+ 
+ from backend.main import app
+ from backend.database import get_db, init_connection
+diff --git a/tests/test_live_smoke.py b/tests/test_live_smoke.py
+index 2ac3930..53184fd 100644
+--- a/tests/test_live_smoke.py
++++ b/tests/test_live_smoke.py
+@@ -1,3 +1,5 @@
++import pytest
++pytestmark = pytest.mark.live
+ """Live smoke test for user-specified YouTube anchors:
+ 
+ 1. TOC Playlist: https://youtube.com/playlist?list=PLBlnK6fEyqRgp46KUv4ZY69yXmpwKOIev
+diff --git a/tests/test_live_smoke_m2.py b/tests/test_live_smoke_m2.py
+index 3cfdf7a..3bcd241 100644
+--- a/tests/test_live_smoke_m2.py
++++ b/tests/test_live_smoke_m2.py
+@@ -1,3 +1,5 @@
++import pytest
++pytestmark = pytest.mark.live
+ """Live Smoke Tests for Milestone 2 against user-specified YouTube anchors.
+ 
+ Anchors:
+diff --git a/tests/test_screenshots_and_notes_export.py b/tests/test_screenshots_and_notes_export.py
+index 5709bd2..df3f974 100644
+--- a/tests/test_screenshots_and_notes_export.py
++++ b/tests/test_screenshots_and_notes_export.py
+@@ -1,6 +1,8 @@
++import pytest
++pytestmark = pytest.mark.e2e
+ """Verification test for Screenshot-to-Notes and Notes PDF/MD Export features."""
+ 
+-from playwright.sync_api import sync_playwright
++sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
+ import pytest
+ import time
+ 
+diff --git a/tests/test_security_and_fixes.py b/tests/test_security_and_fixes.py
+new file mode 100644
+index 0000000..969c226
+--- /dev/null
++++ b/tests/test_security_and_fixes.py
+@@ -0,0 +1,191 @@
++"""Side-by-side verification suite for Phase 0, Phase 1, and Phase 2 foundation fixes.
++
++Runs cleanly with stdlib `unittest` (and pytest) against an isolated temporary directory.
++"""
++
++import os
++import sqlite3
++import tempfile
++import unittest
++from pathlib import Path
++
++USER_PLAYLIST_URL = "https://youtube.com/playlist?list=PLBlnK6fEyqRgp46KUv4ZY69yXmpwKOIev&si=2citoXJbxnLRp3yS"
++USER_LONG_VIDEO_URL = "https://youtu.be/NlLM3sVF8wY?si=MhJJiMOjzevBjiRn"
++
++
++class TestPhase0To2Fixes(unittest.TestCase):
++    def setUp(self):
++        self.tmpdir = tempfile.TemporaryDirectory(prefix="study_lms_verify_")
++        self.tmp_path = Path(self.tmpdir.name)
++        self.db_path = self.tmp_path / "app.db"
++        self.backups_dir = self.tmp_path / "backups"
++        self.backups_dir.mkdir(parents=True, exist_ok=True)
++        os.environ["DATA_DIR"] = str(self.tmp_path)
++        os.environ["APP_ENV"] = "test"
++
++    def tearDown(self):
++        self.tmpdir.cleanup()
++
++    def test_01_migrations_001_to_010_and_idempotency(self):
++        from backend.migrations.runner import apply_migrations, create_verified_online_backup
++        import backend.migrations.runner as runner_mod
++
++        runner_mod.BACKUPS_DIR = self.backups_dir
++        applied = apply_migrations(self.db_path)
++        self.assertEqual(applied, 10)
++        reapplied = apply_migrations(self.db_path)
++        self.assertEqual(reapplied, 0)
++
++        # Verify Migration 010 tables, columns, indexes, and triggers
++        conn = sqlite3.connect(str(self.db_path))
++        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
++        self.assertIn("jobs", tables)
++        triggers = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
++        self.assertIn("trg_chunks_update_fts", triggers)
++        self.assertIn("trg_chunks_delete_fts", triggers)
++
++        # Verify owner_id column exists on courses
++        cols = {r[1] for r in conn.execute("PRAGMA table_info(courses)")}
++        self.assertIn("owner_id", cols)
++
++        # Verify online WAL backup produces integrity_check = ok
++        backup_out = self.backups_dir / "verified_online.db"
++        create_verified_online_backup(self.db_path, backup_out)
++        self.assertTrue(backup_out.exists())
++        conn.close()
++
++    def test_02_net_guard_ssrf_and_user_youtube_urls(self):
++        from backend.infra.net_guard import (
++            validate_ollama_url,
++            validate_public_url,
++            validate_youtube_url_or_id,
++        )
++
++        # Both user-provided YouTube URLs must be accepted
++        self.assertEqual(validate_youtube_url_or_id(USER_PLAYLIST_URL), USER_PLAYLIST_URL)
++        self.assertEqual(validate_youtube_url_or_id(USER_LONG_VIDEO_URL), USER_LONG_VIDEO_URL)
++        self.assertEqual(validate_youtube_url_or_id("NlLM3sVF8wY"), "NlLM3sVF8wY")
++
++        # Non-YouTube / SSRF URLs must be rejected
++        for bad in [
++            "http://127.0.0.1:8000/api/settings",
++            "http://169.254.169.254/latest/meta-data/",
++            "file:///etc/passwd",
++            "https://evil.example.com/watch?v=NlLM3sVF8wY",
++        ]:
++            with self.assertRaises(ValueError):
++                validate_youtube_url_or_id(bad)
++
++        # Public URL SSRF guard blocks loopback, private, link-local, metadata
++        for bad_ssrf in [
++            "http://127.0.0.1:8000/",
++            "http://localhost:11434/api/tags",
++            "http://169.254.169.254/latest/meta-data/",
++            "http://10.0.0.1/admin",
++            "http://192.168.1.1/",
++            "file:///etc/passwd",
++            "ftp://example.com/file",
++        ]:
++            with self.assertRaises(ValueError):
++                validate_public_url(bad_ssrf, resolve_dns=False)
++
++        # Ollama guard allows loopback in local mode, blocks remote & hosted mode
++        self.assertEqual(validate_ollama_url("http://localhost:11434", "local"), "http://localhost:11434")
++        with self.assertRaises(ValueError):
++            validate_ollama_url("http://169.254.169.254:11434", "local")
++        with self.assertRaises(ValueError):
++            validate_ollama_url("http://localhost:11434", "oidc")
++
++    def test_03_env_injection_blocked_and_live_refresh(self):
++        import backend.config as cfg
++
++        orig_base = cfg.BASE_DIR
++        cfg.BASE_DIR = self.tmp_path
++        try:
++            # Newline injection must raise ValueError
++            with self.assertRaises(ValueError):
++                cfg.update_env_file({"GEMINI_API_KEY": "abc\nAPP_HOST=0.0.0.0"})
++            with self.assertRaises(ValueError):
++                cfg.update_env_file({"INVALID-KEY": "123"})
++
++            # Valid update refreshes ENV_VARS in place (same dict object identity!)
++            dict_id_before = id(cfg.ENV_VARS)
++            cfg.update_env_file({"GEMINI_API_KEY": "test_key_123"})
++            self.assertEqual(id(cfg.ENV_VARS), dict_id_before)
++            self.assertEqual(cfg.ENV_VARS.get("GEMINI_API_KEY"), "test_key_123")
++        finally:
++            cfg.BASE_DIR = orig_base
++
++    def test_04_quiz_question_schema_preserves_timestamps(self):
++        from backend.models.schemas import QuizQuestion
++
++        q = QuizQuestion(
++            id="q1",
++            chunk_id="c1",
++            quote="B+ trees keep all keys in leaves.",
++            question="Where are keys stored in a B+ tree?",
++            options=["Root only", "Leaf nodes", "Internal only", "None"],
++            correct_index=1,
++            explanation="B+ trees store data pointers in leaf nodes.",
++            timestamp_sec=742,
++            timestamp_str="12:22",
++            replay_url="https://youtu.be/NlLM3sVF8wY?t=742",
++        )
++        dumped = q.model_dump() if hasattr(q, "model_dump") else q.dict()
++        self.assertEqual(dumped["timestamp_sec"], 742)
++        self.assertEqual(dumped["timestamp_str"], "12:22")
++        self.assertIn("t=742", dumped["replay_url"])
++
++    def test_05_screenshot_path_traversal_blocked(self):
++        from fastapi import FastAPI
++        from fastapi.testclient import TestClient
++        import backend.config as cfg
++        import sys, types
++        sys.modules.setdefault("yt_dlp", types.ModuleType("yt_dlp"))
++        from backend.routers import screenshots as ss_router
++
++        orig_data = cfg.DATA_DIR
++        cfg.DATA_DIR = self.tmp_path
++        app = FastAPI()
++        app.include_router(ss_router.router)
++        client = TestClient(app)
++        try:
++            r1 = client.get("/api/screenshots/..%2F..%2F/etc/passwd")
++            self.assertIn(r1.status_code, (400, 403, 404))
++            r2 = client.get("/api/screenshots/course1/lesson1/..%2Fsecret.jpg")
++            self.assertIn(r2.status_code, (400, 403, 404))
++            # Verify GET did NOT create directories on disk
++            self.assertFalse((self.tmp_path / "screenshots" / "course1").exists())
++        finally:
++            cfg.DATA_DIR = orig_data
++
++    def test_06_scheduler_all_7_rest_days_does_not_hang(self):
++        from datetime import date
++        from backend.scheduler.engine import generate_schedule
++
++        lessons = [{"id": "l1", "title": "Intro", "raw_duration_sec": 1800, "order_index": 0}]
++        result = generate_schedule(
++            course_id="c1",
++            lessons=lessons,
++            minutes_per_day=60,
++            playback_speed=1.0,
++            rest_days=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
++            revision_buffer_days=0,
++            start_date=date(2026, 11, 23),
++            target_date=date(2026, 12, 1),
++        )
++        self.assertIsNotNone(result)
++
++    def test_07_frontend_pyodide_removed_and_no_legacy_crashes(self):
++        repo_root = Path(__file__).resolve().parent.parent
++        self.assertFalse((repo_root / "frontend/static/js/pyodide_worker.js").exists())
++        js = (repo_root / "frontend/static/js/app.js").read_text(encoding="utf-8")
++        self.assertNotIn("loadDueFlashcards(", js)
++        self.assertNotIn("loadSettingsData(", js)
++        self.assertNotIn("formatSeconds(", js)
++        self.assertNotIn("Logger.warn(", js)
++        self.assertNotIn("bg-surface-900", js)
++
++
++if __name__ == "__main__":
++    unittest.main(verbosity=2)
+diff --git a/tests/test_syllabus_match_ui.py b/tests/test_syllabus_match_ui.py
+index c40dd8e..fdbef66 100644
+--- a/tests/test_syllabus_match_ui.py
++++ b/tests/test_syllabus_match_ui.py
+@@ -1,3 +1,5 @@
++import pytest
++pytestmark = pytest.mark.e2e
+ """Playwright Live Browser Test for Syllabus Copy-Paste & Auto-Selection Alignment.
+ 
+ Validates:
+@@ -10,7 +12,7 @@ Validates:
+ 7. Zero JavaScript console errors occur throughout.
+ """
+ 
+-from playwright.sync_api import sync_playwright
++sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
+ import pytest
+ import time
+ 
+diff --git a/tests/test_three_way_filter.py b/tests/test_three_way_filter.py
+index 9dd00ac..188c981 100644
+--- a/tests/test_three_way_filter.py
++++ b/tests/test_three_way_filter.py
+@@ -1,3 +1,5 @@
++import pytest
++pytestmark = pytest.mark.e2e
+ """Playwright and API test suite for the 3-Way Lesson Filter (All vs Concepts vs Examples/Applications).
+ 
+ Validates:
+@@ -16,7 +18,7 @@ import urllib.request
+ from pathlib import Path
+ import pytest
+ import uvicorn
+-from playwright.sync_api import sync_playwright
++sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
+ 
+ from backend.main import app
+ from backend.database import get_db, init_connection

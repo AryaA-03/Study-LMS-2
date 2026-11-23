@@ -39,8 +39,8 @@ async def capture_screenshots(
 
     course_id = row[1]
     video_id = row[2] or ""
-    start_sec = row[3]
-    end_sec = row[4]
+    start_sec = int(row[3] or 0)
+    end_sec = int(row[4] or 0)
     video_url = row[5] or video_id
 
     target_video = video_id if video_id else video_url
@@ -71,9 +71,19 @@ def serve_screenshot(
     lesson_id: str,
     filename: str
 ):
-    """Serves a stored screenshot image."""
-    dir_path = get_screenshots_dir(course_id, lesson_id)
-    file_path = dir_path / filename
+    """Serves a stored screenshot image with strict path containment."""
+    import re
+    from backend.config import DATA_DIR
+
+    safe_id = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+    safe_file = re.compile(r"^[a-zA-Z0-9._-]{1,128}\.(jpg|jpeg|png|webp)$", re.IGNORECASE)
+    if not (safe_id.match(course_id) and safe_id.match(lesson_id) and safe_file.match(filename)):
+        raise HTTPException(status_code=400, detail="Invalid screenshot identifier")
+
+    base_dir = (DATA_DIR / "screenshots").resolve()
+    file_path = (base_dir / course_id / lesson_id / filename).resolve()
+    if not file_path.is_relative_to(base_dir):
+        raise HTTPException(status_code=403, detail="Forbidden path")
 
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="Screenshot image not found")

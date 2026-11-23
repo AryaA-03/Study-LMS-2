@@ -1,3 +1,5 @@
+import pytest
+pytestmark = pytest.mark.e2e
 """Playwright E2E tests for Milestone 5:
 - In-browser Pyodide scratchpad tab and controls
 - Storage Guard maintenance: SQLite Vacuum, Backup download, and Course Bundle Export

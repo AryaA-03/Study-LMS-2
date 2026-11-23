@@ -1,3 +1,4 @@
+from backend.infra.net_guard import validate_public_url
 """Polite Single-Page Web Ingestion Service.
 
 Checks robots.txt compliance, uses custom User-Agent, extracts clean text
@@ -88,8 +89,11 @@ async def ingest_web_page(
 
     headers = {"User-Agent": USER_AGENT}
     try:
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
+            validate_public_url(url)
             resp = await client.get(url, headers=headers)
+            if len(resp.content) > MAX_WEB_BYTES:
+                raise ValueError('Web page exceeds 5 MB size limit.')
             if resp.status_code != 200:
                 logger.error(f"Web page fetch failed with status {resp.status_code} for {url}")
                 return False, "", f"HTTP error {resp.status_code}", 0

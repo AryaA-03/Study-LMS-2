@@ -307,13 +307,14 @@ Return PURE JSON in this schema:
         with httpx.Client(timeout=25.0) as client:
             if settings.GEMINI_API_KEY:
                 model_name = "gemini-2.5-flash"
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={settings.GEMINI_API_KEY}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+                _gemini_headers = {"x-goog-api-key": settings.GEMINI_API_KEY}
                 payload = {
                     "contents": [{"parts": [{"text": prompt}]}],
                     "systemInstruction": {"parts": [{"text": system_instruction}]},
                     "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2}
                 }
-                resp = client.post(url, json=payload)
+                resp = client.post(url, json=payload, headers=_gemini_headers)
                 if resp.status_code == 200:
                     data = resp.json()
                     text = data["candidates"][0]["content"]["parts"][0]["text"]

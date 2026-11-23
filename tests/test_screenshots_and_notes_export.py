@@ -1,6 +1,8 @@
+import pytest
+pytestmark = pytest.mark.e2e
 """Verification test for Screenshot-to-Notes and Notes PDF/MD Export features."""
 
-from playwright.sync_api import sync_playwright
+sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
 import pytest
 import time
 

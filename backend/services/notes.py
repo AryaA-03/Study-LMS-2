@@ -143,6 +143,15 @@ def generate_no_key_structured_notes(
         s_part = c["content"].split(".")[0].strip()
         lines.append(f"- ⚡ **High-Yield Point {idx+1}** {c_pill}: {s_part}.")
 
+    chunk_ids = [str(c["id"]) for c in chunks if c.get("id")]
+    if chunk_ids:
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+        lines.append("## Grounding & Source Chunks")
+        lines.append("")
+        lines.append("- Sources: " + ", ".join(chunk_ids[:10]))
+
     return "\n".join(lines)
 
 
@@ -152,6 +161,7 @@ async def generate_llm_structured_notes(
     gemini_key: Optional[str] = None,
     screenshots: Optional[List[Dict[str, Any]]] = None,
     db_conn: Optional[Any] = None,
+    bypass_cache: bool = False,
 ) -> str:
     """Generates LLM-synthesized standalone GeeksforGeeks-style Markdown study notes grounded in transcript chunks."""
     if not chunks:
@@ -208,7 +218,8 @@ async def generate_llm_structured_notes(
             if key and not generated_text:
                 try:
                     model_used = "gemini-2.5-flash"
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent?key={key}"
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent"
+                    _gemini_headers = {"x-goog-api-key": key}
                     payload = {
                         "contents": [{
                             "parts": [{
@@ -220,7 +231,7 @@ async def generate_llm_structured_notes(
                             "maxOutputTokens": 2048,
                         }
                     }
-                    resp = await client.post(url, json=payload)
+                    resp = await client.post(url, json=payload, headers=_gemini_headers)
                     if resp.status_code == 200:
                         result = resp.json()
                         candidates = result.get("candidates", [])

@@ -304,6 +304,9 @@ class QuizQuestion(BaseModel):
     max_marks: float = 1.0
     rubric: Optional[List[str]] = None
     sample_solution: Optional[str] = None
+    timestamp_sec: Optional[int] = None
+    timestamp_str: Optional[str] = None
+    replay_url: Optional[str] = None
 
 class QuizGenerateRequest(BaseModel):
     lesson_id: Optional[str] = None
