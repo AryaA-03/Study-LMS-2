@@ -168,6 +168,20 @@ def create_flashcard(
     }
 
 
+
+def _safe_elapsed_days(last_review, review_time: datetime) -> int:
+    if not last_review:
+        return 0
+    try:
+        prev = last_review if isinstance(last_review, datetime) else datetime.fromisoformat(str(last_review).replace("Z", "+00:00"))
+        if prev.tzinfo is None and review_time.tzinfo is not None:
+            prev = prev.replace(tzinfo=review_time.tzinfo)
+        elif prev.tzinfo is not None and review_time.tzinfo is None:
+            prev = prev.replace(tzinfo=None)
+        return max(0, (review_time - prev).days)
+    except Exception:
+        return 0
+
 def review_flashcard(
     conn,
     card_id: str,
@@ -230,7 +244,7 @@ def review_flashcard(
             card_after.due.isoformat(),
             card_after.stability or 0.0,
             card_after.difficulty or 0.0,
-            card_row.get("elapsed_days", 0),
+            _safe_elapsed_days(card_row.get("last_review"), review_time),
             scheduled_days,
             reps,
             lapses,

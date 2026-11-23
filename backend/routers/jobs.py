@@ -1,8 +1,12 @@
+from pathlib import Path
 """Background Jobs API Router for non-blocking progress tracking and cancellation."""
 
 import sqlite3
 from typing import Optional
+import asyncio
+import json
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
 from backend.database import get_db
 from backend.infra.job_queue import cancel_job, get_job, list_jobs
@@ -36,3 +40,29 @@ def cancel_background_job(job_id: str, db: sqlite3.Connection = Depends(get_db))
     if not cancelled:
         raise HTTPException(status_code=404, detail="Active job not found or already finished")
     return {"success": True, "job_id": job_id, "status": "cancelled"}
+
+
+@router.get("/{job_id}/events")
+async def stream_job_events(job_id: str, db: sqlite3.Connection = Depends(get_db)):
+    """Server-Sent Events (SSE) stream for live background job progress."""
+    initial = get_job(db, job_id)
+    if not initial:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    db_file_row = db.execute("PRAGMA database_list;").fetchone()
+    db_file = Path(db_file_row[2]) if (db_file_row and db_file_row[2]) else None
+
+    async def _event_gen():
+        from backend.database import get_db_context
+        for _ in range(120):
+            ctx = get_db_context(db_file) if db_file else get_db_context()
+            with ctx as conn:
+                current = get_job(conn, job_id)
+            if not current:
+                break
+            yield f"data: {json.dumps(current, default=str)}\n\n"
+            if current.get("status") in ("completed", "failed", "cancelled"):
+                break
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(_event_gen(), media_type="text/event-stream")

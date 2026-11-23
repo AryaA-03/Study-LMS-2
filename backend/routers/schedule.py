@@ -397,7 +397,22 @@ def skip_allocation(
     if not target_alloc:
         raise HTTPException(status_code=404, detail="Allocation not found")
 
-    logger.info(f"[Schedule] Skipped allocation {allocation_id} - triggering automatic reflow")
+    logger.info(f"[Schedule] Skipped allocation {allocation_id} - saving snapshot before skip")
+    # Save pre-skip snapshot so 1-click Undo restores the allocation to un-skipped
+    try:
+        pre_skip_allocs = db.execute(
+            "SELECT * FROM schedule_allocations WHERE course_id = ?;", (course_id,)
+        ).fetchall()
+        save_snapshot(
+            course_id=course_id,
+            reason="skip_allocation",
+            allocations=[dict(a) for a in pre_skip_allocs],
+            course_row=course,
+            diff_summary={"action": "skip_allocation", "allocation_id": allocation_id},
+            db=db,
+        )
+    except Exception as snap_err:
+        logger.warning(f"[Schedule] Could not save pre-skip snapshot: {snap_err}")
     skipped_at = datetime.now().isoformat()
     db.execute(
         "UPDATE schedule_allocations SET is_skipped = 1, skipped_at = ? WHERE id = ?;",
@@ -414,7 +429,11 @@ def skip_allocation(
     db.commit()
 
     replan_req = ReplanRequest(mode="normal")
-    replan_schedule(course_id, replan_req, db)
+    replan_res = replan_schedule(course_id, replan_req, db)
+    # Remove the post-skip replan snapshot so 1-click Undo restores the pre-skip state
+    if getattr(replan_res, "snapshot_id", None):
+        db.execute("DELETE FROM schedule_snapshots WHERE id = ?;", (replan_res.snapshot_id,))
+        db.commit()
     return get_course_schedule(course_id, db)
 
 @router.post("/allocations/{allocation_id}/reschedule", response_model=ScheduleResponse)

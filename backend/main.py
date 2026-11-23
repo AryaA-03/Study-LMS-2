@@ -23,7 +23,11 @@ logger = logging.getLogger("learn_lms")
 from contextlib import asynccontextmanager
 from backend.config import BASE_DIR
 from backend.deps import CurrentUser, get_current_user
+import os
 from backend.infra.logging_config import install_secret_redaction
+from backend.infra.rate_limit import SlidingWindowRateLimiter
+
+_rate_limiter = SlidingWindowRateLimiter(max_requests=120, window_seconds=60)
 from backend.infra.job_queue import recover_interrupted_jobs
 from backend.services.llm_cache import prune_expired_cache
 
@@ -93,6 +97,15 @@ app.add_middleware(
 @app.middleware("http")
 async def security_and_logging_middleware(request: Request, call_next):
     start_time = time.time()
+    if os.getenv("RATE_LIMIT_ENABLED", "false").lower() == "true" and request.url.path.startswith("/api/"):
+        client_key = request.client.host if request.client else "unknown"
+        allowed, retry_after = _rate_limiter.allow(client_key)
+        if not allowed:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Please slow down."},
+                headers={"Retry-After": str(retry_after)},
+            )
     try:
         response = await call_next(request)
         duration_ms = round((time.time() - start_time) * 1000, 1)
@@ -152,8 +165,17 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 @app.get("/", response_class=HTMLResponse)
 def index_page(request: Request):
-    """Renders main single-page application shell."""
-    return templates.TemplateResponse(request=request, name="index.html")
+    """Serves the modern compiled Vite SPA if built (frontend/static/dist/index.html), else legacy shell."""
+    dist_index = STATIC_DIR / "dist" / "index.html"
+    if dist_index.exists():
+        return HTMLResponse(content=dist_index.read_text(encoding="utf-8"))
+    return HTMLResponse(content=(TEMPLATES_DIR / "index.html").read_text(encoding="utf-8"))
+
+
+@app.get("/legacy", response_class=HTMLResponse)
+def legacy_index_page(request: Request):
+    """Fallback route to the legacy vanilla-JS single-page shell."""
+    return HTMLResponse(content=(TEMPLATES_DIR / "index.html").read_text(encoding="utf-8"))
 
 
 @app.get("/healthz")

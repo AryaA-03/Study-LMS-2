@@ -1,9 +1,9 @@
 {
-  "openapi": "3.1.0",
+  "openapi": "3.0.2",
   "info": {
     "title": "Learn LMS & Exam Prep API",
     "description": "Local-first autonomous personal LMS and exam-prep platform.",
-    "version": "0.6.1"
+    "version": "0.9.0"
   },
   "paths": {
     "/api/courses": {
@@ -19,11 +19,11 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "title": "Response List Courses Api Courses Get",
+                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/CourseResponse"
-                  },
-                  "type": "array",
-                  "title": "Response List Courses Api Courses Get"
+                  }
                 }
               }
             }
@@ -79,13 +79,13 @@
         "operationId": "get_course_api_courses__course_id__get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -119,24 +119,24 @@
         "operationId": "update_course_api_courses__course_id__put",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CourseUpdateRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -161,6 +161,45 @@
           }
         }
       },
+      "delete": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Delete Course",
+        "description": "Delete a course, cascading all DB child records and cleaning disk uploads/screenshots.",
+        "operationId": "delete_course_api_courses__course_id__delete",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "courses"
@@ -169,24 +208,24 @@
         "operationId": "update_course_api_courses__course_id__patch",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CourseUpdateRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -221,29 +260,22 @@
         "operationId": "discover_sources_api_courses__course_id__discover_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "query",
-            "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Query"
-            }
+              "title": "Query",
+              "type": "string"
+            },
+            "name": "query",
+            "in": "query"
           }
         ],
         "responses": {
@@ -279,24 +311,24 @@
         "operationId": "import_source_api_courses__course_id__sources_import_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SourceImportRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -331,24 +363,24 @@
         "operationId": "approve_sources_api_courses__course_id__sources_confirm_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SourceApprovalRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -356,11 +388,11 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "title": "Response Approve Sources Api Courses  Course Id  Sources Confirm Post",
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/SourceResponse"
-                  },
-                  "title": "Response Approve Sources Api Courses  Course Id  Sources Confirm Post"
+                  }
                 }
               }
             }
@@ -387,24 +419,24 @@
         "operationId": "approve_sources_api_courses__course_id__sources_approve_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SourceApprovalRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -412,11 +444,11 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "title": "Response Approve Sources Api Courses  Course Id  Sources Approve Post",
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/SourceResponse"
-                  },
-                  "title": "Response Approve Sources Api Courses  Course Id  Sources Approve Post"
+                  }
                 }
               }
             }
@@ -440,28 +472,28 @@
           "courses"
         ],
         "summary": "Filter Course Lessons",
-        "description": "Smart filtering to include/exclude question & example videos or specific lessons.",
+        "description": "Smart filtering to include/exclude question & example videos, concepts, or specific lessons.",
         "operationId": "filter_course_lessons_api_courses__course_id__lessons_filter_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/LessonFilterRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -469,11 +501,11 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "title": "Response Filter Course Lessons Api Courses  Course Id  Lessons Filter Post",
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/LessonResponse"
-                  },
-                  "title": "Response Filter Course Lessons Api Courses  Course Id  Lessons Filter Post"
+                  }
                 }
               }
             }
@@ -500,22 +532,22 @@
         "operationId": "toggle_lesson_exclusion_api_courses__course_id__lessons__lesson_id__toggle_exclude_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "lesson_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -542,6 +574,155 @@
         }
       }
     },
+    "/api/courses/{course_id}/syllabus/match": {
+      "post": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Match Course Syllabus",
+        "description": "Parses pasted syllabus text and automatically identifies matching course videos.",
+        "operationId": "match_course_syllabus_api_courses__course_id__syllabus_match_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyllabusMatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyllabusMatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/syllabus/apply": {
+      "post": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Apply Syllabus Alignment",
+        "description": "Applies the selected syllabus-matched lessons, excluding out-of-syllabus videos and reflowing schedule.",
+        "operationId": "apply_syllabus_alignment_api_courses__course_id__syllabus_apply_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyllabusApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyllabusApplyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/syllabus": {
+      "get": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Get Course Syllabus",
+        "description": "Retrieves previously saved syllabus text and metadata for a course.",
+        "operationId": "get_course_syllabus_api_courses__course_id__syllabus_get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyllabusInfoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/courses/{course_id}/lessons/{lesson_id}": {
       "put": {
         "tags": [
@@ -551,33 +732,33 @@
         "operationId": "update_lesson_api_courses__course_id__lessons__lesson_id__put",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "lesson_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/LessonUpdateRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -610,33 +791,33 @@
         "operationId": "update_lesson_api_courses__course_id__lessons__lesson_id__patch",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "lesson_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/LessonUpdateRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -672,35 +853,34 @@
         "operationId": "update_course_lesson_notes_api_courses__course_id__lessons__lesson_id__notes_put",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "lesson_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true,
-                "title": "Payload"
+                "title": "Payload",
+                "type": "object"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -733,13 +913,13 @@
         "operationId": "list_sources_api_courses__course_id__sources_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -748,11 +928,11 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "title": "Response List Sources Api Courses  Course Id  Sources Get",
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/SourceResponse"
-                  },
-                  "title": "Response List Sources Api Courses  Course Id  Sources Get"
+                  }
                 }
               }
             }
@@ -779,13 +959,13 @@
         "operationId": "list_lessons_api_courses__course_id__lessons_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -794,11 +974,11 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "title": "Response List Lessons Api Courses  Course Id  Lessons Get",
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/LessonResponse"
-                  },
-                  "title": "Response List Lessons Api Courses  Course Id  Lessons Get"
+                  }
                 }
               }
             }
@@ -826,13 +1006,13 @@
         "operationId": "export_course_bundle_api_courses__course_id__export_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -867,13 +1047,13 @@
         "operationId": "export_course_markdown_api_courses__course_id__export_markdown_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -908,24 +1088,24 @@
         "operationId": "import_manual_transcript_api_courses__course_id__sources_manual_transcript_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ManualTranscriptRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -959,13 +1139,63 @@
         "operationId": "discover_web_candidates_api_courses__course_id__sources_discover_web_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/sources/{source_id}": {
+      "delete": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Delete Course Source",
+        "description": "Delete a single source from a course, cascading its lessons and chunks.",
+        "operationId": "delete_course_source_api_courses__course_id__sources__source_id__delete",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            },
+            "name": "source_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -999,13 +1229,13 @@
         "operationId": "generate_course_schedule_api_courses__course_id__schedule_generate_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -1041,13 +1271,13 @@
         "operationId": "get_course_schedule_api_courses__course_id__schedule_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -1083,22 +1313,22 @@
         "operationId": "toggle_allocation_api_courses__course_id__schedule_allocations__allocation_id__toggle_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "allocation_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Allocation Id"
-            }
+              "title": "Allocation Id",
+              "type": "string"
+            },
+            "name": "allocation_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -1135,22 +1365,22 @@
         "operationId": "complete_allocation_api_courses__course_id__schedule_allocations__allocation_id__complete_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "allocation_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Allocation Id"
-            }
+              "title": "Allocation Id",
+              "type": "string"
+            },
+            "name": "allocation_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -1186,22 +1416,22 @@
         "operationId": "skip_allocation_api_courses__course_id__schedule_allocations__allocation_id__skip_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "allocation_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Allocation Id"
-            }
+              "title": "Allocation Id",
+              "type": "string"
+            },
+            "name": "allocation_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -1237,33 +1467,33 @@
         "operationId": "reschedule_allocation_api_courses__course_id__schedule_allocations__allocation_id__reschedule_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "allocation_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Allocation Id"
-            }
+              "title": "Allocation Id",
+              "type": "string"
+            },
+            "name": "allocation_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/AllocationRescheduleRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1298,24 +1528,24 @@
         "operationId": "replan_schedule_api_courses__course_id__schedule_replan_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ReplanRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1351,13 +1581,13 @@
         "operationId": "undo_last_replan_api_courses__course_id__schedule_undo_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -1510,7 +1740,7 @@
           "settings"
         ],
         "summary": "Cleanup Cache",
-        "description": "Cleans cached transcripts and screenshots.",
+        "description": "Cleans cached transcripts, captions, screenshots (synced with SQLite), and expired LLM cache.",
         "operationId": "cleanup_cache_api_settings_cleanup_cache_post",
         "responses": {
           "200": {
@@ -1536,11 +1766,11 @@
           "content": {
             "application/json": {
               "schema": {
+                "title": "Keys",
+                "type": "object",
                 "additionalProperties": {
                   "type": "string"
-                },
-                "type": "object",
-                "title": "Keys"
+                }
               }
             }
           },
@@ -1608,6 +1838,46 @@
         }
       }
     },
+    "/api/settings/restore": {
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Restore Sqlite Backup",
+        "description": "Localhost-only validated SQLite database restore with automatic pre-restore backup.",
+        "operationId": "restore_sqlite_backup_api_settings_restore_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_restore_sqlite_backup_api_settings_restore_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lessons/{lesson_id}/transcribe": {
       "post": {
         "tags": [
@@ -1618,13 +1888,13 @@
         "operationId": "transcribe_lesson_api_lessons__lesson_id__transcribe_post",
         "parameters": [
           {
-            "name": "lesson_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -1633,9 +1903,8 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Transcribe Lesson Api Lessons  Lesson Id  Transcribe Post"
+                  "title": "Response Transcribe Lesson Api Lessons  Lesson Id  Transcribe Post",
+                  "type": "object"
                 }
               }
             }
@@ -1663,13 +1932,13 @@
         "operationId": "get_lesson_chunks_api_lessons__lesson_id__chunks_get",
         "parameters": [
           {
-            "name": "lesson_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -1678,12 +1947,11 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "title": "Response Get Lesson Chunks Api Lessons  Lesson Id  Chunks Get",
                   "type": "array",
                   "items": {
-                    "type": "object",
-                    "additionalProperties": true
-                  },
-                  "title": "Response Get Lesson Chunks Api Lessons  Lesson Id  Chunks Get"
+                    "type": "object"
+                  }
                 }
               }
             }
@@ -1711,13 +1979,13 @@
         "operationId": "get_lesson_transcript_status_api_lessons__lesson_id__status_get",
         "parameters": [
           {
-            "name": "lesson_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -1726,9 +1994,8 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Lesson Transcript Status Api Lessons  Lesson Id  Status Get"
+                  "title": "Response Get Lesson Transcript Status Api Lessons  Lesson Id  Status Get",
+                  "type": "object"
                 }
               }
             }
@@ -1756,13 +2023,13 @@
         "operationId": "get_lesson_notes_api_lessons__lesson_id__notes_get",
         "parameters": [
           {
-            "name": "lesson_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -1796,26 +2063,25 @@
         "operationId": "update_full_notes_api_lessons__lesson_id__notes_put",
         "parameters": [
           {
-            "name": "lesson_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true,
-                "title": "Payload"
+                "title": "Payload",
+                "type": "object"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1851,13 +2117,13 @@
         "operationId": "regenerate_lesson_notes_api_lessons__lesson_id__notes_regenerate_post",
         "parameters": [
           {
-            "name": "lesson_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -1894,24 +2160,24 @@
         "operationId": "update_personal_notes_api_lessons__lesson_id__notes_personal_put",
         "parameters": [
           {
-            "name": "lesson_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PersonalNotesUpdate"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1919,9 +2185,8 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Update Personal Notes Api Lessons  Lesson Id  Notes Personal Put"
+                  "title": "Response Update Personal Notes Api Lessons  Lesson Id  Notes Personal Put",
+                  "type": "object"
                 }
               }
             }
@@ -1940,22 +2205,22 @@
       }
     },
     "/api/lessons/{lesson_id}/screenshots": {
-      "post": {
+      "get": {
         "tags": [
           "screenshots"
         ],
-        "summary": "Capture Screenshots",
-        "description": "Captures opt-in keyframe screenshots for a lesson.",
-        "operationId": "capture_screenshots_api_lessons__lesson_id__screenshots_post",
+        "summary": "List Screenshots",
+        "description": "Lists existing keyframe screenshots for a lesson.",
+        "operationId": "list_screenshots_api_lessons__lesson_id__screenshots_get",
         "parameters": [
           {
-            "name": "lesson_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -1964,11 +2229,11 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "title": "Response List Screenshots Api Lessons  Lesson Id  Screenshots Get",
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/ScreenshotResponse"
-                  },
-                  "title": "Response Capture Screenshots Api Lessons  Lesson Id  Screenshots Post"
+                  }
                 }
               }
             }
@@ -1985,22 +2250,22 @@
           }
         }
       },
-      "get": {
+      "post": {
         "tags": [
           "screenshots"
         ],
-        "summary": "List Screenshots",
-        "description": "Lists existing keyframe screenshots for a lesson.",
-        "operationId": "list_screenshots_api_lessons__lesson_id__screenshots_get",
+        "summary": "Capture Screenshots",
+        "description": "Captures opt-in keyframe screenshots for a lesson.",
+        "operationId": "capture_screenshots_api_lessons__lesson_id__screenshots_post",
         "parameters": [
           {
-            "name": "lesson_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -2009,11 +2274,11 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "title": "Response Capture Screenshots Api Lessons  Lesson Id  Screenshots Post",
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/ScreenshotResponse"
-                  },
-                  "title": "Response List Screenshots Api Lessons  Lesson Id  Screenshots Get"
+                  }
                 }
               }
             }
@@ -2037,35 +2302,35 @@
           "screenshots"
         ],
         "summary": "Serve Screenshot",
-        "description": "Serves a stored screenshot image.",
+        "description": "Serves a stored screenshot image with strict path containment.",
         "operationId": "serve_screenshot_api_screenshots__course_id___lesson_id___filename__get",
         "parameters": [
           {
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            },
             "name": "course_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+            "in": "path"
           },
           {
+            "required": true,
+            "schema": {
+              "title": "Lesson Id",
+              "type": "string"
+            },
             "name": "lesson_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+            "in": "path"
           },
           {
-            "name": "filename",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Filename"
-            }
+              "title": "Filename",
+              "type": "string"
+            },
+            "name": "filename",
+            "in": "path"
           }
         ],
         "responses": {
@@ -2100,24 +2365,24 @@
         "operationId": "upload_pdf_source_api_courses__course_id__sources_pdf_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/Body_upload_pdf_source_api_courses__course_id__sources_pdf_post"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -2151,24 +2416,24 @@
         "operationId": "import_web_source_api_courses__course_id__sources_web_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/WebSourceImportRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -2193,41 +2458,35 @@
       }
     },
     "/api/courses/{course_id}/qa": {
-      "post": {
+      "get": {
         "tags": [
           "qa"
         ],
-        "summary": "Ask Question",
-        "description": "Answers a question strictly grounded in course evidence chunks.",
-        "operationId": "ask_question_api_courses__course_id__qa_post",
+        "summary": "Get Qa History",
+        "description": "Retrieves previous grounded Q&A threads for this course.",
+        "operationId": "get_qa_history_api_courses__course_id__qa_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/QARequest"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/QAResponse"
+                  "title": "Response Get Qa History Api Courses  Course Id  Qa Get",
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
                 }
               }
             }
@@ -2244,36 +2503,41 @@
           }
         }
       },
-      "get": {
+      "post": {
         "tags": [
           "qa"
         ],
-        "summary": "Get Qa History",
-        "description": "Retrieves previous grounded Q&A threads for this course.",
-        "operationId": "get_qa_history_api_courses__course_id__qa_get",
+        "summary": "Ask Question",
+        "description": "Answers a question strictly grounded in course evidence chunks.",
+        "operationId": "ask_question_api_courses__course_id__qa_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QARequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "additionalProperties": true
-                  },
-                  "title": "Response Get Qa History Api Courses  Course Id  Qa Get"
+                  "$ref": "#/components/schemas/QAResponse"
                 }
               }
             }
@@ -2300,24 +2564,24 @@
         "operationId": "generate_quiz_api_courses__course_id__quizzes_generate_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/QuizGenerateRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -2352,22 +2616,22 @@
         "operationId": "get_quiz_api_courses__course_id__quizzes__quiz_id__get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "quiz_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Quiz Id"
-            }
+              "title": "Quiz Id",
+              "type": "string"
+            },
+            "name": "quiz_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -2403,33 +2667,33 @@
         "operationId": "submit_quiz_api_courses__course_id__quizzes__quiz_id__submit_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "quiz_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Quiz Id"
-            }
+              "title": "Quiz Id",
+              "type": "string"
+            },
+            "name": "quiz_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/QuizSubmitRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -2464,45 +2728,31 @@
         "operationId": "list_quizzes_api_courses__course_id__quizzes_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
+            "required": false,
+            "schema": {
+              "title": "Quiz Type",
+              "type": "string"
+            },
             "name": "quiz_type",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Quiz Type"
-            }
+            "in": "query"
           },
           {
-            "name": "lesson_id",
-            "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "query"
           }
         ],
         "responses": {
@@ -2511,11 +2761,11 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "title": "Response List Quizzes Api Courses  Course Id  Quizzes Get",
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/QuizResponse"
-                  },
-                  "title": "Response List Quizzes Api Courses  Course Id  Quizzes Get"
+                  }
                 }
               }
             }
@@ -2542,39 +2792,32 @@
         "operationId": "list_due_flashcards_api_courses__course_id__flashcards_due_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
+            "required": false,
+            "schema": {
+              "title": "Lesson Id",
+              "type": "string"
+            },
             "name": "lesson_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Lesson Id"
-            }
+            "in": "query"
           },
           {
-            "name": "limit",
-            "in": "query",
             "required": false,
             "schema": {
+              "title": "Limit",
               "type": "integer",
-              "default": 50,
-              "title": "Limit"
-            }
+              "default": 50
+            },
+            "name": "limit",
+            "in": "query"
           }
         ],
         "responses": {
@@ -2583,11 +2826,11 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "title": "Response List Due Flashcards Api Courses  Course Id  Flashcards Due Get",
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/FlashcardResponse"
-                  },
-                  "title": "Response List Due Flashcards Api Courses  Course Id  Flashcards Due Get"
+                  }
                 }
               }
             }
@@ -2614,13 +2857,13 @@
         "operationId": "get_counts_api_courses__course_id__flashcards_counts_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -2653,42 +2896,46 @@
           "flashcards"
         ],
         "summary": "List All Flashcards",
+        "description": "Retrieve all flashcards in a course (or only due cards when due_only=true).",
         "operationId": "list_all_flashcards_api_courses__course_id__flashcards_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
+            "required": false,
+            "schema": {
+              "title": "Lesson Id",
+              "type": "string"
+            },
             "name": "lesson_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Lesson Id"
-            }
+            "in": "query"
           },
           {
-            "name": "limit",
-            "in": "query",
             "required": false,
             "schema": {
+              "title": "Due Only",
+              "type": "boolean",
+              "default": false
+            },
+            "name": "due_only",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "title": "Limit",
               "type": "integer",
-              "default": 100,
-              "title": "Limit"
-            }
+              "default": 100
+            },
+            "name": "limit",
+            "in": "query"
           }
         ],
         "responses": {
@@ -2697,11 +2944,11 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "title": "Response List All Flashcards Api Courses  Course Id  Flashcards Get",
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/FlashcardResponse"
-                  },
-                  "title": "Response List All Flashcards Api Courses  Course Id  Flashcards Get"
+                  }
                 }
               }
             }
@@ -2726,24 +2973,24 @@
         "operationId": "add_flashcard_api_courses__course_id__flashcards_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/FlashcardCreateRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -2778,33 +3025,33 @@
         "operationId": "review_card_api_courses__course_id__flashcards__card_id__review_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "card_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Card Id"
-            }
+              "title": "Card Id",
+              "type": "string"
+            },
+            "name": "card_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/FlashcardReviewRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -2839,33 +3086,33 @@
         "operationId": "update_flashcard_api_courses__course_id__flashcards__card_id__put",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "card_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Card Id"
-            }
+              "title": "Card Id",
+              "type": "string"
+            },
+            "name": "card_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/FlashcardUpdateRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -2898,22 +3145,252 @@
         "operationId": "delete_card_api_courses__course_id__flashcards__card_id__delete",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "card_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Card Id"
+              "title": "Card Id",
+              "type": "string"
+            },
+            "name": "card_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/flashcards/lessons/{lesson_id}/generate": {
+      "post": {
+        "tags": [
+          "flashcards"
+        ],
+        "summary": "Generate Lesson Flashcards Endpoint",
+        "description": "Auto-generate concept flashcards for a specific lesson from its notes/chunks.",
+        "operationId": "generate_lesson_flashcards_endpoint_api_courses__course_id__flashcards_lessons__lesson_id__generate_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Generate Lesson Flashcards Endpoint Api Courses  Course Id  Flashcards Lessons  Lesson Id  Generate Post",
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FlashcardResponse"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Get Jobs List",
+        "description": "List recent background jobs, optionally filtered by course_id.",
+        "operationId": "get_jobs_list_api_jobs_get",
+        "parameters": [
+          {
+            "required": false,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "title": "Limit",
+              "type": "integer",
+              "default": 25
+            },
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Get Job Status",
+        "description": "Get status, progress percentage, and result of a specific background job.",
+        "operationId": "get_job_status_api_jobs__job_id__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            },
+            "name": "job_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Cancel Background Job",
+        "description": "Cancel a queued or running background job.",
+        "operationId": "cancel_background_job_api_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            },
+            "name": "job_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/events": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Stream Job Events",
+        "description": "Server-Sent Events (SSE) stream for live background job progress.",
+        "operationId": "stream_job_events_api_jobs__job_id__events_get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            },
+            "name": "job_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -2948,24 +3425,24 @@
         "operationId": "upload_pyq_file_api_courses__course_id__pyq_upload_file_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/Body_upload_pyq_file_api_courses__course_id__pyq_upload_file_post"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -3001,24 +3478,24 @@
         "operationId": "upload_pyq_text_api_courses__course_id__pyq_upload_text_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PYQUploadTextRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -3054,13 +3531,13 @@
         "operationId": "get_pyq_summary_api_courses__course_id__pyq_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -3095,22 +3572,22 @@
         "operationId": "get_lesson_pyqs_api_courses__course_id__lessons__lesson_id__pyq_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "lesson_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Lesson Id"
-            }
+              "title": "Lesson Id",
+              "type": "string"
+            },
+            "name": "lesson_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -3145,22 +3622,22 @@
         "operationId": "delete_pyq_paper_api_courses__course_id__pyq_papers__paper_id__delete",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           },
           {
-            "name": "paper_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Paper Id"
-            }
+              "title": "Paper Id",
+              "type": "string"
+            },
+            "name": "paper_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -3195,27 +3672,76 @@
         "operationId": "generate_cram_sheet_api_courses__course_id__cram_sheet_generate_post",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CramSheetGenerateRequest",
+                "title": "Payload",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CramSheetGenerateRequest"
+                  }
+                ],
                 "default": {
-                  "force_refresh": false
+                  "force_refresh": false,
+                  "full_syllabus": false
                 }
               }
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CramSheetResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/courses/{course_id}/cram-sheet/generate-full": {
+      "post": {
+        "tags": [
+          "cram_sheet"
+        ],
+        "summary": "Generate Full Cram Sheet",
+        "description": "Sequentially processes and synthesizes notes across all playlist/syllabus videos in batches.",
+        "operationId": "generate_full_cram_sheet_api_courses__course_id__cram_sheet_generate_full_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3250,13 +3776,13 @@
         "operationId": "get_cram_sheet_api_courses__course_id__cram_sheet_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -3293,13 +3819,13 @@
         "operationId": "download_cram_sheet_markdown_api_courses__course_id__cram_sheet_download_get",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
           }
         ],
         "responses": {
@@ -3324,11 +3850,71 @@
         }
       }
     },
+    "/api/courses/{course_id}/cram-sheet/generate-full-async": {
+      "post": {
+        "tags": [
+          "cram_sheet"
+        ],
+        "summary": "Trigger Full Syllabus Cram Sheet Async",
+        "description": "Non-blocking background job version of full-syllabus cram sheet synthesis (returns 202 + job_id).",
+        "operationId": "trigger_full_syllabus_cram_sheet_async_api_courses__course_id__cram_sheet_generate_full_async_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Index Page",
-        "description": "Renders main single-page application shell.",
+        "description": "Serves the modern compiled Vite SPA if built (frontend/static/dist/index.html), else legacy shell.",
         "operationId": "index_page__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/legacy": {
+      "get": {
+        "summary": "Legacy Index Page",
+        "description": "Fallback route to the legacy vanilla-JS single-page shell.",
+        "operationId": "legacy_index_page_legacy_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3346,6 +3932,7 @@
     "/healthz": {
       "get": {
         "summary": "Health Check",
+        "description": "Verifies database connectivity and reports active schema version.",
         "operationId": "health_check_healthz_get",
         "responses": {
           "200": {
@@ -3358,123 +3945,69 @@
           }
         }
       }
+    },
+    "/api/auth/me": {
+      "get": {
+        "summary": "Get Auth Me",
+        "description": "Returns the authenticated user context (local owner in AUTH_MODE=local, JWT user in hosted mode).",
+        "operationId": "get_auth_me_api_auth_me_get",
+        "parameters": [
+          {
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            },
+            "name": "authorization",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
       "AllocationRescheduleRequest": {
-        "properties": {
-          "target_date": {
-            "type": "string",
-            "title": "Target Date",
-            "description": "Target date for this allocation (YYYY-MM-DD)"
-          }
-        },
-        "type": "object",
+        "title": "AllocationRescheduleRequest",
         "required": [
           "target_date"
         ],
-        "title": "AllocationRescheduleRequest"
+        "type": "object",
+        "properties": {
+          "target_date": {
+            "title": "Target Date",
+            "type": "string",
+            "description": "Target date for this allocation (YYYY-MM-DD)"
+          }
+        }
       },
       "AllocationResponse": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "course_id": {
-            "type": "string",
-            "title": "Course Id"
-          },
-          "lesson_id": {
-            "type": "string",
-            "title": "Lesson Id"
-          },
-          "lesson_title": {
-            "type": "string",
-            "title": "Lesson Title"
-          },
-          "video_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Video Id"
-          },
-          "video_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Video Url"
-          },
-          "scheduled_date": {
-            "type": "string",
-            "title": "Scheduled Date"
-          },
-          "split_index": {
-            "type": "integer",
-            "title": "Split Index"
-          },
-          "split_count": {
-            "type": "integer",
-            "title": "Split Count"
-          },
-          "allocated_start_sec": {
-            "type": "integer",
-            "title": "Allocated Start Sec"
-          },
-          "allocated_end_sec": {
-            "type": "integer",
-            "title": "Allocated End Sec"
-          },
-          "raw_minutes": {
-            "type": "number",
-            "title": "Raw Minutes"
-          },
-          "effective_minutes": {
-            "type": "number",
-            "title": "Effective Minutes"
-          },
-          "is_completed": {
-            "type": "boolean",
-            "title": "Is Completed"
-          },
-          "is_skipped": {
-            "type": "boolean",
-            "title": "Is Skipped"
-          },
-          "priority": {
-            "type": "string",
-            "title": "Priority"
-          },
-          "pyq_hit_count": {
-            "type": "integer",
-            "title": "Pyq Hit Count",
-            "default": 0
-          },
-          "pyq_total_marks": {
-            "type": "integer",
-            "title": "Pyq Total Marks",
-            "default": 0
-          }
-        },
-        "type": "object",
+        "title": "AllocationResponse",
         "required": [
           "id",
           "course_id",
           "lesson_id",
           "lesson_title",
-          "video_id",
-          "video_url",
           "scheduled_date",
           "split_index",
           "split_count",
@@ -3486,297 +4019,281 @@
           "is_skipped",
           "priority"
         ],
-        "title": "AllocationResponse"
+        "type": "object",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
+          },
+          "lesson_id": {
+            "title": "Lesson Id",
+            "type": "string"
+          },
+          "lesson_title": {
+            "title": "Lesson Title",
+            "type": "string"
+          },
+          "video_id": {
+            "title": "Video Id",
+            "type": "string"
+          },
+          "video_url": {
+            "title": "Video Url",
+            "type": "string"
+          },
+          "scheduled_date": {
+            "title": "Scheduled Date",
+            "type": "string"
+          },
+          "split_index": {
+            "title": "Split Index",
+            "type": "integer"
+          },
+          "split_count": {
+            "title": "Split Count",
+            "type": "integer"
+          },
+          "allocated_start_sec": {
+            "title": "Allocated Start Sec",
+            "type": "integer"
+          },
+          "allocated_end_sec": {
+            "title": "Allocated End Sec",
+            "type": "integer"
+          },
+          "raw_minutes": {
+            "title": "Raw Minutes",
+            "type": "number"
+          },
+          "effective_minutes": {
+            "title": "Effective Minutes",
+            "type": "number"
+          },
+          "is_completed": {
+            "title": "Is Completed",
+            "type": "boolean"
+          },
+          "is_skipped": {
+            "title": "Is Skipped",
+            "type": "boolean"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "clip_id": {
+            "title": "Clip Id",
+            "type": "string"
+          },
+          "pyq_hit_count": {
+            "title": "Pyq Hit Count",
+            "type": "integer",
+            "default": 0
+          },
+          "pyq_total_marks": {
+            "title": "Pyq Total Marks",
+            "type": "integer",
+            "default": 0
+          }
+        }
+      },
+      "Body_restore_sqlite_backup_api_settings_restore_post": {
+        "title": "Body_restore_sqlite_backup_api_settings_restore_post",
+        "required": [
+          "file"
+        ],
+        "type": "object",
+        "properties": {
+          "file": {
+            "title": "File",
+            "type": "string",
+            "format": "binary"
+          }
+        }
       },
       "Body_upload_pdf_source_api_courses__course_id__sources_pdf_post": {
-        "properties": {
-          "file": {
-            "type": "string",
-            "contentMediaType": "application/octet-stream",
-            "title": "File"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          }
-        },
-        "type": "object",
+        "title": "Body_upload_pdf_source_api_courses__course_id__sources_pdf_post",
         "required": [
           "file"
         ],
-        "title": "Body_upload_pdf_source_api_courses__course_id__sources_pdf_post"
+        "type": "object",
+        "properties": {
+          "file": {
+            "title": "File",
+            "type": "string",
+            "format": "binary"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        }
       },
       "Body_upload_pyq_file_api_courses__course_id__pyq_upload_file_post": {
-        "properties": {
-          "file": {
-            "type": "string",
-            "contentMediaType": "application/octet-stream",
-            "title": "File"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          }
-        },
-        "type": "object",
+        "title": "Body_upload_pyq_file_api_courses__course_id__pyq_upload_file_post",
         "required": [
           "file"
         ],
-        "title": "Body_upload_pyq_file_api_courses__course_id__pyq_upload_file_post"
+        "type": "object",
+        "properties": {
+          "file": {
+            "title": "File",
+            "type": "string",
+            "format": "binary"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        }
       },
       "CandidateDiscoveryResponse": {
-        "properties": {
-          "candidate_videos": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Candidate Videos"
-          },
-          "candidate_playlists": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Candidate Playlists"
-          }
-        },
-        "type": "object",
+        "title": "CandidateDiscoveryResponse",
         "required": [
           "candidate_videos",
           "candidate_playlists"
         ],
-        "title": "CandidateDiscoveryResponse"
+        "type": "object",
+        "properties": {
+          "candidate_videos": {
+            "title": "Candidate Videos",
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "candidate_playlists": {
+            "title": "Candidate Playlists",
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
       },
       "CitationItem": {
-        "properties": {
-          "chunk_id": {
-            "type": "string",
-            "title": "Chunk Id"
-          },
-          "source_title": {
-            "type": "string",
-            "title": "Source Title"
-          },
-          "source_type": {
-            "type": "string",
-            "title": "Source Type",
-            "default": "youtube_video"
-          },
-          "start_sec": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start Sec"
-          },
-          "excerpt": {
-            "type": "string",
-            "title": "Excerpt"
-          }
-        },
-        "type": "object",
+        "title": "CitationItem",
         "required": [
           "chunk_id",
           "source_title",
           "excerpt"
         ],
-        "title": "CitationItem"
+        "type": "object",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "source_title": {
+            "title": "Source Title",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string",
+            "default": "youtube_video"
+          },
+          "start_sec": {
+            "title": "Start Sec",
+            "type": "integer"
+          },
+          "excerpt": {
+            "title": "Excerpt",
+            "type": "string"
+          }
+        }
       },
       "CourseCreateRequest": {
-        "properties": {
-          "title": {
-            "type": "string",
-            "title": "Title",
-            "description": "Course or subject title"
-          },
-          "goal_query": {
-            "type": "string",
-            "title": "Goal Query",
-            "description": "User's goal query or topic"
-          },
-          "source_preferences": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Preferences",
-            "description": "Optional preferences like 'freeCodeCamp, official docs'",
-            "default": ""
-          },
-          "target_date": {
-            "type": "string",
-            "title": "Target Date",
-            "description": "Target exam or completion date (YYYY-MM-DD)"
-          },
-          "minutes_per_day": {
-            "type": "integer",
-            "maximum": 720.0,
-            "minimum": 10.0,
-            "title": "Minutes Per Day",
-            "description": "Daily available study time in minutes",
-            "default": 90
-          },
-          "playback_speed": {
-            "type": "number",
-            "maximum": 3.0,
-            "minimum": 0.5,
-            "title": "Playback Speed",
-            "description": "Playback speed scaling factor",
-            "default": 1.0
-          },
-          "rest_days": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Rest Days",
-            "description": "Weekly rest days"
-          },
-          "revision_buffer_days": {
-            "type": "integer",
-            "maximum": 14.0,
-            "minimum": 0.0,
-            "title": "Revision Buffer Days",
-            "description": "Days reserved before exam strictly for revision",
-            "default": 2
-          },
-          "schedule_strategy": {
-            "type": "string",
-            "title": "Schedule Strategy",
-            "description": "'paced' (Spread to Exam Date) or 'fixed' (Fixed Daily Goal)",
-            "default": "paced"
-          }
-        },
-        "type": "object",
+        "title": "CourseCreateRequest",
         "required": [
           "title",
           "goal_query",
           "target_date"
         ],
-        "title": "CourseCreateRequest"
-      },
-      "CourseResponse": {
+        "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
           "title": {
+            "title": "Title",
             "type": "string",
-            "title": "Title"
+            "description": "Course or subject title"
           },
           "goal_query": {
+            "title": "Goal Query",
             "type": "string",
-            "title": "Goal Query"
+            "description": "User's goal query or topic"
           },
           "source_preferences": {
+            "title": "Source Preferences",
             "type": "string",
-            "title": "Source Preferences"
+            "description": "Optional preferences like 'freeCodeCamp, official docs'",
+            "default": ""
           },
           "target_date": {
+            "title": "Target Date",
             "type": "string",
-            "title": "Target Date"
+            "description": "Target exam or completion date (YYYY-MM-DD)"
           },
           "minutes_per_day": {
+            "title": "Minutes Per Day",
+            "maximum": 720.0,
+            "minimum": 10.0,
             "type": "integer",
-            "title": "Minutes Per Day"
+            "description": "Daily available study time in minutes",
+            "default": 90
           },
           "playback_speed": {
+            "title": "Playback Speed",
+            "maximum": 3.0,
+            "minimum": 0.5,
             "type": "number",
-            "title": "Playback Speed"
+            "description": "Playback speed scaling factor",
+            "default": 1.0
           },
           "rest_days": {
+            "title": "Rest Days",
+            "type": "array",
             "items": {
               "type": "string"
             },
-            "type": "array",
-            "title": "Rest Days"
+            "description": "Weekly rest days"
           },
           "revision_buffer_days": {
+            "title": "Revision Buffer Days",
+            "maximum": 14.0,
+            "minimum": 0.0,
             "type": "integer",
-            "title": "Revision Buffer Days"
+            "description": "Days reserved before exam strictly for revision",
+            "default": 2
           },
           "schedule_strategy": {
-            "type": "string",
             "title": "Schedule Strategy",
+            "type": "string",
+            "description": "'paced' (Spread to Exam Date) or 'fixed' (Fixed Daily Goal)",
             "default": "paced"
           },
-          "status": {
-            "type": "string",
-            "title": "Status"
+          "num_study_days": {
+            "title": "Num Study Days",
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "type": "integer",
+            "description": "Number of study days (alternative to target_date)"
           },
-          "total_effective_minutes": {
-            "type": "number",
-            "title": "Total Effective Minutes",
-            "default": 0.0
-          },
-          "completed_effective_minutes": {
-            "type": "number",
-            "title": "Completed Effective Minutes",
-            "default": 0.0
-          },
-          "remaining_effective_minutes": {
-            "type": "number",
-            "title": "Remaining Effective Minutes",
-            "default": 0.0
-          },
-          "completion_percentage": {
-            "type": "number",
-            "title": "Completion Percentage",
-            "default": 0.0
-          },
-          "projected_finish_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Projected Finish Date"
-          },
-          "is_behind_schedule": {
-            "type": "boolean",
-            "title": "Is Behind Schedule",
-            "default": false
-          },
-          "effective_daily_target_minutes": {
-            "type": "number",
-            "title": "Effective Daily Target Minutes",
-            "default": 0.0
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At"
+          "preferred_daily_minutes": {
+            "title": "Preferred Daily Minutes",
+            "maximum": 720.0,
+            "minimum": 10.0,
+            "type": "integer",
+            "description": "Preferred daily study budget in minutes",
+            "default": 60
           }
-        },
-        "type": "object",
+        }
+      },
+      "CourseResponse": {
+        "title": "CourseResponse",
         "required": [
           "id",
           "title",
@@ -3790,202 +4307,224 @@
           "status",
           "created_at"
         ],
-        "title": "CourseResponse"
-      },
-      "CourseUpdateRequest": {
-        "properties": {
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          },
-          "target_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Date"
-          },
-          "minutes_per_day": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 720.0,
-                "minimum": 10.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Minutes Per Day"
-          },
-          "playback_speed": {
-            "anyOf": [
-              {
-                "type": "number",
-                "maximum": 3.0,
-                "minimum": 0.5
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Playback Speed"
-          },
-          "rest_days": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rest Days"
-          },
-          "revision_buffer_days": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 14.0,
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Revision Buffer Days"
-          },
-          "schedule_strategy": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Schedule Strategy"
-          }
-        },
         "type": "object",
-        "title": "CourseUpdateRequest"
-      },
-      "CramSheetGenerateRequest": {
-        "properties": {
-          "force_refresh": {
-            "type": "boolean",
-            "title": "Force Refresh",
-            "default": false
-          }
-        },
-        "type": "object",
-        "title": "CramSheetGenerateRequest"
-      },
-      "CramSheetResponse": {
         "properties": {
           "id": {
-            "type": "string",
-            "title": "Id"
+            "title": "Id",
+            "type": "string"
           },
-          "course_id": {
-            "type": "string",
-            "title": "Course Id"
+          "title": {
+            "title": "Title",
+            "type": "string"
           },
-          "content_markdown": {
-            "type": "string",
-            "title": "Content Markdown"
+          "goal_query": {
+            "title": "Goal Query",
+            "type": "string"
           },
-          "notes_hash": {
-            "type": "string",
-            "title": "Notes Hash"
+          "source_preferences": {
+            "title": "Source Preferences",
+            "type": "string"
           },
-          "is_generated_by_llm": {
+          "target_date": {
+            "title": "Target Date",
+            "type": "string"
+          },
+          "minutes_per_day": {
+            "title": "Minutes Per Day",
+            "type": "integer"
+          },
+          "playback_speed": {
+            "title": "Playback Speed",
+            "type": "number"
+          },
+          "rest_days": {
+            "title": "Rest Days",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "revision_buffer_days": {
+            "title": "Revision Buffer Days",
+            "type": "integer"
+          },
+          "schedule_strategy": {
+            "title": "Schedule Strategy",
+            "type": "string",
+            "default": "paced"
+          },
+          "num_study_days": {
+            "title": "Num Study Days",
+            "type": "integer"
+          },
+          "preferred_daily_minutes": {
+            "title": "Preferred Daily Minutes",
+            "type": "integer",
+            "default": 60
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "total_effective_minutes": {
+            "title": "Total Effective Minutes",
+            "type": "number",
+            "default": 0.0
+          },
+          "completed_effective_minutes": {
+            "title": "Completed Effective Minutes",
+            "type": "number",
+            "default": 0.0
+          },
+          "remaining_effective_minutes": {
+            "title": "Remaining Effective Minutes",
+            "type": "number",
+            "default": 0.0
+          },
+          "completion_percentage": {
+            "title": "Completion Percentage",
+            "type": "number",
+            "default": 0.0
+          },
+          "projected_finish_date": {
+            "title": "Projected Finish Date",
+            "type": "string"
+          },
+          "is_behind_schedule": {
+            "title": "Is Behind Schedule",
             "type": "boolean",
-            "title": "Is Generated By Llm",
             "default": false
           },
-          "cached": {
-            "type": "boolean",
-            "title": "Cached",
-            "default": false
+          "effective_daily_target_minutes": {
+            "title": "Effective Daily Target Minutes",
+            "type": "number",
+            "default": 0.0
           },
           "created_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
+            "title": "Created At",
+            "type": "string"
           }
-        },
+        }
+      },
+      "CourseUpdateRequest": {
+        "title": "CourseUpdateRequest",
         "type": "object",
+        "properties": {
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "target_date": {
+            "title": "Target Date",
+            "type": "string"
+          },
+          "minutes_per_day": {
+            "title": "Minutes Per Day",
+            "maximum": 720.0,
+            "minimum": 10.0,
+            "type": "integer"
+          },
+          "playback_speed": {
+            "title": "Playback Speed",
+            "maximum": 3.0,
+            "minimum": 0.5,
+            "type": "number"
+          },
+          "rest_days": {
+            "title": "Rest Days",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "revision_buffer_days": {
+            "title": "Revision Buffer Days",
+            "maximum": 14.0,
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "schedule_strategy": {
+            "title": "Schedule Strategy",
+            "type": "string"
+          },
+          "num_study_days": {
+            "title": "Num Study Days",
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "type": "integer"
+          },
+          "preferred_daily_minutes": {
+            "title": "Preferred Daily Minutes",
+            "maximum": 720.0,
+            "minimum": 10.0,
+            "type": "integer"
+          }
+        }
+      },
+      "CramSheetGenerateRequest": {
+        "title": "CramSheetGenerateRequest",
+        "type": "object",
+        "properties": {
+          "force_refresh": {
+            "title": "Force Refresh",
+            "type": "boolean",
+            "default": false
+          },
+          "full_syllabus": {
+            "title": "Full Syllabus",
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "CramSheetResponse": {
+        "title": "CramSheetResponse",
         "required": [
           "id",
           "course_id",
           "content_markdown",
           "notes_hash"
         ],
-        "title": "CramSheetResponse"
+        "type": "object",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
+          },
+          "content_markdown": {
+            "title": "Content Markdown",
+            "type": "string"
+          },
+          "notes_hash": {
+            "title": "Notes Hash",
+            "type": "string"
+          },
+          "is_generated_by_llm": {
+            "title": "Is Generated By Llm",
+            "type": "boolean",
+            "default": false
+          },
+          "cached": {
+            "title": "Cached",
+            "type": "boolean",
+            "default": false
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        }
       },
       "DayScheduleResponse": {
-        "properties": {
-          "date": {
-            "type": "string",
-            "title": "Date"
-          },
-          "day_name": {
-            "type": "string",
-            "title": "Day Name"
-          },
-          "is_rest_day": {
-            "type": "boolean",
-            "title": "Is Rest Day"
-          },
-          "is_revision_day": {
-            "type": "boolean",
-            "title": "Is Revision Day"
-          },
-          "total_effective_minutes": {
-            "type": "number",
-            "title": "Total Effective Minutes"
-          },
-          "allocations": {
-            "items": {
-              "$ref": "#/components/schemas/AllocationResponse"
-            },
-            "type": "array",
-            "title": "Allocations"
-          }
-        },
-        "type": "object",
+        "title": "DayScheduleResponse",
         "required": [
           "date",
           "day_name",
@@ -3994,91 +4533,85 @@
           "total_effective_minutes",
           "allocations"
         ],
-        "title": "DayScheduleResponse"
+        "type": "object",
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "day_name": {
+            "title": "Day Name",
+            "type": "string"
+          },
+          "is_rest_day": {
+            "title": "Is Rest Day",
+            "type": "boolean"
+          },
+          "is_revision_day": {
+            "title": "Is Revision Day",
+            "type": "boolean"
+          },
+          "total_effective_minutes": {
+            "title": "Total Effective Minutes",
+            "type": "number"
+          },
+          "allocations": {
+            "title": "Allocations",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationResponse"
+            }
+          }
+        }
       },
       "DiffSummary": {
+        "title": "DiffSummary",
+        "type": "object",
         "properties": {
           "old_finish_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Old Finish Date"
+            "title": "Old Finish Date",
+            "type": "string"
           },
           "new_finish_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "New Finish Date"
+            "title": "New Finish Date",
+            "type": "string"
           },
           "days_difference": {
-            "type": "integer",
             "title": "Days Difference",
+            "type": "integer",
             "default": 0
           },
           "lessons_moved_count": {
-            "type": "integer",
             "title": "Lessons Moved Count",
+            "type": "integer",
             "default": 0
           },
           "dropped_deep_dive_count": {
-            "type": "integer",
             "title": "Dropped Deep Dive Count",
+            "type": "integer",
             "default": 0
           },
           "deficit_minutes": {
-            "type": "number",
             "title": "Deficit Minutes",
+            "type": "number",
             "default": 0.0
           },
           "deficit_message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Deficit Message"
+            "title": "Deficit Message",
+            "type": "string"
+          },
+          "pace_change": {
+            "title": "Pace Change",
+            "type": "string"
+          },
+          "pace_notice": {
+            "title": "Pace Notice",
+            "type": "string"
           }
-        },
-        "type": "object",
-        "title": "DiffSummary"
+        }
       },
       "FlashcardCountsResponse": {
-        "properties": {
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          },
-          "due": {
-            "type": "integer",
-            "title": "Due"
-          },
-          "new": {
-            "type": "integer",
-            "title": "New"
-          },
-          "learning": {
-            "type": "integer",
-            "title": "Learning"
-          },
-          "review": {
-            "type": "integer",
-            "title": "Review"
-          }
-        },
-        "type": "object",
+        "title": "FlashcardCountsResponse",
         "required": [
           "total",
           "due",
@@ -4086,143 +4619,62 @@
           "learning",
           "review"
         ],
-        "title": "FlashcardCountsResponse"
+        "type": "object",
+        "properties": {
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "due": {
+            "title": "Due",
+            "type": "integer"
+          },
+          "new": {
+            "title": "New",
+            "type": "integer"
+          },
+          "learning": {
+            "title": "Learning",
+            "type": "integer"
+          },
+          "review": {
+            "title": "Review",
+            "type": "integer"
+          }
+        }
       },
       "FlashcardCreateRequest": {
-        "properties": {
-          "front": {
-            "type": "string",
-            "title": "Front"
-          },
-          "back": {
-            "type": "string",
-            "title": "Back"
-          },
-          "lesson_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lesson Id"
-          },
-          "chunk_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Chunk Id"
-          },
-          "source_quote": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Quote"
-          }
-        },
-        "type": "object",
+        "title": "FlashcardCreateRequest",
         "required": [
           "front",
           "back"
         ],
-        "title": "FlashcardCreateRequest"
-      },
-      "FlashcardResponse": {
+        "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "course_id": {
-            "type": "string",
-            "title": "Course Id"
-          },
-          "lesson_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lesson Id"
-          },
-          "chunk_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Chunk Id"
-          },
           "front": {
-            "type": "string",
-            "title": "Front"
+            "title": "Front",
+            "type": "string"
           },
           "back": {
-            "type": "string",
-            "title": "Back"
+            "title": "Back",
+            "type": "string"
           },
-          "state": {
-            "type": "integer",
-            "title": "State"
+          "lesson_id": {
+            "title": "Lesson Id",
+            "type": "string"
           },
-          "state_name": {
-            "type": "string",
-            "title": "State Name"
-          },
-          "due_date": {
-            "type": "string",
-            "title": "Due Date"
-          },
-          "stability": {
-            "type": "number",
-            "title": "Stability"
-          },
-          "difficulty": {
-            "type": "number",
-            "title": "Difficulty"
-          },
-          "reps": {
-            "type": "integer",
-            "title": "Reps"
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
           },
           "source_quote": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Quote"
-          },
-          "intervals": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Intervals"
+            "title": "Source Quote",
+            "type": "string"
           }
-        },
-        "type": "object",
+        }
+      },
+      "FlashcardResponse": {
+        "title": "FlashcardResponse",
         "required": [
           "id",
           "course_id",
@@ -4235,232 +4687,161 @@
           "difficulty",
           "reps"
         ],
-        "title": "FlashcardResponse"
+        "type": "object",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
+          },
+          "lesson_id": {
+            "title": "Lesson Id",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "front": {
+            "title": "Front",
+            "type": "string"
+          },
+          "back": {
+            "title": "Back",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "integer"
+          },
+          "state_name": {
+            "title": "State Name",
+            "type": "string"
+          },
+          "due_date": {
+            "title": "Due Date",
+            "type": "string"
+          },
+          "stability": {
+            "title": "Stability",
+            "type": "number"
+          },
+          "difficulty": {
+            "title": "Difficulty",
+            "type": "number"
+          },
+          "reps": {
+            "title": "Reps",
+            "type": "integer"
+          },
+          "source_quote": {
+            "title": "Source Quote",
+            "type": "string"
+          },
+          "intervals": {
+            "title": "Intervals",
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
       },
       "FlashcardReviewRequest": {
-        "properties": {
-          "rating": {
-            "type": "integer",
-            "maximum": 4.0,
-            "minimum": 1.0,
-            "title": "Rating",
-            "description": "1=Again, 2=Hard, 3=Good, 4=Easy"
-          }
-        },
-        "type": "object",
+        "title": "FlashcardReviewRequest",
         "required": [
           "rating"
         ],
-        "title": "FlashcardReviewRequest"
+        "type": "object",
+        "properties": {
+          "rating": {
+            "title": "Rating",
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "type": "integer",
+            "description": "1=Again, 2=Hard, 3=Good, 4=Easy"
+          }
+        }
       },
       "FlashcardReviewResponse": {
+        "title": "FlashcardReviewResponse",
+        "required": [
+          "card",
+          "next_interval_str"
+        ],
+        "type": "object",
         "properties": {
           "card": {
             "$ref": "#/components/schemas/FlashcardResponse"
           },
           "next_interval_str": {
-            "type": "string",
-            "title": "Next Interval Str"
+            "title": "Next Interval Str",
+            "type": "string"
           }
-        },
-        "type": "object",
-        "required": [
-          "card",
-          "next_interval_str"
-        ],
-        "title": "FlashcardReviewResponse"
+        }
       },
       "FlashcardUpdateRequest": {
+        "title": "FlashcardUpdateRequest",
+        "type": "object",
         "properties": {
           "front": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Front"
+            "title": "Front",
+            "type": "string"
           },
           "back": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Back"
+            "title": "Back",
+            "type": "string"
           }
-        },
-        "type": "object",
-        "title": "FlashcardUpdateRequest"
+        }
       },
       "HTTPValidationError": {
+        "title": "HTTPValidationError",
+        "type": "object",
         "properties": {
           "detail": {
+            "title": "Detail",
+            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ValidationError"
-            },
-            "type": "array",
-            "title": "Detail"
+            }
           }
-        },
-        "type": "object",
-        "title": "HTTPValidationError"
+        }
       },
       "LessonFilterRequest": {
+        "title": "LessonFilterRequest",
+        "type": "object",
         "properties": {
+          "filter_mode": {
+            "title": "Filter Mode",
+            "type": "string",
+            "description": "'all', 'concepts', or 'examples'"
+          },
           "include_examples": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
             "title": "Include Examples",
+            "type": "boolean",
             "description": "Set True to include, False to exclude questions/examples videos"
           },
           "lesson_ids_to_include": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lesson Ids To Include"
+            "title": "Lesson Ids To Include",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "lesson_ids_to_exclude": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lesson Ids To Exclude"
+            "title": "Lesson Ids To Exclude",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
-        },
-        "type": "object",
-        "title": "LessonFilterRequest"
+        }
       },
       "LessonResponse": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "course_id": {
-            "type": "string",
-            "title": "Course Id"
-          },
-          "source_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Id"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "summary": {
-            "type": "string",
-            "title": "Summary"
-          },
-          "video_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Video Id"
-          },
-          "video_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Video Url"
-          },
-          "start_sec": {
-            "type": "integer",
-            "title": "Start Sec"
-          },
-          "end_sec": {
-            "type": "integer",
-            "title": "End Sec"
-          },
-          "raw_duration_sec": {
-            "type": "integer",
-            "title": "Raw Duration Sec"
-          },
-          "priority": {
-            "type": "string",
-            "title": "Priority"
-          },
-          "order_index": {
-            "type": "integer",
-            "title": "Order Index"
-          },
-          "chapter_title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Chapter Title"
-          },
-          "is_tested_out": {
-            "type": "boolean",
-            "title": "Is Tested Out",
-            "default": false
-          },
-          "is_excluded": {
-            "type": "boolean",
-            "title": "Is Excluded",
-            "default": false
-          },
-          "pyq_hit_count": {
-            "type": "integer",
-            "title": "Pyq Hit Count",
-            "default": 0
-          },
-          "pyq_total_marks": {
-            "type": "integer",
-            "title": "Pyq Total Marks",
-            "default": 0
-          }
-        },
-        "type": "object",
+        "title": "LessonResponse",
         "required": [
           "id",
           "course_id",
@@ -4472,474 +4853,388 @@
           "priority",
           "order_index"
         ],
-        "title": "LessonResponse"
-      },
-      "LessonUpdateRequest": {
+        "type": "object",
         "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
           "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
+            "title": "Title",
+            "type": "string"
           },
           "summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Summary"
+            "title": "Summary",
+            "type": "string"
           },
-          "priority": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Priority"
-          }
-        },
-        "type": "object",
-        "title": "LessonUpdateRequest"
-      },
-      "ManualTranscriptRequest": {
-        "properties": {
-          "title": {
-            "type": "string",
-            "title": "Title"
+          "video_id": {
+            "title": "Video Id",
+            "type": "string"
           },
-          "transcript_text": {
-            "type": "string",
-            "title": "Transcript Text"
+          "video_url": {
+            "title": "Video Url",
+            "type": "string"
+          },
+          "start_sec": {
+            "title": "Start Sec",
+            "type": "integer"
+          },
+          "end_sec": {
+            "title": "End Sec",
+            "type": "integer"
           },
           "raw_duration_sec": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
             "title": "Raw Duration Sec",
-            "default": 1200
+            "type": "integer"
           },
           "priority": {
-            "type": "string",
             "title": "Priority",
+            "type": "string"
+          },
+          "order_index": {
+            "title": "Order Index",
+            "type": "integer"
+          },
+          "chapter_title": {
+            "title": "Chapter Title",
+            "type": "string"
+          },
+          "is_tested_out": {
+            "title": "Is Tested Out",
+            "type": "boolean",
+            "default": false
+          },
+          "is_excluded": {
+            "title": "Is Excluded",
+            "type": "boolean",
+            "default": false
+          },
+          "pyq_hit_count": {
+            "title": "Pyq Hit Count",
+            "type": "integer",
+            "default": 0
+          },
+          "pyq_total_marks": {
+            "title": "Pyq Total Marks",
+            "type": "integer",
+            "default": 0
+          },
+          "priority_tag": {
+            "title": "Priority Tag",
+            "type": "string",
             "default": "core"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string",
+            "default": "pending"
+          },
+          "completed_at": {
+            "title": "Completed At",
+            "type": "string"
+          },
+          "skipped_at": {
+            "title": "Skipped At",
+            "type": "string"
           }
-        },
+        }
+      },
+      "LessonUpdateRequest": {
+        "title": "LessonUpdateRequest",
         "type": "object",
+        "properties": {
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          }
+        }
+      },
+      "ManualTranscriptRequest": {
+        "title": "ManualTranscriptRequest",
         "required": [
           "title",
           "transcript_text"
         ],
-        "title": "ManualTranscriptRequest"
+        "type": "object",
+        "properties": {
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "transcript_text": {
+            "title": "Transcript Text",
+            "type": "string"
+          },
+          "raw_duration_sec": {
+            "title": "Raw Duration Sec",
+            "type": "integer",
+            "default": 1200
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string",
+            "default": "core"
+          }
+        }
       },
       "NoteResponse": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "course_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Course Id"
-          },
-          "lesson_id": {
-            "type": "string",
-            "title": "Lesson Id"
-          },
-          "content_markdown": {
-            "type": "string",
-            "title": "Content Markdown"
-          },
-          "personal_notes": {
-            "type": "string",
-            "title": "Personal Notes",
-            "default": ""
-          },
-          "is_generated": {
-            "type": "integer",
-            "title": "Is Generated",
-            "default": 1
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          }
-        },
-        "type": "object",
+        "title": "NoteResponse",
         "required": [
           "id",
           "lesson_id",
           "content_markdown"
         ],
-        "title": "NoteResponse"
-      },
-      "PYQQuestionItem": {
+        "type": "object",
         "properties": {
           "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
+          },
+          "lesson_id": {
+            "title": "Lesson Id",
+            "type": "string"
+          },
+          "content_markdown": {
+            "title": "Content Markdown",
+            "type": "string"
+          },
+          "personal_notes": {
+            "title": "Personal Notes",
             "type": "string",
-            "title": "Id"
-          },
-          "question_number": {
-            "type": "string",
-            "title": "Question Number"
-          },
-          "question_text": {
-            "type": "string",
-            "title": "Question Text"
-          },
-          "marks": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Marks"
-          },
-          "matched_lesson_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Matched Lesson Id"
-          },
-          "matched_chunk_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Matched Chunk Id"
-          },
-          "snippet": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Snippet",
             "default": ""
+          },
+          "is_generated": {
+            "title": "Is Generated",
+            "type": "integer",
+            "default": 1
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
           }
-        },
-        "type": "object",
+        }
+      },
+      "PYQQuestionItem": {
+        "title": "PYQQuestionItem",
         "required": [
           "id",
           "question_number",
           "question_text"
         ],
-        "title": "PYQQuestionItem"
+        "type": "object",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "question_number": {
+            "title": "Question Number",
+            "type": "string"
+          },
+          "question_text": {
+            "title": "Question Text",
+            "type": "string"
+          },
+          "marks": {
+            "title": "Marks",
+            "type": "integer"
+          },
+          "matched_lesson_id": {
+            "title": "Matched Lesson Id",
+            "type": "string"
+          },
+          "matched_chunk_id": {
+            "title": "Matched Chunk Id",
+            "type": "string"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string",
+            "default": ""
+          }
+        }
       },
       "PYQUploadResponse": {
-        "properties": {
-          "success": {
-            "type": "boolean",
-            "title": "Success",
-            "default": true
-          },
-          "paper_id": {
-            "type": "string",
-            "title": "Paper Id"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "filename": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Filename",
-            "default": ""
-          },
-          "questions_count": {
-            "type": "integer",
-            "title": "Questions Count"
-          },
-          "matched_count": {
-            "type": "integer",
-            "title": "Matched Count"
-          },
-          "questions": {
-            "items": {
-              "$ref": "#/components/schemas/PYQQuestionItem"
-            },
-            "type": "array",
-            "title": "Questions"
-          }
-        },
-        "type": "object",
+        "title": "PYQUploadResponse",
         "required": [
           "paper_id",
           "title",
           "questions_count",
           "matched_count"
         ],
-        "title": "PYQUploadResponse"
+        "type": "object",
+        "properties": {
+          "success": {
+            "title": "Success",
+            "type": "boolean",
+            "default": true
+          },
+          "paper_id": {
+            "title": "Paper Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string",
+            "default": ""
+          },
+          "questions_count": {
+            "title": "Questions Count",
+            "type": "integer"
+          },
+          "matched_count": {
+            "title": "Matched Count",
+            "type": "integer"
+          },
+          "questions": {
+            "title": "Questions",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PYQQuestionItem"
+            }
+          }
+        }
       },
       "PYQUploadTextRequest": {
-        "properties": {
-          "title": {
-            "type": "string",
-            "maxLength": 256,
-            "title": "Title"
-          },
-          "raw_text": {
-            "type": "string",
-            "minLength": 10,
-            "title": "Raw Text"
-          }
-        },
-        "type": "object",
+        "title": "PYQUploadTextRequest",
         "required": [
           "title",
           "raw_text"
         ],
-        "title": "PYQUploadTextRequest"
+        "type": "object",
+        "properties": {
+          "title": {
+            "title": "Title",
+            "maxLength": 256,
+            "type": "string"
+          },
+          "raw_text": {
+            "title": "Raw Text",
+            "minLength": 10,
+            "type": "string"
+          }
+        }
       },
       "PersonalNotesUpdate": {
-        "properties": {
-          "personal_notes": {
-            "type": "string",
-            "maxLength": 200000,
-            "title": "Personal Notes"
-          }
-        },
-        "type": "object",
+        "title": "PersonalNotesUpdate",
         "required": [
           "personal_notes"
         ],
-        "title": "PersonalNotesUpdate"
+        "type": "object",
+        "properties": {
+          "personal_notes": {
+            "title": "Personal Notes",
+            "maxLength": 200000,
+            "type": "string"
+          }
+        }
       },
       "QARequest": {
-        "properties": {
-          "query": {
-            "type": "string",
-            "maxLength": 4000,
-            "title": "Query"
-          },
-          "lesson_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lesson Id"
-          }
-        },
-        "type": "object",
+        "title": "QARequest",
         "required": [
           "query"
         ],
-        "title": "QARequest"
+        "type": "object",
+        "properties": {
+          "query": {
+            "title": "Query",
+            "maxLength": 4000,
+            "type": "string"
+          },
+          "lesson_id": {
+            "title": "Lesson Id",
+            "type": "string"
+          }
+        }
       },
       "QAResponse": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "course_id": {
-            "type": "string",
-            "title": "Course Id"
-          },
-          "query": {
-            "type": "string",
-            "title": "Query"
-          },
-          "answer_markdown": {
-            "type": "string",
-            "title": "Answer Markdown"
-          },
-          "citations": {
-            "items": {
-              "$ref": "#/components/schemas/CitationItem"
-            },
-            "type": "array",
-            "title": "Citations"
-          }
-        },
-        "type": "object",
+        "title": "QAResponse",
         "required": [
           "id",
           "course_id",
           "query",
           "answer_markdown"
         ],
-        "title": "QAResponse"
+        "type": "object",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "answer_markdown": {
+            "title": "Answer Markdown",
+            "type": "string"
+          },
+          "citations": {
+            "title": "Citations",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CitationItem"
+            }
+          }
+        }
       },
       "QuizGenerateRequest": {
+        "title": "QuizGenerateRequest",
+        "type": "object",
         "properties": {
           "lesson_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lesson Id"
+            "title": "Lesson Id",
+            "type": "string"
           },
           "quiz_type": {
-            "type": "string",
             "title": "Quiz Type",
+            "type": "string",
             "description": "'lesson', 'diagnostic', or 'mock_exam'",
             "default": "lesson"
           },
           "question_count": {
-            "type": "integer",
+            "title": "Question Count",
             "maximum": 30.0,
             "minimum": 1.0,
-            "title": "Question Count",
+            "type": "integer",
             "default": 5
           },
           "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
+            "title": "Title",
+            "type": "string"
           }
-        },
-        "type": "object",
-        "title": "QuizGenerateRequest"
+        }
       },
       "QuizQuestion": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "chunk_id": {
-            "type": "string",
-            "title": "Chunk Id"
-          },
-          "lesson_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lesson Id"
-          },
-          "quote": {
-            "type": "string",
-            "title": "Quote"
-          },
-          "question": {
-            "type": "string",
-            "title": "Question"
-          },
-          "options": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Options"
-          },
-          "correct_index": {
-            "type": "integer",
-            "title": "Correct Index",
-            "default": 0
-          },
-          "explanation": {
-            "type": "string",
-            "title": "Explanation"
-          },
-          "question_type": {
-            "type": "string",
-            "title": "Question Type",
-            "default": "mcq"
-          },
-          "max_marks": {
-            "type": "number",
-            "title": "Max Marks",
-            "default": 1.0
-          },
-          "rubric": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rubric"
-          },
-          "sample_solution": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sample Solution"
-          }
-        },
-        "type": "object",
+        "title": "QuizQuestion",
         "required": [
           "id",
           "chunk_id",
@@ -4947,84 +5242,81 @@
           "question",
           "explanation"
         ],
-        "title": "QuizQuestion"
-      },
-      "QuizResponse": {
+        "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "title": "Id"
+            "title": "Id",
+            "type": "string"
           },
-          "course_id": {
-            "type": "string",
-            "title": "Course Id"
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
           },
           "lesson_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lesson Id"
+            "title": "Lesson Id",
+            "type": "string"
           },
-          "quiz_type": {
-            "type": "string",
-            "title": "Quiz Type"
+          "quote": {
+            "title": "Quote",
+            "type": "string"
           },
-          "title": {
-            "type": "string",
-            "title": "Title"
+          "question": {
+            "title": "Question",
+            "type": "string"
           },
-          "questions": {
-            "items": {
-              "$ref": "#/components/schemas/QuizQuestion"
-            },
+          "options": {
+            "title": "Options",
             "type": "array",
-            "title": "Questions"
+            "items": {
+              "type": "string"
+            }
           },
-          "score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Score"
+          "correct_index": {
+            "title": "Correct Index",
+            "type": "integer",
+            "default": 0
           },
-          "passed": {
-            "type": "boolean",
-            "title": "Passed",
-            "default": false
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
           },
-          "time_taken_seconds": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Time Taken Seconds"
+          "question_type": {
+            "title": "Question Type",
+            "type": "string",
+            "default": "mcq"
           },
-          "created_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
+          "max_marks": {
+            "title": "Max Marks",
+            "type": "number",
+            "default": 1.0
+          },
+          "rubric": {
+            "title": "Rubric",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sample_solution": {
+            "title": "Sample Solution",
+            "type": "string"
+          },
+          "timestamp_sec": {
+            "title": "Timestamp Sec",
+            "type": "integer"
+          },
+          "timestamp_str": {
+            "title": "Timestamp Str",
+            "type": "string"
+          },
+          "replay_url": {
+            "title": "Replay Url",
+            "type": "string"
           }
-        },
-        "type": "object",
+        }
+      },
+      "QuizResponse": {
+        "title": "QuizResponse",
         "required": [
           "id",
           "course_id",
@@ -5032,127 +5324,83 @@
           "title",
           "questions"
         ],
-        "title": "QuizResponse"
+        "type": "object",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
+          },
+          "lesson_id": {
+            "title": "Lesson Id",
+            "type": "string"
+          },
+          "quiz_type": {
+            "title": "Quiz Type",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "questions": {
+            "title": "Questions",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuizQuestion"
+            }
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean",
+            "default": false
+          },
+          "time_taken_seconds": {
+            "title": "Time Taken Seconds",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          }
+        }
       },
       "QuizSubmitRequest": {
+        "title": "QuizSubmitRequest",
+        "type": "object",
         "properties": {
           "answers": {
+            "title": "Answers",
+            "type": "object",
             "additionalProperties": {
               "type": "integer"
             },
-            "type": "object",
-            "title": "Answers",
             "description": "Mapping of MCQ question ID to chosen option index"
           },
           "short_answers": {
+            "title": "Short Answers",
+            "type": "object",
             "additionalProperties": {
               "type": "string"
             },
-            "type": "object",
-            "title": "Short Answers",
             "description": "Mapping of short-answer question ID to student answer text"
           },
           "time_taken_seconds": {
-            "type": "integer",
             "title": "Time Taken Seconds",
+            "type": "integer",
             "default": 0
           }
-        },
-        "type": "object",
-        "title": "QuizSubmitRequest"
+        }
       },
       "QuizSubmitResponse": {
-        "properties": {
-          "quiz_id": {
-            "type": "string",
-            "title": "Quiz Id"
-          },
-          "score": {
-            "type": "number",
-            "title": "Score"
-          },
-          "passed": {
-            "type": "boolean",
-            "title": "Passed"
-          },
-          "correct_count": {
-            "type": "integer",
-            "title": "Correct Count"
-          },
-          "total_questions": {
-            "type": "integer",
-            "title": "Total Questions"
-          },
-          "mastery_status": {
-            "type": "string",
-            "title": "Mastery Status"
-          },
-          "tested_out_lessons": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Tested Out Lessons"
-          },
-          "flashcards_created": {
-            "type": "integer",
-            "title": "Flashcards Created",
-            "default": 0
-          },
-          "missed_count": {
-            "type": "integer",
-            "title": "Missed Count",
-            "default": 0
-          },
-          "schedule_updated": {
-            "type": "boolean",
-            "title": "Schedule Updated",
-            "default": false
-          },
-          "diff_summary": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Diff Summary"
-          },
-          "short_answer_evaluations": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Short Answer Evaluations"
-          },
-          "total_marks_obtained": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Total Marks Obtained"
-          },
-          "total_marks_possible": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Total Marks Possible"
-          }
-        },
-        "type": "object",
+        "title": "QuizSubmitResponse",
         "required": [
           "quiz_id",
           "score",
@@ -5161,103 +5409,148 @@
           "total_questions",
           "mastery_status"
         ],
-        "title": "QuizSubmitResponse"
+        "type": "object",
+        "properties": {
+          "quiz_id": {
+            "title": "Quiz Id",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "correct_count": {
+            "title": "Correct Count",
+            "type": "integer"
+          },
+          "total_questions": {
+            "title": "Total Questions",
+            "type": "integer"
+          },
+          "mastery_status": {
+            "title": "Mastery Status",
+            "type": "string"
+          },
+          "tested_out_lessons": {
+            "title": "Tested Out Lessons",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "flashcards_created": {
+            "title": "Flashcards Created",
+            "type": "integer",
+            "default": 0
+          },
+          "missed_count": {
+            "title": "Missed Count",
+            "type": "integer",
+            "default": 0
+          },
+          "schedule_updated": {
+            "title": "Schedule Updated",
+            "type": "boolean",
+            "default": false
+          },
+          "diff_summary": {
+            "title": "Diff Summary",
+            "type": "object"
+          },
+          "short_answer_evaluations": {
+            "title": "Short Answer Evaluations",
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "total_marks_obtained": {
+            "title": "Total Marks Obtained",
+            "type": "number"
+          },
+          "total_marks_possible": {
+            "title": "Total Marks Possible",
+            "type": "number"
+          }
+        }
       },
       "ReplanRequest": {
+        "title": "ReplanRequest",
+        "type": "object",
         "properties": {
           "mode": {
-            "type": "string",
             "title": "Mode",
+            "type": "string",
             "description": "'normal', 'compress', or 'extend'",
             "default": "normal"
           },
           "schedule_strategy": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
             "title": "Schedule Strategy",
+            "type": "string",
             "description": "'paced' or 'fixed'"
           },
           "minutes_per_day": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 720.0,
-                "minimum": 10.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Minutes Per Day"
+            "title": "Minutes Per Day",
+            "maximum": 720.0,
+            "minimum": 10.0,
+            "type": "integer"
           },
           "playback_speed": {
-            "anyOf": [
-              {
-                "type": "number",
-                "maximum": 3.0,
-                "minimum": 0.5
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Playback Speed"
+            "title": "Playback Speed",
+            "maximum": 3.0,
+            "minimum": 0.5,
+            "type": "number"
           },
           "rest_days": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rest Days"
+            "title": "Rest Days",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "target_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Date"
+            "title": "Target Date",
+            "type": "string"
           },
           "revision_buffer_days": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Revision Buffer Days"
+            "title": "Revision Buffer Days",
+            "type": "integer"
+          },
+          "num_study_days": {
+            "title": "Num Study Days",
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "type": "integer"
+          },
+          "preferred_daily_minutes": {
+            "title": "Preferred Daily Minutes",
+            "maximum": 720.0,
+            "minimum": 10.0,
+            "type": "integer"
           }
-        },
-        "type": "object",
-        "title": "ReplanRequest"
+        }
       },
       "ReplanResponse": {
+        "title": "ReplanResponse",
+        "required": [
+          "success",
+          "snapshot_id",
+          "diff",
+          "schedule"
+        ],
+        "type": "object",
         "properties": {
           "success": {
-            "type": "boolean",
-            "title": "Success"
+            "title": "Success",
+            "type": "boolean"
           },
           "snapshot_id": {
-            "type": "string",
-            "title": "Snapshot Id"
+            "title": "Snapshot Id",
+            "type": "string"
           },
           "diff": {
             "$ref": "#/components/schemas/DiffSummary"
@@ -5265,123 +5558,106 @@
           "schedule": {
             "$ref": "#/components/schemas/ScheduleResponse"
           }
-        },
-        "type": "object",
-        "required": [
-          "success",
-          "snapshot_id",
-          "diff",
-          "schedule"
-        ],
-        "title": "ReplanResponse"
+        }
       },
       "ScheduleResponse": {
-        "properties": {
-          "course_id": {
-            "type": "string",
-            "title": "Course Id"
-          },
-          "days": {
-            "items": {
-              "$ref": "#/components/schemas/DayScheduleResponse"
-            },
-            "type": "array",
-            "title": "Days"
-          },
-          "total_effective_minutes": {
-            "type": "number",
-            "title": "Total Effective Minutes"
-          },
-          "completed_effective_minutes": {
-            "type": "number",
-            "title": "Completed Effective Minutes"
-          },
-          "remaining_effective_minutes": {
-            "type": "number",
-            "title": "Remaining Effective Minutes"
-          },
-          "projected_finish_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Projected Finish Date"
-          },
-          "target_date": {
-            "type": "string",
-            "title": "Target Date"
-          },
-          "is_behind_schedule": {
-            "type": "boolean",
-            "title": "Is Behind Schedule"
-          },
-          "revision_buffer_days": {
-            "type": "integer",
-            "title": "Revision Buffer Days"
-          },
-          "schedule_strategy": {
-            "type": "string",
-            "title": "Schedule Strategy",
-            "default": "paced"
-          },
-          "effective_daily_target_minutes": {
-            "type": "number",
-            "title": "Effective Daily Target Minutes",
-            "default": 0.0
-          },
-          "minutes_per_day": {
-            "type": "integer",
-            "title": "Minutes Per Day",
-            "default": 90
-          },
-          "playback_speed": {
-            "type": "number",
-            "title": "Playback Speed",
-            "default": 1.25
-          }
-        },
-        "type": "object",
+        "title": "ScheduleResponse",
         "required": [
           "course_id",
           "days",
           "total_effective_minutes",
           "completed_effective_minutes",
           "remaining_effective_minutes",
-          "projected_finish_date",
           "target_date",
           "is_behind_schedule",
           "revision_buffer_days"
         ],
-        "title": "ScheduleResponse"
+        "type": "object",
+        "properties": {
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
+          },
+          "days": {
+            "title": "Days",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DayScheduleResponse"
+            }
+          },
+          "total_effective_minutes": {
+            "title": "Total Effective Minutes",
+            "type": "number"
+          },
+          "completed_effective_minutes": {
+            "title": "Completed Effective Minutes",
+            "type": "number"
+          },
+          "remaining_effective_minutes": {
+            "title": "Remaining Effective Minutes",
+            "type": "number"
+          },
+          "projected_finish_date": {
+            "title": "Projected Finish Date",
+            "type": "string"
+          },
+          "target_date": {
+            "title": "Target Date",
+            "type": "string"
+          },
+          "is_behind_schedule": {
+            "title": "Is Behind Schedule",
+            "type": "boolean"
+          },
+          "revision_buffer_days": {
+            "title": "Revision Buffer Days",
+            "type": "integer"
+          },
+          "schedule_strategy": {
+            "title": "Schedule Strategy",
+            "type": "string",
+            "default": "paced"
+          },
+          "effective_daily_target_minutes": {
+            "title": "Effective Daily Target Minutes",
+            "type": "number",
+            "default": 0.0
+          },
+          "minutes_per_day": {
+            "title": "Minutes Per Day",
+            "type": "integer",
+            "default": 90
+          },
+          "playback_speed": {
+            "title": "Playback Speed",
+            "type": "number",
+            "default": 1.25
+          },
+          "num_study_days": {
+            "title": "Num Study Days",
+            "type": "integer"
+          },
+          "preferred_daily_minutes": {
+            "title": "Preferred Daily Minutes",
+            "type": "number"
+          },
+          "required_daily_minutes": {
+            "title": "Required Daily Minutes",
+            "type": "number"
+          },
+          "pace_notice": {
+            "title": "Pace Notice",
+            "type": "string"
+          },
+          "exceeds_budget": {
+            "title": "Exceeds Budget",
+            "type": "boolean",
+            "default": false
+          }
+        }
       },
       "ScreenshotResponse": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "timestamp_sec": {
-            "type": "integer",
-            "title": "Timestamp Sec"
-          },
-          "formatted_time": {
-            "type": "string",
-            "title": "Formatted Time"
-          },
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "caption": {
-            "type": "string",
-            "title": "Caption"
-          }
-        },
-        "type": "object",
+        "title": "ScreenshotResponse",
         "required": [
           "id",
           "timestamp_sec",
@@ -5389,115 +5665,77 @@
           "url",
           "caption"
         ],
-        "title": "ScreenshotResponse"
+        "type": "object",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "timestamp_sec": {
+            "title": "Timestamp Sec",
+            "type": "integer"
+          },
+          "formatted_time": {
+            "title": "Formatted Time",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "caption": {
+            "title": "Caption",
+            "type": "string"
+          }
+        }
       },
       "SourceApprovalRequest": {
-        "properties": {
-          "source_ids_to_approve": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Source Ids To Approve",
-            "description": "List of source IDs to approve"
-          },
-          "source_ids_to_reject": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Ids To Reject",
-            "description": "List of source IDs to drop"
-          }
-        },
-        "type": "object",
+        "title": "SourceApprovalRequest",
         "required": [
           "source_ids_to_approve"
         ],
-        "title": "SourceApprovalRequest"
+        "type": "object",
+        "properties": {
+          "source_ids_to_approve": {
+            "title": "Source Ids To Approve",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of source IDs to approve"
+          },
+          "source_ids_to_reject": {
+            "title": "Source Ids To Reject",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of source IDs to drop"
+          }
+        }
       },
       "SourceImportRequest": {
-        "properties": {
-          "url": {
-            "type": "string",
-            "title": "Url",
-            "description": "YouTube video or playlist URL"
-          },
-          "is_approved": {
-            "type": "boolean",
-            "title": "Is Approved",
-            "description": "Directly approve manual URL imports",
-            "default": true
-          }
-        },
-        "type": "object",
+        "title": "SourceImportRequest",
         "required": [
           "url"
         ],
-        "title": "SourceImportRequest"
-      },
-      "SourceResponse": {
+        "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "course_id": {
-            "type": "string",
-            "title": "Course Id"
-          },
-          "source_type": {
-            "type": "string",
-            "title": "Source Type"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
           "url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Url"
-          },
-          "external_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "External Id"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Metadata"
+            "title": "Url",
+            "type": "string",
+            "description": "YouTube video or playlist URL"
           },
           "is_approved": {
+            "title": "Is Approved",
             "type": "boolean",
-            "title": "Is Approved"
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At"
+            "description": "Directly approve manual URL imports",
+            "default": true
           }
-        },
-        "type": "object",
+        }
+      },
+      "SourceResponse": {
+        "title": "SourceResponse",
         "required": [
           "id",
           "course_id",
@@ -5506,116 +5744,281 @@
           "is_approved",
           "created_at"
         ],
-        "title": "SourceResponse"
-      },
-      "SystemSettingsResponse": {
+        "type": "object",
         "properties": {
-          "ytdlp_version": {
-            "type": "string",
-            "title": "Ytdlp Version"
+          "id": {
+            "title": "Id",
+            "type": "string"
           },
-          "cookies_browser": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cookies Browser"
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
           },
-          "timezone": {
-            "type": "string",
-            "title": "Timezone"
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
           },
-          "data_dir": {
-            "type": "string",
-            "title": "Data Dir"
+          "title": {
+            "title": "Title",
+            "type": "string"
           },
-          "db_size_bytes": {
-            "type": "integer",
-            "title": "Db Size Bytes"
+          "url": {
+            "title": "Url",
+            "type": "string"
           },
-          "transcripts_size_bytes": {
-            "type": "integer",
-            "title": "Transcripts Size Bytes"
+          "external_id": {
+            "title": "External Id",
+            "type": "string"
           },
-          "screenshots_size_bytes": {
-            "type": "integer",
-            "title": "Screenshots Size Bytes"
+          "metadata": {
+            "title": "Metadata",
+            "type": "object"
           },
-          "has_gemini_key": {
-            "type": "boolean",
-            "title": "Has Gemini Key"
+          "is_approved": {
+            "title": "Is Approved",
+            "type": "boolean"
           },
-          "has_groq_key": {
-            "type": "boolean",
-            "title": "Has Groq Key"
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          }
+        }
+      },
+      "SyllabusApplyRequest": {
+        "title": "SyllabusApplyRequest",
+        "required": [
+          "syllabus_text"
+        ],
+        "type": "object",
+        "properties": {
+          "syllabus_text": {
+            "title": "Syllabus Text",
+            "minLength": 1,
+            "type": "string"
           },
-          "has_openrouter_key": {
-            "type": "boolean",
-            "title": "Has Openrouter Key"
-          },
-          "has_ollama": {
-            "type": "boolean",
-            "title": "Has Ollama",
-            "default": false
-          },
-          "gemini_model": {
-            "type": "string",
-            "title": "Gemini Model",
-            "default": "gemini-2.5-flash"
-          },
-          "groq_model": {
-            "type": "string",
-            "title": "Groq Model",
-            "default": "llama-3.3-70b-versatile"
-          },
-          "openrouter_model": {
-            "type": "string",
-            "title": "Openrouter Model",
-            "default": "google/gemini-2.5-flash"
-          },
-          "openrouter_base_url": {
-            "type": "string",
-            "title": "Openrouter Base Url",
-            "default": "https://openrouter.ai/api/v1"
-          },
-          "ollama_base_url": {
-            "type": "string",
-            "title": "Ollama Base Url",
-            "default": "http://localhost:11434"
-          },
-          "ollama_model": {
-            "type": "string",
-            "title": "Ollama Model",
-            "default": "llama3.2"
-          },
-          "default_minutes_per_day": {
-            "type": "integer",
-            "title": "Default Minutes Per Day",
-            "default": 90
-          },
-          "default_playback_speed": {
-            "type": "number",
-            "title": "Default Playback Speed",
-            "default": 1.25
-          },
-          "default_rest_days": {
+          "included_lesson_ids": {
+            "title": "Included Lesson Ids",
+            "type": "array",
             "items": {
               "type": "string"
-            },
-            "type": "array",
-            "title": "Default Rest Days"
+            }
           },
-          "default_revision_buffer_days": {
-            "type": "integer",
-            "title": "Default Revision Buffer Days",
-            "default": 2
+          "strictness": {
+            "title": "Strictness",
+            "type": "string",
+            "default": "balanced"
+          },
+          "regenerate_schedule": {
+            "title": "Regenerate Schedule",
+            "type": "boolean",
+            "default": true
           }
-        },
+        }
+      },
+      "SyllabusApplyResponse": {
+        "title": "SyllabusApplyResponse",
+        "required": [
+          "course_id",
+          "included_count",
+          "excluded_count",
+          "message"
+        ],
         "type": "object",
+        "properties": {
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
+          },
+          "included_count": {
+            "title": "Included Count",
+            "type": "integer"
+          },
+          "excluded_count": {
+            "title": "Excluded Count",
+            "type": "integer"
+          },
+          "schedule_reflowed": {
+            "title": "Schedule Reflowed",
+            "type": "boolean",
+            "default": true
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        }
+      },
+      "SyllabusInfoResponse": {
+        "title": "SyllabusInfoResponse",
+        "required": [
+          "course_id"
+        ],
+        "type": "object",
+        "properties": {
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
+          },
+          "syllabus_text": {
+            "title": "Syllabus Text",
+            "type": "string"
+          },
+          "syllabus_metadata": {
+            "title": "Syllabus Metadata",
+            "type": "object"
+          }
+        }
+      },
+      "SyllabusLessonMatch": {
+        "title": "SyllabusLessonMatch",
+        "required": [
+          "id",
+          "title",
+          "raw_duration_sec",
+          "is_matched",
+          "match_score"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "raw_duration_sec": {
+            "title": "Raw Duration Sec",
+            "type": "integer"
+          },
+          "order_index": {
+            "title": "Order Index",
+            "type": "integer",
+            "default": 0
+          },
+          "is_matched": {
+            "title": "Is Matched",
+            "type": "boolean"
+          },
+          "match_score": {
+            "title": "Match Score",
+            "type": "number"
+          },
+          "matched_topics": {
+            "title": "Matched Topics",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "match_reason": {
+            "title": "Match Reason",
+            "type": "string",
+            "default": ""
+          }
+        }
+      },
+      "SyllabusMatchRequest": {
+        "title": "SyllabusMatchRequest",
+        "required": [
+          "syllabus_text"
+        ],
+        "type": "object",
+        "properties": {
+          "syllabus_text": {
+            "title": "Syllabus Text",
+            "maxLength": 500000,
+            "minLength": 5,
+            "type": "string"
+          },
+          "strictness": {
+            "title": "Strictness",
+            "type": "string",
+            "description": "'strict', 'balanced', or 'comprehensive'",
+            "default": "balanced"
+          }
+        }
+      },
+      "SyllabusMatchResponse": {
+        "title": "SyllabusMatchResponse",
+        "required": [
+          "course_id",
+          "total_lessons",
+          "matched_lessons_count",
+          "matched_percentage",
+          "saved_minutes"
+        ],
+        "type": "object",
+        "properties": {
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
+          },
+          "total_lessons": {
+            "title": "Total Lessons",
+            "type": "integer"
+          },
+          "matched_lessons_count": {
+            "title": "Matched Lessons Count",
+            "type": "integer"
+          },
+          "matched_percentage": {
+            "title": "Matched Percentage",
+            "type": "number"
+          },
+          "saved_minutes": {
+            "title": "Saved Minutes",
+            "type": "integer"
+          },
+          "topics": {
+            "title": "Topics",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyllabusTopicMatch"
+            }
+          },
+          "lessons": {
+            "title": "Lessons",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyllabusLessonMatch"
+            }
+          }
+        }
+      },
+      "SyllabusTopicMatch": {
+        "title": "SyllabusTopicMatch",
+        "required": [
+          "topic"
+        ],
+        "type": "object",
+        "properties": {
+          "topic": {
+            "title": "Topic",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string",
+            "default": "General"
+          },
+          "matched_lesson_count": {
+            "title": "Matched Lesson Count",
+            "type": "integer",
+            "default": 0
+          },
+          "matched_lesson_ids": {
+            "title": "Matched Lesson Ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SystemSettingsResponse": {
+        "title": "SystemSettingsResponse",
         "required": [
           "ytdlp_version",
           "timezone",
@@ -5627,229 +6030,232 @@
           "has_groq_key",
           "has_openrouter_key"
         ],
-        "title": "SystemSettingsResponse"
+        "type": "object",
+        "properties": {
+          "ytdlp_version": {
+            "title": "Ytdlp Version",
+            "type": "string"
+          },
+          "cookies_browser": {
+            "title": "Cookies Browser",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "data_dir": {
+            "title": "Data Dir",
+            "type": "string"
+          },
+          "db_size_bytes": {
+            "title": "Db Size Bytes",
+            "type": "integer"
+          },
+          "transcripts_size_bytes": {
+            "title": "Transcripts Size Bytes",
+            "type": "integer"
+          },
+          "screenshots_size_bytes": {
+            "title": "Screenshots Size Bytes",
+            "type": "integer"
+          },
+          "has_gemini_key": {
+            "title": "Has Gemini Key",
+            "type": "boolean"
+          },
+          "has_groq_key": {
+            "title": "Has Groq Key",
+            "type": "boolean"
+          },
+          "has_openrouter_key": {
+            "title": "Has Openrouter Key",
+            "type": "boolean"
+          },
+          "has_ollama": {
+            "title": "Has Ollama",
+            "type": "boolean",
+            "default": false
+          },
+          "gemini_model": {
+            "title": "Gemini Model",
+            "type": "string",
+            "default": "gemini-2.5-flash"
+          },
+          "groq_model": {
+            "title": "Groq Model",
+            "type": "string",
+            "default": "llama-3.3-70b-versatile"
+          },
+          "openrouter_model": {
+            "title": "Openrouter Model",
+            "type": "string",
+            "default": "google/gemini-2.5-flash"
+          },
+          "openrouter_base_url": {
+            "title": "Openrouter Base Url",
+            "type": "string",
+            "default": "https://openrouter.ai/api/v1"
+          },
+          "ollama_base_url": {
+            "title": "Ollama Base Url",
+            "type": "string",
+            "default": "http://localhost:11434"
+          },
+          "ollama_model": {
+            "title": "Ollama Model",
+            "type": "string",
+            "default": "llama3.2"
+          },
+          "default_minutes_per_day": {
+            "title": "Default Minutes Per Day",
+            "type": "integer",
+            "default": 90
+          },
+          "default_playback_speed": {
+            "title": "Default Playback Speed",
+            "type": "number",
+            "default": 1.25
+          },
+          "default_rest_days": {
+            "title": "Default Rest Days",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "default_revision_buffer_days": {
+            "title": "Default Revision Buffer Days",
+            "type": "integer",
+            "default": 2
+          }
+        }
       },
       "TestConnectionRequest": {
-        "properties": {
-          "provider": {
-            "type": "string",
-            "title": "Provider",
-            "description": "'gemini', 'groq', 'openrouter', or 'ollama'"
-          },
-          "api_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Api Key"
-          },
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
-          },
-          "base_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Base Url"
-          }
-        },
-        "type": "object",
+        "title": "TestConnectionRequest",
         "required": [
           "provider"
         ],
-        "title": "TestConnectionRequest"
+        "type": "object",
+        "properties": {
+          "provider": {
+            "title": "Provider",
+            "type": "string",
+            "description": "'gemini', 'groq', 'openrouter', or 'ollama'"
+          },
+          "api_key": {
+            "title": "Api Key",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          }
+        }
       },
       "TestConnectionResponse": {
-        "properties": {
-          "success": {
-            "type": "boolean",
-            "title": "Success"
-          },
-          "provider": {
-            "type": "string",
-            "title": "Provider"
-          },
-          "message": {
-            "type": "string",
-            "title": "Message"
-          },
-          "guide": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Guide"
-          }
-        },
-        "type": "object",
+        "title": "TestConnectionResponse",
         "required": [
           "success",
           "provider",
           "message"
         ],
-        "title": "TestConnectionResponse"
+        "type": "object",
+        "properties": {
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "guide": {
+            "title": "Guide",
+            "type": "string"
+          }
+        }
       },
       "UpdateSettingsRequest": {
+        "title": "UpdateSettingsRequest",
+        "type": "object",
         "properties": {
           "cookies_browser": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
             "title": "Cookies Browser",
+            "type": "string",
             "description": "Browser name for --cookies-from-browser (e.g. 'chrome', 'firefox', 'safari', 'brave')"
           },
           "minutes_per_day": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 720.0,
-                "minimum": 10.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Minutes Per Day"
+            "title": "Minutes Per Day",
+            "maximum": 720.0,
+            "minimum": 10.0,
+            "type": "integer"
           },
           "playback_speed": {
-            "anyOf": [
-              {
-                "type": "number",
-                "maximum": 3.0,
-                "minimum": 0.5
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Playback Speed"
+            "title": "Playback Speed",
+            "maximum": 3.0,
+            "minimum": 0.5,
+            "type": "number"
           },
           "rest_days": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rest Days"
+            "title": "Rest Days",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "revision_buffer_days": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 14.0,
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Revision Buffer Days"
+            "title": "Revision Buffer Days",
+            "maximum": 14.0,
+            "minimum": 0.0,
+            "type": "integer"
           },
           "gemini_model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Gemini Model"
+            "title": "Gemini Model",
+            "type": "string"
           },
           "groq_model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Groq Model"
+            "title": "Groq Model",
+            "type": "string"
           },
           "openrouter_model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Openrouter Model"
+            "title": "Openrouter Model",
+            "type": "string"
           },
           "openrouter_base_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Openrouter Base Url"
+            "title": "Openrouter Base Url",
+            "type": "string"
           },
           "ollama_base_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ollama Base Url"
+            "title": "Ollama Base Url",
+            "type": "string"
           },
           "ollama_model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ollama Model"
+            "title": "Ollama Model",
+            "type": "string"
           }
-        },
-        "type": "object",
-        "title": "UpdateSettingsRequest"
+        }
       },
       "ValidationError": {
+        "title": "ValidationError",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "type": "object",
         "properties": {
           "loc": {
+            "title": "Location",
+            "type": "array",
             "items": {
               "anyOf": [
                 {
@@ -5859,58 +6265,35 @@
                   "type": "integer"
                 }
               ]
-            },
-            "type": "array",
-            "title": "Location"
+            }
           },
           "msg": {
-            "type": "string",
-            "title": "Message"
+            "title": "Message",
+            "type": "string"
           },
           "type": {
-            "type": "string",
-            "title": "Error Type"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "ctx": {
-            "type": "object",
-            "title": "Context"
+            "title": "Error Type",
+            "type": "string"
           }
-        },
-        "type": "object",
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError"
+        }
       },
       "WebSourceImportRequest": {
-        "properties": {
-          "url": {
-            "type": "string",
-            "maxLength": 2048,
-            "title": "Url"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          }
-        },
-        "type": "object",
+        "title": "WebSourceImportRequest",
         "required": [
           "url"
         ],
-        "title": "WebSourceImportRequest"
+        "type": "object",
+        "properties": {
+          "url": {
+            "title": "Url",
+            "maxLength": 2048,
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        }
       }
     }
   }

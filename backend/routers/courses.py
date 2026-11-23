@@ -804,6 +804,12 @@ def apply_syllabus_alignment(
                 today = default_clock()
                 strategy = course["schedule_strategy"] if "schedule_strategy" in course.keys() else "paced"
 
+                # Preserve completed lessons and only replace non-completed allocations
+                completed_rows = db.execute(
+                    "SELECT DISTINCT lesson_id FROM schedule_allocations WHERE course_id = ? AND is_completed = 1;",
+                    (course_id,),
+                ).fetchall()
+                completed_ids = {r[0] for r in completed_rows}
                 sched_result = generate_schedule(
                     course_id=course_id,
                     lessons=lesson_dicts,
@@ -814,8 +820,9 @@ def apply_syllabus_alignment(
                     rest_days=rest_days,
                     revision_buffer_days=course["revision_buffer_days"],
                     schedule_strategy=strategy,
+                    completed_lesson_ids=completed_ids,
                 )
-                db.execute("DELETE FROM schedule_allocations WHERE course_id = ?;", (course_id,))
+                db.execute("DELETE FROM schedule_allocations WHERE course_id = ? AND is_completed = 0;", (course_id,))
                 for a in sched_result["allocations"]:
                     db.execute(
                         """

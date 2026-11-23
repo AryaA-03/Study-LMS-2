@@ -417,7 +417,19 @@ async def answer_course_question(
     # 3. Synthesize answer
     has_llm = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY)
     if has_llm:
-        answer_text, citations = await generate_llm_grounded_answer(query, matching_chunks, settings.GEMINI_API_KEY)
+        prior_turns_block = ""
+        if db_conn is not None:
+            try:
+                hist_rows = db_conn.execute(
+                    "SELECT query, answer_markdown FROM qa_threads WHERE course_id = ? ORDER BY created_at DESC LIMIT 6;",
+                    (course_id,),
+                ).fetchall()
+                if hist_rows:
+                    turns = [f"User: {r[0]}\nAssistant: {(r[1] or '')[:300]}" for r in reversed(hist_rows)]
+                    prior_turns_block = "\n\nRecent Conversation Context:\n" + "\n---\n".join(turns) + "\n\nCurrent Question: "
+            except Exception:
+                prior_turns_block = ""
+        answer_text, citations = await generate_llm_grounded_answer(prior_turns_block + query, matching_chunks, settings.GEMINI_API_KEY)
     else:
         answer_text, citations = format_no_key_answer(query, matching_chunks)
 

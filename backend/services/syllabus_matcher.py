@@ -210,10 +210,10 @@ def score_lesson_against_topic(
     expanded_common = topic_expanded.intersection(lesson_expanded)
     if len(topic_tokens) > 0:
         direct_ratio = len(direct_common) / len(topic_tokens)
-        expanded_ratio = len(expanded_common) / len(topic_tokens)
+        expanded_ratio = min(1.0, len(expanded_common) / len(topic_tokens))
         score = max(direct_ratio, expanded_ratio * 0.85)
 
-        if score >= 0.5:
+        if score >= 0.20:
             matched_words = ", ".join(list(expanded_common)[:3])
             return (round(score, 2), f"Matched on keywords ({matched_words})")
 

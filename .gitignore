@@ -31,6 +31,8 @@ htmlcov/
 # Node / Frontend Build Artifacts
 node_modules/
 dist/
+!frontend/static/dist/
+!frontend/static/dist/**
 build/
 .next/
 out/

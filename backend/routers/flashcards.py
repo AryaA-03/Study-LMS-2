@@ -206,3 +206,29 @@ def delete_card(
     db.execute("DELETE FROM flashcards WHERE id = ? AND course_id = ?;", (card_id, course_id))
     db.commit()
     return {"success": True, "deleted_id": card_id}
+
+
+@router.post("/lessons/{lesson_id}/generate", response_model=List[FlashcardResponse])
+def generate_lesson_flashcards_endpoint(
+    course_id: str,
+    lesson_id: str,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Auto-generate concept flashcards for a specific lesson from its notes/chunks."""
+    from backend.services.fsrs_engine import generate_concept_flashcards
+
+    lesson = db.execute(
+        "SELECT id, title FROM lessons WHERE id = ? AND course_id = ?;",
+        (lesson_id, course_id),
+    ).fetchone()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found in this course")
+    cards = generate_concept_flashcards(db, course_id=course_id, lesson_id=lesson_id)
+    state_map = {0: "New", 1: "Learning", 2: "Review", 3: "Relearning"}
+    out = []
+    for c in cards or []:
+        d = dict(c)
+        d.setdefault("state_name", state_map.get(int(d.get("state") or 0), "New"))
+        d.setdefault("interval_previews", {})
+        out.append(d)
+    return out

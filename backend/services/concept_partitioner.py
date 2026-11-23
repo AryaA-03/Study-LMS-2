@@ -333,7 +333,7 @@ def partition_video_deterministic(
 
     for i, c in enumerate(clips):
         c_start = last_end
-        c_end = max(c_start + 60, int(c["end_sec"]))
+        c_end = min(total_duration, max(c_start + 60, int(c["end_sec"])))
         if i == len(clips) - 1:
             c_end = total_duration
         if i == 0:
@@ -593,7 +593,7 @@ def partition_video_semantic_ai(
 
     for i, c in enumerate(all_clips):
         c_start = last_end
-        c_end = max(c_start + 60, int(c["end_sec"]))
+        c_end = min(total_duration, max(c_start + 60, int(c["end_sec"])))
         if i == 0:
             c_start = 0
         if i == len(all_clips) - 1:
