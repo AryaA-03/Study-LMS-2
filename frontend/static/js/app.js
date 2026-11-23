@@ -567,9 +567,12 @@ function setupEventListeners() {
   const populatePreset = (title, query) => {
     document.getElementById('input-course-title').value = title;
     document.getElementById('input-goal-query').value = query;
-    inputCourseTitle.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    inputCourseTitle.classList.add('ring-2', 'ring-blue-500');
-    setTimeout(() => inputCourseTitle.classList.remove('ring-2', 'ring-blue-500'), 1500);
+    const _presetTitleEl = document.getElementById('input-course-title');
+    if (_presetTitleEl) {
+        _presetTitleEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        _presetTitleEl.classList.add('ring-2', 'ring-blue-500');
+        setTimeout(() => _presetTitleEl.classList.remove('ring-2', 'ring-blue-500'), 1500);
+    }
   };
 
   const selectExistingOrPopulate = (titleMatch, query, fallbackTitle) => {

@@ -1,3 +1,5 @@
+import sqlite3
+import hashlib
 """Citation Quiz & Diagnostic Pre-Test Engine.
 
 Generates strictly grounded multiple-choice questions (MCQs) citing source chunks,
@@ -1288,6 +1290,54 @@ def create_and_store_quiz(
     }
 
 
+
+def _resolve_valid_chunk_id(conn: sqlite3.Connection, chunk_id: Optional[str]) -> Optional[str]:
+    """Return chunk_id only if it actually exists in chunks table (prevents FK crash on untranscribed/synthetic quizzes)."""
+    if not chunk_id:
+        return None
+    row = conn.execute("SELECT 1 FROM chunks WHERE id = ?;", (chunk_id,)).fetchone()
+    return chunk_id if row else None
+
+
+def _create_missed_flashcard_safe(
+    conn: sqlite3.Connection,
+    course_id: str,
+    front: str,
+    back: str,
+    lesson_id: Optional[str],
+    chunk_id: Optional[str],
+    source_quote: Optional[str],
+) -> None:
+    """Create a flashcard for a missed quiz question with valid FK chunk_id and deduplication."""
+    q_hash = hashlib.sha256(f"{course_id}:{lesson_id or ''}:{front.strip().lower()}".encode("utf-8")).hexdigest()[:32]
+    try:
+        existing = conn.execute(
+            "SELECT id FROM flashcards WHERE course_id = ? AND source_question_hash = ?;",
+            (course_id, q_hash),
+        ).fetchone()
+        if existing:
+            return
+    except sqlite3.OperationalError:
+        q_hash = None
+    safe_chunk_id = _resolve_valid_chunk_id(conn, chunk_id)
+    card = create_flashcard(
+        conn=conn,
+        course_id=course_id,
+        front=front,
+        back=back,
+        lesson_id=lesson_id,
+        chunk_id=safe_chunk_id,
+        source_quote=source_quote,
+    )
+    if q_hash and isinstance(card, dict) and card.get("id"):
+        try:
+            conn.execute(
+                "UPDATE flashcards SET source_question_hash = ? WHERE id = ?;",
+                (q_hash, card["id"]),
+            )
+        except sqlite3.OperationalError:
+            pass
+
 def grade_and_apply_mastery(
     conn,
     quiz_id: str,
@@ -1410,7 +1460,7 @@ def grade_and_apply_mastery(
                 else:
                     correct_opt = mq["options"][mq["correct_index"]] if mq.get("options") else ""
                     back = f"Correct Answer: {correct_opt}\n\nEvidence: {mq.get('explanation', '')}"
-                create_flashcard(
+                _create_missed_flashcard_safe(
                     conn=conn,
                     course_id=course_id,
                     front=front,
@@ -1444,7 +1494,7 @@ def grade_and_apply_mastery(
                 else:
                     correct_opt = mq["options"][mq["correct_index"]] if mq.get("options") else ""
                     back = f"Answer: {correct_opt}\n\nExplanation: {mq.get('explanation', '')}"
-                create_flashcard(
+                _create_missed_flashcard_safe(
                     conn=conn,
                     course_id=course_id,
                     front=front,

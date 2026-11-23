@@ -332,7 +332,14 @@ async def answer_course_question(
 ) -> Dict[str, Any]:
     """Orchestrates FTS5 search, answer synthesis, caching, and persistence in qa_threads."""
     # 1. Check llm_cache for existing (course_id, query, lesson_id)
-    cache_key = f"qa:{course_id}:{query}:{lesson_id or ''}"
+    chunk_cnt = 0
+    if db_conn is not None:
+        try:
+            row_c = db_conn.execute("SELECT COUNT(*) FROM chunks WHERE course_id = ?;", (course_id,)).fetchone()
+            chunk_cnt = int(row_c[0]) if row_c else 0
+        except Exception:
+            chunk_cnt = 0
+    cache_key = f"qa:{course_id}:v{chunk_cnt}:{query}:{lesson_id or ''}"
     prompt_hash = compute_sha256(cache_key)
 
     if db_conn is not None:
@@ -415,7 +422,7 @@ async def answer_course_question(
         answer_text, citations = format_no_key_answer(query, matching_chunks)
 
     # 4. Save to llm_cache only if it is a substantive answer
-    if db_conn is not None and not answer_text.startswith("**Study Guide for:"):
+    if db_conn is not None and answer_text and "sufficient evidence" not in answer_text.lower() and "couldn't find" not in answer_text.lower():
         cache_val = json.dumps({
             "answer_markdown": answer_text,
             "citations": citations

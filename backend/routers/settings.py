@@ -12,7 +12,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from backend.database import get_db
 from backend.config import DATA_DIR, DB_PATH, TIMEZONE_STR, ENV_VARS, update_env_file
@@ -376,3 +376,45 @@ def vacuum_database(db: sqlite3.Connection = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"VACUUM failed: {str(e)}")
 
+
+
+@router.post("/restore")
+async def restore_sqlite_backup(request: Request, file: UploadFile = File(...)):
+    """Localhost-only validated SQLite database restore with automatic pre-restore backup."""
+    from backend.migrations.runner import backup_db_before_migration, get_current_schema_version
+
+    client_host = request.client.host if request.client else ""
+    if client_host not in ("127.0.0.1", "::1", "localhost", "testclient"):
+        raise HTTPException(status_code=403, detail="Database restore is only accessible from localhost.")
+
+    data = await file.read(100 * 1024 * 1024 + 1)
+    if len(data) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Backup file exceeds 100 MB limit.")
+    if not data.startswith(b"SQLite format 3\x00"):
+        raise HTTPException(status_code=400, detail="Uploaded file is not a valid SQLite 3 database.")
+
+    tmp_fd, tmp_path = tempfile.mkstemp(prefix="restore_candidate_", suffix=".db")
+    try:
+        with os.fdopen(tmp_fd, "wb") as f:
+            f.write(data)
+        check_conn = sqlite3.connect(tmp_path)
+        try:
+            res = check_conn.execute("PRAGMA integrity_check;").fetchone()
+            if not res or res[0] != "ok":
+                raise HTTPException(status_code=400, detail="Uploaded SQLite backup failed integrity check.")
+        finally:
+            check_conn.close()
+
+        if DB_PATH.exists():
+            cur_conn = sqlite3.connect(str(DB_PATH))
+            try:
+                ver = get_current_schema_version(cur_conn)
+            finally:
+                cur_conn.close()
+            backup_db_before_migration(DB_PATH, ver)
+
+        create_verified_online_backup(Path(tmp_path), DB_PATH)
+        return {"success": True, "message": "Database restored and verified successfully."}
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)

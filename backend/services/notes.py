@@ -144,6 +144,21 @@ def generate_no_key_structured_notes(
         lines.append(f"- ⚡ **High-Yield Point {idx+1}** {c_pill}: {s_part}.")
 
     chunk_ids = [str(c["id"]) for c in chunks if c.get("id")]
+    if screenshots:
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+        lines.append("## Captured Slides & Keyframes")
+        lines.append("")
+        for sc in screenshots[:6]:
+            sc_pill = sc.get("formatted_time") or format_seconds_to_mm_ss(sc.get("timestamp_sec") or 0)
+            sc_cap = sc.get("caption") or f"Slide at {sc_pill}"
+            sc_url = sc.get("url") or ""
+            if sc_url:
+                lines.append(f"![{sc_cap}]({sc_url})")
+                lines.append(f"*{sc_pill} — {sc_cap}*")
+                lines.append("")
+
     if chunk_ids:
         lines.append("")
         lines.append("---")

@@ -1210,3 +1210,36 @@ def discover_web_candidates(course_id: str, db: sqlite3.Connection = Depends(get
         ]
     return {"candidates": candidates}
 
+
+
+@router.delete("/{course_id}")
+def delete_course(course_id: str, db: sqlite3.Connection = Depends(get_db)):
+    """Delete a course, cascading all DB child records and cleaning disk uploads/screenshots."""
+    import shutil
+    from backend.config import DATA_DIR
+
+    row = db.execute("SELECT id FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Course not found")
+    db.execute("DELETE FROM courses WHERE id = ?;", (course_id,))
+    db.commit()
+    for folder_name in ("uploads", "screenshots"):
+        target = (DATA_DIR / folder_name / course_id).resolve()
+        base = (DATA_DIR / folder_name).resolve()
+        if target.is_relative_to(base) and target.exists():
+            shutil.rmtree(target, ignore_errors=True)
+    return {"success": True, "deleted_course_id": course_id}
+
+
+@router.delete("/{course_id}/sources/{source_id}")
+def delete_course_source(course_id: str, source_id: str, db: sqlite3.Connection = Depends(get_db)):
+    """Delete a single source from a course, cascading its lessons and chunks."""
+    row = db.execute(
+        "SELECT id FROM sources WHERE id = ? AND course_id = ?;",
+        (source_id, course_id),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Source not found in this course")
+    db.execute("DELETE FROM sources WHERE id = ? AND course_id = ?;", (source_id, course_id))
+    db.commit()
+    return {"success": True, "deleted_source_id": source_id}

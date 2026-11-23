@@ -26,6 +26,7 @@ from backend.routers import (
     courses,
     cram_sheet,
     flashcards,
+    jobs,
     notes,
     pyq,
     qa,
@@ -108,6 +109,7 @@ app.include_router(sources.router)
 app.include_router(qa.router)
 app.include_router(quizzes.router)
 app.include_router(flashcards.router)
+app.include_router(jobs.router)
 app.include_router(pyq.router)
 app.include_router(cram_sheet.router)
 

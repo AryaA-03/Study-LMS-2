@@ -55,11 +55,31 @@ def get_counts(
 def list_all_flashcards(
     course_id: str,
     lesson_id: Optional[str] = None,
+    due_only: bool = False,
     limit: int = 100,
     db: sqlite3.Connection = Depends(get_db),
 ):
-    # Retrieve all flashcards (not just due)
-    return get_due_flashcards(conn=db, course_id=course_id, lesson_id=lesson_id, as_of=None, limit=limit)
+    """Retrieve all flashcards in a course (or only due cards when due_only=true)."""
+    if due_only:
+        return get_due_flashcards(conn=db, course_id=course_id, lesson_id=lesson_id, as_of=None, limit=limit)
+    if lesson_id:
+        rows = db.execute(
+            "SELECT * FROM flashcards WHERE course_id = ? AND lesson_id = ? ORDER BY due_date ASC LIMIT ?;",
+            (course_id, lesson_id, limit),
+        ).fetchall()
+    else:
+        rows = db.execute(
+            "SELECT * FROM flashcards WHERE course_id = ? ORDER BY due_date ASC LIMIT ?;",
+            (course_id, limit),
+        ).fetchall()
+    state_map = {0: "New", 1: "Learning", 2: "Review", 3: "Relearning"}
+    result = []
+    for r in rows:
+        d = dict(r)
+        d.setdefault("state_name", state_map.get(int(d.get("state") or 0), "New"))
+        d.setdefault("interval_previews", {})
+        result.append(d)
+    return result
 
 
 @router.post("", response_model=FlashcardResponse)
