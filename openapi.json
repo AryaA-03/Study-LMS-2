@@ -1391,6 +1391,62 @@
         ]
       }
     },
+    "/api/courses/{course_id}/smart-prepare": {
+      "post": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Smart Prepare Course Endpoint",
+        "description": "Upgrade long fixed-slice videos via subtitle-based semantic partitioning, cluster playlists, and start background study bundle generation.",
+        "operationId": "smart_prepare_course_endpoint_api_courses__course_id__smart_prepare_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
+            "in": "path"
+          },
+          {
+            "required": false,
+            "schema": {
+              "title": "Force Repartition",
+              "type": "boolean",
+              "default": false
+            },
+            "name": "force_repartition",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/courses/{course_id}/schedule/generate": {
       "post": {
         "tags": [
@@ -5456,6 +5512,10 @@
           },
           "priority": {
             "title": "Priority",
+            "type": "string"
+          },
+          "chapter_title": {
+            "title": "Chapter Title",
             "type": "string"
           }
         }

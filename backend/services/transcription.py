@@ -252,13 +252,15 @@ def _group_words_into_chunks(
 async def fetch_youtube_captions(
     video_url_or_id: str,
     start_sec: int = 0,
-    end_sec: int = sys.maxsize,
+    end_sec: Optional[int] = sys.maxsize,
 ) -> Optional[List[Dict[str, Any]]]:
     """Fetches manual or auto-generated captions for a YouTube video.
     
     Prefers json3 for exact word-level timing, falls back to vtt.
     Returns chunked transcript dicts, or None if no captions exist.
     """
+    start_sec = max(0, int(start_sec or 0))
+    end_sec = int(end_sec) if (end_sec is not None and int(end_sec) > start_sec) else sys.maxsize
     video_url = video_url_or_id
     if not video_url.startswith("http"):
         video_url = f"https://www.youtube.com/watch?v={video_url_or_id}"
@@ -279,13 +281,19 @@ async def fetch_youtube_captions(
     subtitles = info.get("subtitles") or {}
     auto_captions = info.get("automatic_captions") or {}
 
-    # Prefer English manual captions, then English auto-captions, then any first available
-    en_formats = (
-        subtitles.get("en")
-        or auto_captions.get("en")
-        or (next(iter(subtitles.values()), None) if subtitles else None)
-        or (next(iter(auto_captions.values()), None) if auto_captions else None)
-    )
+    # Prefer English/Hinglish/Hindi manual captions, then auto-captions (handles en-IN, en-orig, hi, hi-orig)
+    def _pick_track(track_map: dict):
+        if not track_map:
+            return None
+        for code in ("en", "en-orig", "en-IN", "en-US", "en-GB", "hi", "hi-orig"):
+            if track_map.get(code):
+                return track_map[code]
+        for k, v in track_map.items():
+            if v and (k.startswith("en") or k.startswith("hi")):
+                return v
+        return next(iter(track_map.values()), None)
+
+    en_formats = _pick_track(subtitles) or _pick_track(auto_captions)
 
     if not en_formats:
         logger.info(f"No subtitle tracks found for video {video_url_or_id}")

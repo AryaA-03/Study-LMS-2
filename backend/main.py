@@ -53,6 +53,11 @@ from backend.routers import (
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     try:
+        from backend.migrations.runner import apply_migrations
+        apply_migrations()
+    except Exception as mig_err:
+        logger.warning(f"[Startup] Migration check warning: {mig_err}")
+    try:
         from backend.database import get_db_context
         with get_db_context() as conn:
             try:

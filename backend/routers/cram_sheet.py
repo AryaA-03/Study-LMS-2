@@ -3,7 +3,7 @@ from pathlib import Path
 
 import logging
 from typing import Dict, Any, Optional
-from backend.deps import get_current_user
+from backend.deps import CurrentUser, get_current_user, require_course_owner
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 import sqlite3
 
@@ -101,40 +101,24 @@ def download_cram_sheet_markdown(
     )
 
 
-@router.post("/{course_id}/cram-sheet/generate-full-async", status_code=202)
+@router.post("/{course_id}/cram-sheet/generate-full-async", status_code=202, dependencies=[Depends(require_course_owner)])
 async def trigger_full_syllabus_cram_sheet_async(
     course_id: str,
-    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
     db: sqlite3.Connection = Depends(get_db),
 ):
     """Non-blocking background job version of full-syllabus cram sheet synthesis (returns 202 + job_id)."""
-    from backend.database import get_db_context
-    from backend.infra.job_queue import enqueue_job, update_job_progress
+    from backend.infra.job_queue import enqueue_job
 
     row = db.execute("SELECT id FROM courses WHERE id = ?;", (course_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Course not found")
 
-    job_id = enqueue_job(db, "cram_sheet_full", course_id=course_id, payload={"full_syllabus": True})
-    db_file_row = db.execute("PRAGMA database_list;").fetchone()
-    target_db_path = Path(db_file_row[2]) if (db_file_row and db_file_row[2]) else None
-
-    async def _run_job():
-        ctx = get_db_context(target_db_path) if target_db_path else get_db_context()
-        with ctx as jdb:
-            update_job_progress(jdb, job_id, "running", 10, "Synthesizing full-syllabus cram sheet...")
-            try:
-                sheet = await get_or_create_cram_sheet(jdb, course_id, force_refresh=True, full_syllabus=True)
-                update_job_progress(
-                    jdb,
-                    job_id,
-                    "completed",
-                    100,
-                    "Cram sheet ready",
-                    result={"cram_sheet_id": sheet.get("id") if isinstance(sheet, dict) else None},
-                )
-            except Exception as exc:
-                update_job_progress(jdb, job_id, "failed", 100, "Failed", error_text=str(exc))
-
-    background_tasks.add_task(_run_job)
+    job_id = enqueue_job(
+        db,
+        "cram_sheet_full",
+        course_id=course_id,
+        payload={"full_syllabus": True},
+        owner_id=user.id,
+    )
     return {"job_id": job_id, "status": "queued", "course_id": course_id}

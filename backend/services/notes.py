@@ -359,7 +359,7 @@ async def get_or_generate_lesson_notes(
             (lesson_id,)
         )
         note_row = cur.fetchone()
-        if note_row and note_row[1]:
+        if note_row and note_row[1] and "No transcript or captions found" not in note_row[1]:
             return {
                 "id": note_row[0],
                 "content_markdown": note_row[1],
@@ -379,6 +379,38 @@ async def get_or_generate_lesson_notes(
         (lesson_id,)
     )
     chunk_rows = cur.fetchall()
+    if not chunk_rows:
+        try:
+            cur.execute(
+                "SELECT source_id, video_id, video_url, start_sec, end_sec FROM lessons WHERE id = ?;",
+                (lesson_id,),
+            )
+            lm = cur.fetchone()
+            target_vid = (lm[1] or lm[2] or "") if lm else ""
+            if target_vid:
+                from backend.services.transcription import ingest_lesson_transcript
+                await ingest_lesson_transcript(
+                    db_conn,
+                    course_id=course_id,
+                    source_id=(lm[0] or None),
+                    lesson_id=lesson_id,
+                    video_id_or_url=target_vid,
+                    start_sec=int(lm[3] or 0),
+                    end_sec=lm[4],
+                )
+                cur.execute(
+                    """
+                    SELECT id, chunk_index, token_count, start_sec, end_sec, content
+                    FROM chunks
+                    WHERE lesson_id = ?
+                    ORDER BY start_sec ASC, chunk_index ASC;
+                    """,
+                    (lesson_id,),
+                )
+                chunk_rows = cur.fetchall()
+        except Exception as auto_err:
+            logger.warning(f"[Notes] Auto-transcription skipped for {lesson_id}: {auto_err}")
+
     chunks = [
         {
             "id": r[0],
@@ -396,12 +428,13 @@ async def get_or_generate_lesson_notes(
     screenshots = get_lesson_screenshots(db_conn, lesson_id)
 
     # 4. Generate structured notes
-    has_llm = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY)
+    cur_settings = get_settings()
+    has_llm = bool(cur_settings.GEMINI_API_KEY or cur_settings.GROQ_API_KEY or cur_settings.OPENROUTER_API_KEY)
     if has_llm:
         markdown = await generate_llm_structured_notes(
             lesson_title=lesson_title,
             chunks=chunks,
-            gemini_key=settings.GEMINI_API_KEY,
+            gemini_key=cur_settings.GEMINI_API_KEY,
             screenshots=screenshots,
             db_conn=db_conn,
         )

@@ -40,7 +40,7 @@ from backend.services.notes import get_or_generate_lesson_notes
 from backend.services.syllabus_matcher import match_syllabus_to_course
 
 logger = logging.getLogger("learn_lms.courses")
-from backend.deps import CurrentUser, get_current_user
+from backend.deps import CurrentUser, get_current_user, require_course_owner
 router = APIRouter(prefix="/api/courses", tags=["courses"], dependencies=[Depends(get_current_user)])
 
 @contextlib.contextmanager
@@ -115,6 +115,7 @@ async def pregenerate_initial_notes(course_id: str, db: Optional[sqlite3.Connect
 @router.post("", response_model=CourseResponse)
 def create_course(
     req: CourseCreateRequest,
+    user: CurrentUser = Depends(get_current_user),
     db: sqlite3.Connection = Depends(get_db),
 ):
     course_id = str(uuid.uuid4())
@@ -126,13 +127,14 @@ def create_course(
     db.execute(
         """
         INSERT INTO courses (
-            id, title, goal_query, source_preferences, target_date,
+            id, owner_id, title, goal_query, source_preferences, target_date,
             minutes_per_day, playback_speed, rest_days, revision_buffer_days, schedule_strategy,
             num_study_days, preferred_daily_minutes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """,
         (
             course_id,
+            user.id,
             req.title,
             req.goal_query,
             req.source_preferences or "",
@@ -182,15 +184,15 @@ def list_courses(
 
 get_all_courses = list_courses  # backward-compat alias for tests that import this directly
 
-@router.get("/{course_id}", response_model=CourseResponse)
+@router.get("/{course_id}", response_model=CourseResponse, dependencies=[Depends(require_course_owner)])
 def get_course(course_id: str, db: sqlite3.Connection = Depends(get_db)):
     row = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Course not found")
     return compute_course_stats(row, db)
 
-@router.patch("/{course_id}", response_model=CourseResponse)
-@router.put("/{course_id}", response_model=CourseResponse)
+@router.patch("/{course_id}", response_model=CourseResponse, dependencies=[Depends(require_course_owner)])
+@router.put("/{course_id}", response_model=CourseResponse, dependencies=[Depends(require_course_owner)])
 def update_course(
     course_id: str,
     req: CourseUpdateRequest,
@@ -880,8 +882,8 @@ def get_course_syllabus(course_id: str, db: sqlite3.Connection = Depends(get_db)
         syllabus_metadata=meta,
     )
 
-@router.patch("/{course_id}/lessons/{lesson_id}", response_model=LessonResponse)
-@router.put("/{course_id}/lessons/{lesson_id}", response_model=LessonResponse)
+@router.patch("/{course_id}/lessons/{lesson_id}", response_model=LessonResponse, dependencies=[Depends(require_course_owner)])
+@router.put("/{course_id}/lessons/{lesson_id}", response_model=LessonResponse, dependencies=[Depends(require_course_owner)])
 def update_lesson(
     course_id: str,
     lesson_id: str,
@@ -905,6 +907,9 @@ def update_lesson(
     if req.priority is not None:
         updates.append("priority = ?")
         params.append(req.priority)
+    if req.chapter_title is not None:
+        updates.append("chapter_title = ?")
+        params.append(req.chapter_title)
 
     if updates:
         params.extend([lesson_id, course_id])
@@ -1230,7 +1235,7 @@ def discover_web_candidates(course_id: str, db: sqlite3.Connection = Depends(get
 
 
 
-@router.delete("/{course_id}")
+@router.delete("/{course_id}", dependencies=[Depends(require_course_owner)])
 def delete_course(course_id: str, db: sqlite3.Connection = Depends(get_db)):
     """Delete a course, cascading all DB child records and cleaning disk uploads/screenshots."""
     import shutil
@@ -1271,3 +1276,16 @@ def cluster_topics_endpoint(course_id: str, db: sqlite3.Connection = Depends(get
         raise HTTPException(status_code=404, detail="Course not found")
     from backend.services.topic_grouper import cluster_course_topics
     return cluster_course_topics(db, course_id)
+
+@router.post("/{course_id}/smart-prepare")
+async def smart_prepare_course_endpoint(
+    course_id: str,
+    force_repartition: bool = False,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Upgrade long fixed-slice videos via subtitle-based semantic partitioning, cluster playlists, and start background study bundle generation."""
+    row = db.execute("SELECT id FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Course not found")
+    from backend.services.smart_prepare import smart_prepare_course
+    return await smart_prepare_course(db, course_id, force_repartition=force_repartition)

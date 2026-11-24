@@ -431,52 +431,65 @@ RULES:
     raw_clips = None
     try:
         with httpx.Client(timeout=25.0) as client:
-            if settings.GEMINI_API_KEY:
-                model_name = "gemini-2.5-flash"
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
-                _gemini_headers = {"x-goog-api-key": settings.GEMINI_API_KEY}
-                payload = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "systemInstruction": {"parts": [{"text": system_instruction}]},
-                    "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2}
-                }
-                resp = client.post(url, json=payload, headers=_gemini_headers)
-                if resp.status_code == 200:
-                    raw_clips = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-            elif settings.GROQ_API_KEY:
-                model_name = "llama-3.3-70b-versatile"
-                url = "https://api.groq.com/openai/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {settings.GROQ_API_KEY}", "Content-Type": "application/json"}
-                payload = {
-                    "model": model_name,
-                    "messages": [
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "temperature": 0.2,
-                    "response_format": {"type": "json_object"}
-                }
-                resp = client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    raw_clips = resp.json()["choices"][0]["message"]["content"]
-            elif settings.OPENROUTER_API_KEY:
-                model_name = "google/gemini-2.5-flash"
-                url = "https://openrouter.ai/api/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {settings.OPENROUTER_API_KEY}", "Content-Type": "application/json"}
-                payload = {
-                    "model": model_name,
-                    "messages": [
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "temperature": 0.2
-                }
-                resp = client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    raw_clips = resp.json()["choices"][0]["message"]["content"]
+            if not raw_clips and settings.GEMINI_API_KEY:
+                try:
+                    model_name = "gemini-2.5-flash"
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+                    _gemini_headers = {"x-goog-api-key": settings.GEMINI_API_KEY}
+                    payload = {
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "systemInstruction": {"parts": [{"text": system_instruction}]},
+                        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2}
+                    }
+                    resp = client.post(url, json=payload, headers=_gemini_headers)
+                    if resp.status_code == 200:
+                        raw_clips = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                except Exception as ge:
+                    logger.warning(f"Gemini semantic partition attempt failed: {ge}")
+            if not raw_clips and settings.GROQ_API_KEY:
+                try:
+                    model_name = "llama-3.3-70b-versatile"
+                    url = "https://api.groq.com/openai/v1/chat/completions"
+                    headers = {"Authorization": f"Bearer {settings.GROQ_API_KEY}", "Content-Type": "application/json"}
+                    payload = {
+                        "model": model_name,
+                        "messages": [
+                            {"role": "system", "content": system_instruction},
+                            {"role": "user", "content": prompt}
+                        ],
+                        "temperature": 0.2,
+                        "response_format": {"type": "json_object"}
+                    }
+                    resp = client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        raw_clips = resp.json()["choices"][0]["message"]["content"]
+                except Exception as gqe:
+                    logger.warning(f"Groq semantic partition attempt failed: {gqe}")
+            if not raw_clips and settings.OPENROUTER_API_KEY:
+                try:
+                    model_name = "google/gemini-2.5-flash"
+                    url = "https://openrouter.ai/api/v1/chat/completions"
+                    headers = {"Authorization": f"Bearer {settings.OPENROUTER_API_KEY}", "Content-Type": "application/json"}
+                    payload = {
+                        "model": model_name,
+                        "messages": [
+                            {"role": "system", "content": system_instruction},
+                            {"role": "user", "content": prompt}
+                        ],
+                        "temperature": 0.2
+                    }
+                    resp = client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        raw_clips = resp.json()["choices"][0]["message"]["content"]
+                except Exception as ore:
+                    logger.warning(f"OpenRouter semantic partition attempt failed: {ore}")
 
         if raw_clips:
-            parsed = json.loads(raw_clips)
+            cleaned_json = raw_clips.strip()
+            if cleaned_json.startswith("```"):
+                cleaned_json = re.sub(r"^```(?:json)?\s*", "", cleaned_json)
+                cleaned_json = re.sub(r"\s*```$", "", cleaned_json).strip()
+            parsed = json.loads(cleaned_json)
             clips_list = parsed.get("clips") if isinstance(parsed, dict) else parsed
             if isinstance(clips_list, list) and len(clips_list) >= 1:
                 if db_conn is not None:

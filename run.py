@@ -115,13 +115,13 @@ def ensure_port_available(host: str = "127.0.0.1", port: int = 8000):
         print(f"⚠️ Port {port} is currently occupied by a previous server process.")
         if sys.platform != "win32":
             try:
-                out = subprocess.check_output(["lsof", "-ti", f":{port}"]).decode().strip()
+                out = subprocess.check_output(["lsof", "-tiTCP:" + str(port), "-sTCP:LISTEN"]).decode().strip()
                 pids = [p.strip() for p in out.splitlines() if p.strip() and p.strip() != str(os.getpid())]
                 for pid in pids:
                     print(f"❌ Port {port} is in use by PID {pid}. Run: kill {pid} (or set APP_PORT=8001 python run.py)")
-                sys.exit(1)
             except Exception as e:
-                print(f"⚠️ Could not auto-terminate process on port {port}: {e}")
+                print(f"⚠️ Port {port} is busy (could not inspect PID: {e}). Set APP_PORT=8001 python run.py")
+        sys.exit(1)
 
 def start_server():
     """Starts FastAPI server using Uvicorn."""

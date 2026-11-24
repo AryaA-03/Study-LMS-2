@@ -130,7 +130,7 @@ def require_local_admin(request: Request) -> None:
             detail="Host-level administration endpoints are disabled in hosted mode.",
         )
     client_host = (request.client.host if request.client else "") or ""
-    if client_host and client_host not in _LOOPBACK_HOSTS:
+    if client_host not in _LOOPBACK_HOSTS:
         raise HTTPException(
             status_code=403,
             detail="Host-level administration endpoints are restricted to localhost.",

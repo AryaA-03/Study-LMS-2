@@ -231,7 +231,7 @@ export const EditLessonModal: React.FC<{
             className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 py-2 text-[var(--fg-primary)]"
           >
             <option value="core">Core (Always Kept)</option>
-            <option value="deep_dive">Deep-Dive (Dropped in Emergency Cram)</option>
+            <option value="deep-dive">Deep-Dive (Dropped in Emergency Cram)</option>
           </select>
         </div>
 
@@ -309,7 +309,6 @@ export const CommandPaletteModal: React.FC<{
                   type="button"
                   onClick={() => {
                     onAction(a.id);
-                    onClose();
                   }}
                   className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[var(--fg-primary)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-text)]"
                 >

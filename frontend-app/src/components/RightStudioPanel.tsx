@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   BookmarkPlus,
   CheckCircle2,
@@ -73,6 +73,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
+  const [shortAnswers, setShortAnswers] = useState<Record<string, string>>({});
   const [quizResult, setQuizResult] = useState<QuizSubmitResult | null>(null);
 
   // Flashcards state (moved right here to the Right Studio!)
@@ -162,12 +163,53 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, courseId, activeLesson?.id]);
 
+  const autoGenQuizRef = useRef<string | null>(null);
+  const autoGenCardsRef = useRef<string | null>(null);
+
   // Reset quiz when lesson changes
   useEffect(() => {
     setQuiz(null);
     setQuizAnswers({});
     setQuizResult(null);
   }, [activeLesson?.id]);
+
+  // Auto-load or auto-generate Quiz when user opens the Quiz tab (no manual click needed!)
+  useEffect(() => {
+    if (activeTab !== 'quiz' || !courseId || !activeLesson?.id || quiz || quizLoading) return;
+    const key = `${courseId}:${activeLesson.id}`;
+    if (autoGenQuizRef.current === key) return;
+    autoGenQuizRef.current = key;
+    setQuizLoading(true);
+    api
+      .listQuizzes(courseId, 'lesson', activeLesson.id)
+      .then((existing) => {
+        if (existing && existing.length > 0 && existing[0].questions?.length > 0) {
+          setQuiz(existing[0]);
+          return null;
+        }
+        return api.generateQuiz(courseId, { quiz_type: 'lesson', lesson_id: activeLesson.id, question_count: 5 });
+      })
+      .then((created) => {
+        if (created) setQuiz(created);
+      })
+      .catch(() => {})
+      .finally(() => setQuizLoading(false));
+  }, [activeTab, courseId, activeLesson?.id, quiz, quizLoading]);
+
+  // Auto-generate FSRS Flashcards when user opens Flashcards tab and deck is empty!
+  useEffect(() => {
+    if (activeTab !== 'flashcards' || !courseId || !activeLesson?.id || cardsLoading) return;
+    if (cards.length > 0 || dueOnly) return;
+    const key = `${courseId}:${activeLesson.id}`;
+    if (autoGenCardsRef.current === key) return;
+    autoGenCardsRef.current = key;
+    api
+      .generateLessonFlashcards(courseId, activeLesson.id)
+      .then((created) => {
+        if (created && created.length > 0) setCards(created);
+      })
+      .catch(() => {});
+  }, [activeTab, courseId, activeLesson?.id, cards.length, cardsLoading, dueOnly]);
 
   const handleSaveNotes = async () => {
     if (!activeLesson) return;
@@ -218,7 +260,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
     if (!courseId || !quiz) return;
     setQuizLoading(true);
     try {
-      const res = await api.submitQuiz(courseId, quiz.id, quizAnswers);
+      const res = await api.submitQuiz(courseId, quiz.id, quizAnswers, shortAnswers);
       setQuizResult(res);
       if (res.schedule_updated) onScheduleChanged();
       if ((res.flashcards_created || 0) > 0) {
@@ -434,8 +476,10 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
           ) : (
             <div className="space-y-3">
               {quiz.questions.map((q, idx) => {
-                const resItem = quizResult?.results?.find((r) => r.question_id === q.id);
-                const ts = resItem?.source_timestamp_sec ?? q.source_timestamp_sec;
+                const chosenIdx = quizAnswers[q.id];
+                const isGraded = !!quizResult;
+                const isCorrectAnswer = isGraded && chosenIdx === q.correct_index;
+                const ts = q.timestamp_sec ?? q.source_timestamp_sec;
                 return (
                   <div
                     key={q.id}
@@ -443,7 +487,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                   >
                     <div className="flex items-start justify-between gap-2 text-xs font-semibold text-[var(--fg-primary)]">
                       <span>
-                        {idx + 1}. {q.question_text}
+                        {idx + 1}. {q.question || q.question_text}
                       </span>
                       {ts !== undefined && ts !== null && (
                         <button
@@ -457,11 +501,21 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                       )}
                     </div>
 
+                    {q.question_type === 'short_answer' ? (
+                      <textarea
+                        rows={3}
+                        disabled={!!quizResult}
+                        value={shortAnswers[q.id] || ''}
+                        onChange={(e) => setShortAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                        placeholder="Write your concise exam answer here..."
+                        className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-2 text-xs text-[var(--fg-primary)] outline-none focus:border-[var(--accent)]"
+                      />
+                    ) : (
                     <div className="space-y-1.5">
                       {(q.options || []).map((opt, oIdx) => {
                         const chosen = quizAnswers[q.id] === oIdx;
-                        const isCorrectOpt = resItem && resItem.correct_index === oIdx;
-                        const isWrongChosen = resItem && chosen && !resItem.is_correct;
+                        const isCorrectOpt = isGraded && q.correct_index === oIdx;
+                        const isWrongChosen = isGraded && chosen && !isCorrectAnswer;
                         return (
                           <button
                             key={oIdx}
@@ -488,11 +542,12 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                         );
                       })}
                     </div>
+                    )}
 
-                    {resItem && (
+                    {isGraded && (
                       <div className="rounded-lg bg-[var(--bg-elevated)] p-2 text-[11px] text-[var(--fg-secondary)] space-y-1">
-                        <p>{resItem.explanation || q.explanation}</p>
-                        {!resItem.is_correct && ts !== undefined && ts !== null && (
+                        <p>{q.explanation || (isCorrectAnswer ? 'Correct!' : 'Review this concept in the lecture clip below.')}</p>
+                        {!isCorrectAnswer && ts !== undefined && ts !== null && (
                           <button
                             type="button"
                             onClick={() => onSeekTimestamp(ts)}
@@ -511,7 +566,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                 <button
                   type="button"
                   onClick={handleSubmitQuiz}
-                  disabled={quizLoading || Object.keys(quizAnswers).length === 0}
+                  disabled={quizLoading || (Object.keys(quizAnswers).length === 0 && Object.keys(shortAnswers).length === 0)}
                   className="w-full rounded-lg bg-[var(--accent)] py-2 text-xs font-bold text-white hover:opacity-90 disabled:opacity-50"
                 >
                   Submit & Grade Quiz
@@ -756,9 +811,9 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                     onSeekTimestamp={onSeekTimestamp}
                     className="text-[13px]"
                   />
-                  {item.citations && item.citations.length > 0 && (
+                  {item.citations && item.citations.filter((c) => c.start_sec !== undefined && c.start_sec !== null).length > 0 && (
                     <div className="flex flex-wrap gap-1 pt-1">
-                      {item.citations.map((c, ci) => (
+                      {item.citations.filter((c) => c.start_sec !== undefined && c.start_sec !== null).map((c, ci) => (
                         <button
                           key={ci}
                           type="button"
@@ -773,7 +828,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                   <button
                     type="button"
                     onClick={async () => {
-                      await onAppendToPersonalNotes(`\n\n### Q: ${item.query || item.question}\n${item.answer}\n`);
+                      await onAppendToPersonalNotes(`\n\n### Q: ${item.query || item.question}\n${item.answer_markdown || item.answer || ''}\n`);
                       onToast('Saved AI answer to My Notes');
                     }}
                     className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] py-1.5 text-xs font-semibold text-[var(--fg-primary)] hover:bg-[var(--bg-hover)]"

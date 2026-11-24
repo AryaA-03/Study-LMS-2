@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 from backend.database import get_db
 from backend.deps import get_current_user, require_local_admin
 from backend.infra.net_guard import validate_public_url
-from backend.config import DATA_DIR, DB_PATH, TIMEZONE_STR, ENV_VARS, update_env_file
+from backend.config import DATA_DIR, DB_PATH, TIMEZONE_STR, ENV_VARS, get_settings, update_env_file
 import json
 from backend.models.schemas import SystemSettingsResponse, UpdateSettingsRequest, TestConnectionRequest, TestConnectionResponse
 from backend.services.youtube import get_ytdlp_version, update_ytdlp_package
@@ -52,11 +52,12 @@ def get_system_settings(db: sqlite3.Connection = Depends(get_db)):
     transcripts_size = get_dir_size(transcripts_dir)
     screenshots_size = get_dir_size(screenshots_dir)
 
-    # Key presence without leaking values
-    has_gemini = bool(ENV_VARS.get("GEMINI_API_KEY"))
-    has_groq = bool(ENV_VARS.get("GROQ_API_KEY"))
-    has_openrouter = bool(ENV_VARS.get("OPENROUTER_API_KEY"))
-    has_ollama = bool(ENV_VARS.get("OLLAMA_BASE_URL"))
+    cfg = get_settings()
+    # Key presence without leaking values (honors both .env and process env)
+    has_gemini = bool(cfg.GEMINI_API_KEY)
+    has_groq = bool(cfg.GROQ_API_KEY)
+    has_openrouter = bool(cfg.OPENROUTER_API_KEY)
+    has_ollama = bool(cfg.OLLAMA_BASE_URL)
 
     # Configurable defaults from DB
     def get_setting(key: str, default: Any) -> Any:
@@ -96,7 +97,7 @@ def get_system_settings(db: sqlite3.Connection = Depends(get_db)):
         default_revision_buffer_days=buffer_days,
     )
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_local_admin)])
 def update_settings(
     req: UpdateSettingsRequest,
     db: sqlite3.Connection = Depends(get_db),
@@ -160,7 +161,14 @@ def update_settings(
         except ValueError as ve:
             raise HTTPException(status_code=400, detail=f"Invalid OpenRouter base URL: {ve}")
         env_updates["OPENROUTER_BASE_URL"] = req.openrouter_base_url.strip()
-    if req.ollama_base_url: env_updates["OLLAMA_BASE_URL"] = req.ollama_base_url
+    if req.ollama_base_url:
+        try:
+            env_updates["OLLAMA_BASE_URL"] = validate_ollama_url(
+                req.ollama_base_url.strip(),
+                auth_mode=os.getenv("AUTH_MODE", "local"),
+            )
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=f"Invalid Ollama base URL: {ve}")
     if req.ollama_model: env_updates["OLLAMA_MODEL"] = req.ollama_model
     if env_updates:
         try:
@@ -175,8 +183,9 @@ async def test_connection(req: TestConnectionRequest):
     """Tests real connectivity to the configured LLM provider by making a lightweight HTTP call."""
     provider = req.provider.lower()
 
+    cfg = get_settings()
     if provider == "gemini":
-        key = req.api_key or ENV_VARS.get("GEMINI_API_KEY")
+        key = req.api_key or cfg.GEMINI_API_KEY
         if not key:
             return TestConnectionResponse(
                 success=False, provider="gemini",
@@ -213,7 +222,7 @@ async def test_connection(req: TestConnectionRequest):
             )
 
     elif provider == "groq":
-        key = req.api_key or ENV_VARS.get("GROQ_API_KEY")
+        key = req.api_key or cfg.GROQ_API_KEY
         if not key:
             return TestConnectionResponse(
                 success=False, provider="groq",
@@ -243,7 +252,7 @@ async def test_connection(req: TestConnectionRequest):
             )
 
     elif provider == "openrouter":
-        key = req.api_key or ENV_VARS.get("OPENROUTER_API_KEY")
+        key = req.api_key or cfg.OPENROUTER_API_KEY
         if not key:
             return TestConnectionResponse(
                 success=False, provider="openrouter",
@@ -273,9 +282,9 @@ async def test_connection(req: TestConnectionRequest):
             )
 
     elif provider == "ollama":
-        raw_ollama = req.base_url or ENV_VARS.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        raw_ollama = req.base_url or cfg.OLLAMA_BASE_URL or "http://localhost:11434"
         try:
-            base_url = validate_ollama_url(raw_ollama)
+            base_url = validate_ollama_url(raw_ollama, auth_mode=os.getenv("AUTH_MODE", "local"))
         except ValueError as ve:
             raise HTTPException(status_code=400, detail=str(ve))
         try:
@@ -340,6 +349,19 @@ def update_api_keys(keys: Dict[str, str]):
         "OPENROUTER_MODEL", "OPENROUTER_BASE_URL", "OLLAMA_MODEL"
     }
     filtered_updates = {k: v for k, v in keys.items() if k in allowed_keys}
+    if filtered_updates.get("OPENROUTER_BASE_URL"):
+        try:
+            validate_public_url(filtered_updates["OPENROUTER_BASE_URL"].strip())
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=f"Invalid OpenRouter base URL: {ve}")
+    if filtered_updates.get("OLLAMA_BASE_URL"):
+        try:
+            filtered_updates["OLLAMA_BASE_URL"] = validate_ollama_url(
+                filtered_updates["OLLAMA_BASE_URL"].strip(),
+                auth_mode=os.getenv("AUTH_MODE", "local"),
+            )
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=f"Invalid Ollama base URL: {ve}")
     if filtered_updates:
         try:
             update_env_file(filtered_updates)

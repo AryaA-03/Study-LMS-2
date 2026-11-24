@@ -80,6 +80,7 @@ class LessonUpdateRequest(BaseModel):
     title: Optional[str] = None
     summary: Optional[str] = None
     priority: Optional[str] = None  # 'core' vs 'deep-dive'
+    chapter_title: Optional[str] = None
 
 class LessonResponse(BaseModel):
     id: str

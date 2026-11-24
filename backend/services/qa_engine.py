@@ -46,7 +46,7 @@ def search_chunks_fts(
 ) -> List[Dict[str, Any]]:
     """Performs FTS5 BM25 search against indexed chunks for a course, optionally restricted to a lesson."""
     # Clean query for FTS5 match: keep alphanumeric words and join with OR
-    words = re.findall(r"[A-Za-z0-9_]+", query)
+    words = re.findall(r"[^\W_]+", query, re.UNICODE)
     if not words:
         return []
 
@@ -203,9 +203,9 @@ async def generate_llm_grounded_answer(
         "4. RELEVANCE: Keep your answer tightly focused on the student's query and the course subject."
     )
 
-    key = gemini_key or settings.GEMINI_API_KEY
-    groq_key = settings.GROQ_API_KEY
-    openrouter_key = settings.OPENROUTER_API_KEY
+    key = gemini_key or get_settings().GEMINI_API_KEY
+    groq_key = get_settings().GROQ_API_KEY
+    openrouter_key = get_settings().OPENROUTER_API_KEY
 
     raw_answer = None
 
@@ -415,7 +415,7 @@ async def answer_course_question(
         }]
 
     # 3. Synthesize answer
-    has_llm = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY)
+    has_llm = bool(get_settings().GEMINI_API_KEY or get_settings().GROQ_API_KEY or get_settings().OPENROUTER_API_KEY)
     if has_llm:
         prior_turns_block = ""
         if db_conn is not None:
@@ -429,7 +429,7 @@ async def answer_course_question(
                     prior_turns_block = "\n\nRecent Conversation Context:\n" + "\n---\n".join(turns) + "\n\nCurrent Question: "
             except Exception:
                 prior_turns_block = ""
-        answer_text, citations = await generate_llm_grounded_answer(prior_turns_block + query, matching_chunks, settings.GEMINI_API_KEY)
+        answer_text, citations = await generate_llm_grounded_answer(prior_turns_block + query, matching_chunks, get_settings().GEMINI_API_KEY)
     else:
         answer_text, citations = format_no_key_answer(query, matching_chunks)
 
@@ -439,7 +439,7 @@ async def answer_course_question(
             "answer_markdown": answer_text,
             "citations": citations
         })
-        model_name = "gemini-2.5-flash" if settings.GEMINI_API_KEY else ("llama-3.3-70b-versatile" if settings.GROQ_API_KEY else ("google/gemini-2.5-flash" if settings.OPENROUTER_API_KEY else "deterministic"))
+        model_name = "gemini-2.5-flash" if get_settings().GEMINI_API_KEY else ("llama-3.3-70b-versatile" if get_settings().GROQ_API_KEY else ("google/gemini-2.5-flash" if get_settings().OPENROUTER_API_KEY else "deterministic"))
         set_cached_response(db_conn, prompt_hash, model_name, cache_val)
 
     # 5. Persist in qa_threads table

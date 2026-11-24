@@ -3,7 +3,7 @@
 import sqlite3
 import logging
 from typing import List, Dict, Any, Optional
-from backend.deps import get_current_user
+from backend.deps import get_current_user, require_course_owner
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.database import get_db
@@ -23,7 +23,7 @@ from backend.services.fsrs_engine import (
 )
 
 logger = logging.getLogger("learn_lms.flashcards_router")
-router = APIRouter(prefix="/api/courses/{course_id}/flashcards", tags=["flashcards"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/api/courses/{course_id}/flashcards", tags=["flashcards"], dependencies=[Depends(get_current_user), Depends(require_course_owner)])
 
 
 @router.get("/due", response_model=List[FlashcardResponse])

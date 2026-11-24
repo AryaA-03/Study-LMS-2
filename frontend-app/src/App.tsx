@@ -1,6 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  BookOpen,
+  ChevronDown,
+  Layers,
+  MoreHorizontal,
+  Zap,
   Camera,
   CheckCircle2,
   Copy,
@@ -69,9 +74,9 @@ export const App: React.FC = () => {
   }, [dark]);
 
   // 3-Zone Resizable Layout State (persisted in localStorage)
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [leftCollapsed, setLeftCollapsed] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 1024);
   const [leftWidth, setLeftWidth] = useState<number>(() => Number(safeStorageGet('lms-left-w')) || 280);
-  const [rightOpen, setRightOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState<boolean>(() => typeof window === 'undefined' || window.innerWidth >= 1200);
   const [rightWidth, setRightWidth] = useState<number>(() => Number(safeStorageGet('lms-right-w')) || 370);
   const [videoHeightPct, setVideoHeightPct] = useState<number>(() => Number(safeStorageGet('lms-vid-h')) || 38);
   const [videoHidden, setVideoHidden] = useState(false);
@@ -79,6 +84,7 @@ export const App: React.FC = () => {
 
   // Core Data State
   const [courses, setCourses] = useState<Course[]>([]);
+  const [coursesLoading, setCoursesLoading] = useState(true);
   const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
   const [schedule, setSchedule] = useState<ScheduleResponse | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -92,6 +98,10 @@ export const App: React.FC = () => {
 
   // Banners & Toasts
   const [undoBanner, setUndoBanner] = useState<string | null>(null);
+  const [preparingMsg, setPreparingMsg] = useState<string | null>(null);
+  const [planMenuOpen, setPlanMenuOpen] = useState(false);
+  const [lessonMenuOpen, setLessonMenuOpen] = useState(false);
+  const autoPreparedRef = useRef<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
 
   // Modals
@@ -141,6 +151,8 @@ export const App: React.FC = () => {
       }
     } catch (e: any) {
       showToast(`Failed to load courses: ${e.message}`);
+    } finally {
+      setCoursesLoading(false);
     }
   }, [showToast]);
 
@@ -159,6 +171,25 @@ export const App: React.FC = () => {
       setSchedule(sched);
       setLessons(lesList || []);
       setSources(srcList || []);
+
+      // Auto-upgrade long fixed-slice [MM:SS - MM:SS] videos using subtitles + enqueue background notes/quizzes/cards
+      const fixedSliceCount = (lesList || []).filter((l) =>
+        /\[\d{1,2}:\d{2}(?::\d{2})?\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?\]\s*$/.test(l.title || ''),
+      ).length;
+      if (fixedSliceCount >= 2 && !autoPreparedRef.current.has(courseId)) {
+        autoPreparedRef.current.add(courseId);
+        setPreparingMsg('Splitting marathon video into subtitle-based topics & building notes, quizzes, and flashcards in background...');
+        api
+          .smartPrepareCourse(courseId, false)
+          .then((res) => {
+            if (res.repartitioned_sources > 0) {
+              showToast(`Split video into ${res.new_semantic_clips} subtitle-based topics!`);
+              loadCourseData(courseId);
+            }
+          })
+          .catch(() => {})
+          .finally(() => setPreparingMsg(null));
+      }
 
       // Auto-select first incomplete scheduled lesson or first lesson
       setActiveLesson((prev) => {
@@ -202,9 +233,10 @@ export const App: React.FC = () => {
     return () => ctrl.abort();
   }, [activeLesson?.id]);
 
-  // Smooth Drag Resizers (Left width, Right width, Center Video/Notes height)
+  // Smooth Drag Resizers (Left width, Right width, Center Video/Notes height) with iframe drag shield
   const startDragLeft = (e: React.MouseEvent) => {
     e.preventDefault();
+    document.body.classList.add('is-resizing');
     const startX = e.clientX;
     const startW = leftWidth;
     const onMove = (ev: MouseEvent) => {
@@ -213,6 +245,7 @@ export const App: React.FC = () => {
       safeStorageSet('lms-left-w', String(next));
     };
     const onUp = () => {
+      document.body.classList.remove('is-resizing');
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
@@ -222,6 +255,7 @@ export const App: React.FC = () => {
 
   const startDragRight = (e: React.MouseEvent) => {
     e.preventDefault();
+    document.body.classList.add('is-resizing');
     const startX = e.clientX;
     const startW = rightWidth;
     const onMove = (ev: MouseEvent) => {
@@ -230,6 +264,7 @@ export const App: React.FC = () => {
       safeStorageSet('lms-right-w', String(next));
     };
     const onUp = () => {
+      document.body.classList.remove('is-resizing');
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
@@ -240,6 +275,7 @@ export const App: React.FC = () => {
   const startDragVideo = (e: React.MouseEvent) => {
     e.preventDefault();
     if (!centerRef.current) return;
+    document.body.classList.add('is-resizing');
     const rect = centerRef.current.getBoundingClientRect();
     const onMove = (ev: MouseEvent) => {
       const pct = Math.round(((ev.clientY - rect.top) / rect.height) * 100);
@@ -249,6 +285,7 @@ export const App: React.FC = () => {
       safeStorageSet('lms-vid-h', String(clamped));
     };
     const onUp = () => {
+      document.body.classList.remove('is-resizing');
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
@@ -308,13 +345,13 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleReplan = async (mode: 'normal' | 'emergency_cram' = 'normal') => {
+  const handleReplan = async (mode: 'normal' | 'compress' = 'normal') => {
     if (!activeCourseId) return;
     try {
       await api.replanSchedule(activeCourseId, mode);
       await loadCourseData(activeCourseId);
       setUndoBanner(
-        mode === 'emergency_cram'
+        mode === 'compress'
           ? 'Compressed schedule by dropping deep-dive units.'
           : 'Schedule repacked deterministically.',
       );
@@ -408,7 +445,7 @@ export const App: React.FC = () => {
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
-                <span className="text-[11px] font-semibold text-[var(--fg-secondary)]">
+                <span className="whitespace-nowrap text-[11px] font-semibold text-[var(--fg-secondary)]">
                   {progressPct}% Completed
                 </span>
               </div>
@@ -417,7 +454,7 @@ export const App: React.FC = () => {
               <div
                 onClick={() => setModal('edit-course')}
                 title="Click to edit Exam Date, Pace & Rest Days"
-                className="hidden cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2.5 py-1 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] lg:flex"
+                className="hidden cursor-pointer items-center gap-2.5 whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2.5 py-1 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] lg:flex"
               >
                 <span>
                   Study Left: <strong className="text-[var(--fg-primary)]">{formatHoursMin(remainingMin)}</strong>
@@ -466,14 +503,77 @@ export const App: React.FC = () => {
               >
                 <GraduationCap className="h-3.5 w-3.5" /> Mock Exam
               </button>
-              <button
-                type="button"
-                onClick={() => setModal('edit-course')}
-                title="Edit Course & Timings"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--fg-primary)] hover:bg-[var(--bg-hover)]"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setPlanMenuOpen((o) => !o)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2.5 py-1.5 text-xs font-semibold text-[var(--fg-primary)] hover:bg-[var(--bg-hover)]"
+                >
+                  Plan <ChevronDown className="h-3.5 w-3.5 text-[var(--fg-muted)]" />
+                </button>
+                {planMenuOpen && (
+                  <div
+                    className="absolute right-0 top-10 z-40 w-60 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-card)] p-1.5 shadow-xl text-xs"
+                    onMouseLeave={() => setPlanMenuOpen(false)}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => { setPlanMenuOpen(false); setModal('edit-course'); }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-hover)]"
+                    >
+                      <Pencil className="h-3.5 w-3.5 text-[var(--accent)]" /> Edit Course & Timings
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setPlanMenuOpen(false); setModal('diagnostic'); }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-hover)]"
+                    >
+                      <Zap className="h-3.5 w-3.5 text-[var(--warning)]" /> 2-Min Diagnostic Pre-Test
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setPlanMenuOpen(false); setModal('syllabus'); }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-hover)]"
+                    >
+                      <Layers className="h-3.5 w-3.5 text-[var(--accent)]" /> University Syllabus Matcher
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setPlanMenuOpen(false); setModal('curriculum'); }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-hover)]"
+                    >
+                      <BookOpen className="h-3.5 w-3.5 text-[var(--fg-secondary)]" /> Curriculum Inspector
+                    </button>
+                    <div className="my-1 h-px bg-[var(--border-subtle)]" />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setPlanMenuOpen(false);
+                        setPreparingMsg('Splitting videos into subtitle-based topics & preparing study bundles...');
+                        try {
+                          const res = await api.smartPrepareCourse(activeCourse.id, true);
+                          showToast(`Prepared ${res.new_semantic_clips || res.topics_clustered} topics — notes & quizzes building in background`);
+                          await loadCourseData(activeCourse.id);
+                        } catch (e: any) {
+                          showToast(`Smart Prepare error: ${e.message}`);
+                        } finally {
+                          setPreparingMsg(null);
+                        }
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-hover)]"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-[var(--accent)]" /> Smart Topic Split (Subtitles)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setPlanMenuOpen(false); handleReplan('normal'); }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-hover)]"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5 text-[var(--success)]" /> Instant Repack Schedule
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           )}
 
@@ -525,17 +625,24 @@ export const App: React.FC = () => {
         </div>
       )}
 
+      {preparingMsg && (
+        <div className="no-print flex items-center gap-2 border-b border-[var(--accent)]/25 bg-[var(--accent-soft)] px-4 py-1.5 text-xs font-medium text-[var(--accent-text)]">
+          <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+          <span>{preparingMsg}</span>
+        </div>
+      )}
+
       {/* BEHIND SCHEDULE WARNING BANNER */}
       {schedule?.is_behind_schedule && (
         <div className="no-print flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs text-amber-800 dark:text-amber-200">
           <span className="inline-flex items-center gap-1.5 font-medium">
             <AlertTriangle className="h-3.5 w-3.5" />
-            {schedule.behind_message || 'Projected finish date encroaches on your exam revision buffer.'}
+            {(schedule as any).pace_notice || schedule.behind_message || 'Projected finish date encroaches on your exam revision buffer.'}
           </span>
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => handleReplan('emergency_cram')}
+              onClick={() => handleReplan('compress')}
               className="rounded bg-amber-600 px-2.5 py-0.5 font-semibold text-white hover:bg-amber-700"
             >
               Compress (Drop Deep-Dives)
@@ -552,7 +659,7 @@ export const App: React.FC = () => {
       )}
 
       {/* MAIN 3-ZONE RESIZABLE WORKSPACE */}
-      {!activeCourse ? (
+      {coursesLoading ? (<div className="flex flex-1 items-center justify-center text-sm text-[var(--fg-muted)]">Loading your study workspace...</div>) : !activeCourse ? (
         <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
           <h1 className="text-xl font-bold text-[var(--fg-primary)]">Welcome to your Calm Exam & Study Workspace</h1>
           <p className="mt-2 max-w-md text-sm text-[var(--fg-secondary)]">
@@ -584,13 +691,6 @@ export const App: React.FC = () => {
             }}
             onToggleComplete={handleToggleComplete}
             onSkipAllocation={handleSkipAllocation}
-            onQuickUpdateSchedule={handleQuickUpdateSchedule}
-            onReplan={() => handleReplan('normal')}
-            onClusterTopics={handleClusterTopics}
-            onOpenEditCourse={() => setModal('edit-course')}
-            onOpenCurriculum={() => setModal('curriculum')}
-            onOpenSyllabusModal={() => setModal('syllabus')}
-            onOpenDiagnostic={() => setModal('diagnostic')}
             onOpenAddSource={() => setModal('add-source')}
             onDeleteSource={async (sid) => {
               await api.deleteSource(activeCourse.id, sid);
@@ -601,7 +701,7 @@ export const App: React.FC = () => {
           />
 
           {/* VERTICAL DRAG SLIDER (Left <-> Center) */}
-          {!leftCollapsed && <div className="no-print resizer-v" onMouseDown={startDragLeft} />}
+          {!leftCollapsed && <div className="no-print resizer-v" onMouseDown={startDragLeft} onDoubleClick={() => { setLeftWidth(280); safeStorageSet('lms-left-w', '280'); }} title="Drag to resize, double-click to reset" />}
 
           {/* ZONE 2: CENTER STUDY STAGE (Top Video + Draggable Horizontal Divider + Bottom Pre-Made Notes!) */}
           <main ref={centerRef} className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--bg-canvas)]">
@@ -629,7 +729,12 @@ export const App: React.FC = () => {
             <div
               className="no-print resizer-h group"
               onMouseDown={startDragVideo}
-              title="Drag vertically to resize Video vs Notes"
+              onDoubleClick={() => {
+                setVideoHidden(false);
+                setVideoHeightPct(38);
+                safeStorageSet('lms-vid-h', '38');
+              }}
+              title="Drag vertically to resize Video vs Notes (double-click to reset)"
             >
               <div
                 className="flex items-center gap-1 rounded-full border border-[var(--border-strong)] bg-[var(--bg-card)] px-2 py-0.5 text-[10px] font-semibold text-[var(--fg-secondary)] shadow-sm"
@@ -639,7 +744,8 @@ export const App: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setVideoHidden(false);
-                    setVideoHeightPct(26);
+                    setVideoHeightPct(25);
+                    safeStorageSet('lms-vid-h', '25');
                   }}
                   className="rounded px-1.5 py-0.5 hover:bg-[var(--bg-hover)] hover:text-[var(--fg-primary)]"
                 >
@@ -650,6 +756,7 @@ export const App: React.FC = () => {
                   onClick={() => {
                     setVideoHidden(false);
                     setVideoHeightPct(38);
+                    safeStorageSet('lms-vid-h', '38');
                   }}
                   className="rounded px-1.5 py-0.5 hover:bg-[var(--bg-hover)] hover:text-[var(--fg-primary)]"
                 >
@@ -672,13 +779,13 @@ export const App: React.FC = () => {
                 {activeLesson ? (
                   <>
                     {/* Lesson Notes Toolbar */}
-                    <div className="no-print mb-4 flex flex-col gap-2.5 border-b border-[var(--border-subtle)] pb-3">
+                    <div className="no-print mb-5 flex items-start justify-between gap-4 border-b border-[var(--border-subtle)] pb-4">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={async () => {
-                              const next = activeLesson.priority === 'deep_dive' ? 'core' : 'deep_dive';
+                              const next = (activeLesson.priority === 'deep-dive' || activeLesson.priority === 'deep_dive') ? 'core' : 'deep-dive';
                               await api.updateLesson(activeCourse.id, activeLesson.id, { priority: next });
                               showToast(`Priority set to ${next === 'core' ? 'Core' : 'Deep-Dive'}`);
                               loadCourseData(activeCourse.id);
@@ -686,7 +793,7 @@ export const App: React.FC = () => {
                             title="Click to toggle Core / Deep-Dive priority"
                             className="rounded-full border border-[var(--border-subtle)] bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--accent-text)]"
                           >
-                            {activeLesson.priority === 'deep_dive' ? 'Deep-Dive' : 'Core'}
+                            {(activeLesson.priority === 'deep-dive' || activeLesson.priority === 'deep_dive') ? 'Deep-Dive' : 'Core'}
                           </button>
                           {activeLesson.chapter_title && (
                             <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
@@ -712,118 +819,126 @@ export const App: React.FC = () => {
                           </button>
                         </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <div className="flex items-center gap-2 text-xs">
                         {activeAlloc && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleComplete(activeAlloc)}
-                              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 font-semibold transition ${
-                                activeAlloc.is_completed
-                                  ? 'bg-emerald-600 text-white'
-                                  : 'bg-[var(--accent)] text-white hover:opacity-90'
-                              }`}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleComplete(activeAlloc)}
+                            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold transition ${
+                              activeAlloc.is_completed
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-[var(--accent)] text-white hover:opacity-90'
+                            }`}
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" /> {activeAlloc.is_completed ? 'Completed' : 'Mark Complete'}
+                          </button>
+                        )}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setLessonMenuOpen((o) => !o)}
+                            title="More lesson actions"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--fg-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg-primary)]"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                          {lessonMenuOpen && (
+                            <div
+                              className="absolute right-0 top-9 z-40 w-52 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-card)] p-1.5 shadow-xl text-xs"
+                              onMouseLeave={() => setLessonMenuOpen(false)}
                             >
-                              <CheckCircle2 className="h-3 w-3" /> {activeAlloc.is_completed ? 'Completed' : 'Complete'}
-                            </button>
-                            {!activeAlloc.is_completed && (
+                              {activeAlloc && !activeAlloc.is_completed && (
+                                <button
+                                  type="button"
+                                  onClick={() => { setLessonMenuOpen(false); handleSkipAllocation(activeAlloc); }}
+                                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-hover)]"
+                                >
+                                  <SkipForward className="h-3.5 w-3.5" /> Skip to Later Day
+                                </button>
+                              )}
                               <button
                                 type="button"
-                                onClick={() => handleSkipAllocation(activeAlloc)}
-                                title="Skip & push to later day"
-                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 font-semibold text-[var(--fg-secondary)] hover:bg-[var(--bg-hover)]"
+                                onClick={async () => {
+                                  setLessonMenuOpen(false);
+                                  showToast('Fetching subtitles / transcribing...');
+                                  try {
+                                    const r = await api.transcribeLesson(activeLesson.id);
+                                    showToast(`Transcribed (${r.chunk_count} chunks)`);
+                                    await handleRegenerateNotes();
+                                  } catch (e: any) {
+                                    showToast(`Transcribe failed: ${e.message}`);
+                                  }
+                                }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-hover)]"
                               >
-                                <SkipForward className="h-3 w-3" /> Skip
+                                <FileAudio className="h-3.5 w-3.5" /> Re-Transcribe Captions
                               </button>
-                            )}
-                          </>
-                        )}
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            showToast('Transcribing lecture captions...');
-                            try {
-                              const r = await api.transcribeLesson(activeLesson.id);
-                              showToast(`Transcribed (${r.chunk_count} chunks via ${r.transcript_type})`);
-                              await handleRegenerateNotes();
-                            } catch (e: any) {
-                              showToast(`Transcribe failed: ${e.message}`);
-                            }
-                          }}
-                          title="Transcribe Captions / Whisper Fallback"
-                          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 font-semibold text-[var(--fg-primary)] hover:bg-[var(--bg-hover)]"
-                        >
-                          <FileAudio className="h-3 w-3" /> Transcribe
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            showToast('Capturing slide keyframes...');
-                            try {
-                              const frames = await api.captureScreenshots(activeLesson.id);
-                              showToast(`Captured ${frames.length} slide keyframes`);
-                              await handleRegenerateNotes();
-                            } catch (e: any) {
-                              showToast(`Slide capture failed: ${e.message}`);
-                            }
-                          }}
-                          title="Capture Slide Keyframes from Video"
-                          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 font-semibold text-[var(--fg-primary)] hover:bg-[var(--bg-hover)]"
-                        >
-                          <Camera className="h-3 w-3" /> Slides
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleRegenerateNotes}
-                          disabled={notesLoading}
-                          title="Regenerate Standalone Structured Notes"
-                          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 font-semibold text-[var(--fg-primary)] hover:bg-[var(--bg-hover)]"
-                        >
-                          <RefreshCw className={`h-3 w-3 ${notesLoading ? 'animate-spin' : ''}`} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (notes?.content_markdown) {
-                              await handleAppendToPersonalNotes(`
-
-${notes.content_markdown}`);
-                              setStudioTab('notes');
-                              setRightOpen(true);
-                              showToast('Copied structured notes to My Notes');
-                            }
-                          }}
-                          title="Copy to My Notes"
-                          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 font-semibold text-[var(--fg-secondary)] hover:bg-[var(--bg-hover)]"
-                        >
-                          <Copy className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!notes?.content_markdown) return;
-                            const blob = new Blob([notes.content_markdown], { type: 'text/markdown' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `${activeLesson.title.replace(/[^a-z0-9]+/gi, '_')}.md`;
-                            a.click();
-                            URL.revokeObjectURL(url);
-                          }}
-                          title="Download Notes (.md)"
-                          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 font-semibold text-[var(--fg-secondary)] hover:bg-[var(--bg-hover)]"
-                        >
-                          <Download className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => window.print()}
-                          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 font-semibold text-[var(--fg-secondary)] hover:bg-[var(--bg-hover)]"
-                          title="Print Lesson Notes"
-                        >
-                          <Printer className="h-3 w-3" />
-                        </button>
-                      </div>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  setLessonMenuOpen(false);
+                                  showToast('Capturing slide keyframes...');
+                                  try {
+                                    const frames = await api.captureScreenshots(activeLesson.id);
+                                    showToast(`Captured ${frames.length} slide keyframes`);
+                                    await handleRegenerateNotes();
+                                  } catch (e: any) {
+                                    showToast(`Slide capture failed: ${e.message}`);
+                                  }
+                                }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-hover)]"
+                              >
+                                <Camera className="h-3.5 w-3.5" /> Capture Slide Keyframes
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setLessonMenuOpen(false); handleRegenerateNotes(); }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-hover)]"
+                              >
+                                <RefreshCw className="h-3.5 w-3.5" /> Regenerate Notes
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  setLessonMenuOpen(false);
+                                  if (notes?.content_markdown) {
+                                    await handleAppendToPersonalNotes(`\n\n${notes.content_markdown}`);
+                                    setStudioTab('notes');
+                                    setRightOpen(true);
+                                    showToast('Copied to My Notes');
+                                  }
+                                }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-hover)]"
+                              >
+                                <Copy className="h-3.5 w-3.5" /> Copy to My Notes
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setLessonMenuOpen(false);
+                                  if (!notes?.content_markdown) return;
+                                  const blob = new Blob([notes.content_markdown], { type: 'text/markdown' });
+                                  const url = URL.createObjectURL(blob);
+                                  const a = document.createElement('a');
+                                  a.href = url;
+                                  a.download = `${activeLesson.title.replace(/[^a-z0-9]+/gi, '_')}.md`;
+                                  a.click();
+                                  URL.revokeObjectURL(url);
+                                }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-hover)]"
+                              >
+                                <Download className="h-3.5 w-3.5" /> Download Notes (.md)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setLessonMenuOpen(false); window.print(); }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-hover)]"
+                              >
+                                <Printer className="h-3.5 w-3.5" /> Print Notes
+                              </button>
+                            </div>
+                          )}
+                        </div>                      </div>
                     </div>
 
                     {/* Structured Notes Content with Highlight-to-Explain */}
@@ -835,8 +950,8 @@ ${notes.content_markdown}`);
                     ) : (
                       <MarkdownView
                         markdown={
-                          notes?.content_markdown ||
-                          `# ${activeLesson.title}\n\nClick **Regenerate** above to build standalone GfG-style notes from this lecture's transcript.`
+                          (notes?.content_markdown || '').replace(/^#\s+[^\n]+\n+/, '') ||
+                          `Synthesizing standalone structured notes from this lecture's subtitles...`
                         }
                         onSeekTimestamp={handleSeekTimestamp}
                         onExplainSelection={(selText) => {
@@ -860,7 +975,7 @@ ${notes.content_markdown}`);
           </main>
 
           {/* VERTICAL DRAG SLIDER (Center <-> Right Studio) */}
-          {rightOpen && <div className="no-print resizer-v" onMouseDown={startDragRight} />}
+          {rightOpen && <div className="no-print resizer-v" onMouseDown={startDragRight} onDoubleClick={() => { setRightWidth(370); safeStorageSet('lms-right-w', '370'); }} title="Drag to resize, double-click to reset" />}
 
           {/* ZONE 3: RIGHT FULL-HEIGHT TABBED STUDIO PANEL */}
           {rightOpen && (
@@ -968,11 +1083,21 @@ ${notes.content_markdown}`);
         <CommandPaletteModal
           lessons={lessons}
           onClose={() => setModal(null)}
-          onSelectLesson={(les) => setActiveLesson(les)}
+          onSelectLesson={(les) => {
+            setActiveLesson(les);
+            const matchedAlloc = schedule?.days?.flatMap((d) => d.allocations).find((a) => a.lesson_id === les.id) || null;
+            setActiveAlloc(matchedAlloc);
+          }}
           onAction={(act) => {
-            if (act === 'theme') setDark((d) => !d);
-            else if (act === 'cluster') handleClusterTopics();
-            else setModal(act as any);
+            if (act === 'theme') {
+              setDark((d) => !d);
+              setModal(null);
+            } else if (act === 'cluster') {
+              setModal(null);
+              handleClusterTopics();
+            } else {
+              setModal(act as any);
+            }
           }}
         />
       )}

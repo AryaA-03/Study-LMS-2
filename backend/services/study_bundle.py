@@ -72,12 +72,12 @@ async def generate_single_concept_bundle(
         logger.warning(f"[StudyBundle] Lesson {lesson_id} not found.")
         return {"notes": None, "quiz": None, "flashcards": []}
 
-    source_id = l_row[2] or ""
+    source_id = l_row[2] or None
     title = l_row[3]
     video_id = l_row[4] or ""
     video_url = l_row[5] or ""
     start_sec = int(l_row[6] or 0)
-    end_sec = int(l_row[7] or 0)
+    end_sec = int(l_row[7]) if l_row[7] else None
     target_video = video_id if video_id else video_url
 
     # 2. Check and ingest transcript chunks if missing
@@ -151,7 +151,7 @@ async def generate_initial_concept_bundles(
                 """
                 SELECT id, title, order_index
                 FROM lessons
-                WHERE course_id = ?
+                WHERE course_id = ? AND COALESCE(is_excluded, 0) = 0
                 ORDER BY order_index ASC
                 LIMIT ?;
                 """,
@@ -165,8 +165,15 @@ async def generate_initial_concept_bundles(
                 logger.info(f"[StudyBundle] Pre-warming initial bundle for clip {cid} ({ctitle})")
                 await generate_single_concept_bundle(conn, course_id, cid, force_regenerate=False)
 
-        # Enqueue remaining clips in background
-        asyncio.create_task(process_remaining_concept_bundles(course_id, db))
+        # Enqueue remaining clips in persistent job queue (deduplicated)
+        with _get_bundle_db(db) as qconn:
+            from backend.infra.job_queue import enqueue_job
+            existing = qconn.execute(
+                "SELECT id FROM jobs WHERE course_id = ? AND job_type = 'study_bundle_remaining' AND status IN ('queued', 'running') LIMIT 1;",
+                (course_id,),
+            ).fetchone()
+            if not existing:
+                enqueue_job(qconn, "study_bundle_remaining", course_id=course_id, payload={"course_id": course_id})
     except Exception as e:
         logger.error(f"[StudyBundle] Initial concept bundle generation error: {e}", exc_info=True)
 
@@ -174,6 +181,7 @@ async def generate_initial_concept_bundles(
 async def process_remaining_concept_bundles(
     course_id: str,
     db: Optional[sqlite3.Connection] = None,
+    job_id: Optional[str] = None,
 ) -> None:
     """Silently processes remaining Concept Clips in a resumable background queue.
     
@@ -187,7 +195,7 @@ async def process_remaining_concept_bundles(
                 """
                 SELECT id, title, order_index
                 FROM lessons
-                WHERE course_id = ?
+                WHERE course_id = ? AND COALESCE(is_excluded, 0) = 0
                 ORDER BY order_index ASC;
                 """,
                 (course_id,)
@@ -195,6 +203,11 @@ async def process_remaining_concept_bundles(
             all_clips = cur.fetchall()
 
             for c in all_clips:
+                if job_id:
+                    jrow = conn.execute("SELECT status FROM jobs WHERE id = ?;", (job_id,)).fetchone()
+                    if jrow and jrow[0] == "cancelled":
+                        logger.info(f"[StudyBundle] Job {job_id} cancelled; stopping background loop.")
+                        break
                 cid = c[0]
                 ctitle = c[1]
                 # Check if this clip already has notes, quiz, and flashcards

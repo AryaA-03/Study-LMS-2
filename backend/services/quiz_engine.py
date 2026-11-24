@@ -116,9 +116,9 @@ Output pure JSON adhering to this exact schema:
 """
     system_instruction = "You are a university computer science examiner. Grade subjective answers fairly and rigorously based on the provided 3-part rubric."
 
-    api_key = settings.GEMINI_API_KEY
-    groq_key = settings.GROQ_API_KEY
-    openrouter_key = settings.OPENROUTER_API_KEY
+    api_key = get_settings().GEMINI_API_KEY
+    groq_key = get_settings().GROQ_API_KEY
+    openrouter_key = get_settings().OPENROUTER_API_KEY
 
     async with httpx.AsyncClient(timeout=25.0) as client:
         if api_key:
@@ -222,7 +222,7 @@ def evaluate_short_answer_with_rubric(
                 pass
 
     # Check for LLM key
-    has_key = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY)
+    has_key = bool(get_settings().GEMINI_API_KEY or get_settings().GROQ_API_KEY or get_settings().OPENROUTER_API_KEY)
     if has_key:
         try:
             eval_res = run_sync(_evaluate_short_answer_llm(question, cleaned))
@@ -474,7 +474,7 @@ async def generate_llm_questions(
     conn=None
 ) -> List[Dict[str, Any]]:
     """Generates structured citation-grounded MCQs using Gemini 2.5 Flash, Groq, or OpenRouter."""
-    has_key = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY)
+    has_key = bool(get_settings().GEMINI_API_KEY or get_settings().GROQ_API_KEY or get_settings().OPENROUTER_API_KEY)
     if not has_key or not chunks:
         return generate_no_key_questions(chunks, question_count, quiz_type)
 
@@ -600,9 +600,9 @@ Output pure JSON adhering to this schema:
 }}
 """
 
-    api_key = settings.GEMINI_API_KEY
-    groq_key = settings.GROQ_API_KEY
-    openrouter_key = settings.OPENROUTER_API_KEY
+    api_key = get_settings().GEMINI_API_KEY
+    groq_key = get_settings().GROQ_API_KEY
+    openrouter_key = get_settings().OPENROUTER_API_KEY
     model_used = "gemini-2.5-flash"
 
     try:
@@ -739,6 +739,7 @@ Output pure JSON adhering to this schema:
                 return verified_qs
     except Exception as e:
         logger.warning(f"LLM quiz generation failed or rejected ({e}); falling back to deterministic generation.")
+    return generate_no_key_questions(chunks, question_count, quiz_type)
 
 async def _generate_diagnostic_questions_llm(
     conn,
@@ -746,7 +747,7 @@ async def _generate_diagnostic_questions_llm(
     sampled_lessons: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     """Generates CourseIt-style diagnostic placement test questions via LLM."""
-    has_key = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY)
+    has_key = bool(get_settings().GEMINI_API_KEY or get_settings().GROQ_API_KEY or get_settings().OPENROUTER_API_KEY)
     if not has_key or not sampled_lessons:
         return []
 
@@ -799,9 +800,9 @@ async def _generate_diagnostic_questions_llm(
             except Exception:
                 pass
 
-    api_key = settings.GEMINI_API_KEY
-    groq_key = settings.GROQ_API_KEY
-    openrouter_key = settings.OPENROUTER_API_KEY
+    api_key = get_settings().GEMINI_API_KEY
+    groq_key = get_settings().GROQ_API_KEY
+    openrouter_key = get_settings().OPENROUTER_API_KEY
 
     raw_response = None
     model_used = None
@@ -954,7 +955,7 @@ def generate_diagnostic_questions(
                 sampled_lessons.append(lessons[idx])
 
     # Try LLM generation if key configured
-    has_llm = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY)
+    has_llm = bool(get_settings().GEMINI_API_KEY or get_settings().GROQ_API_KEY or get_settings().OPENROUTER_API_KEY)
     if has_llm:
         try:
             llm_qs = run_sync(_generate_diagnostic_questions_llm(conn, course_id, sampled_lessons))
@@ -1243,7 +1244,7 @@ def create_and_store_quiz(
             }]
 
     # Generate questions: use LLM if GEMINI_API_KEY / Groq / OpenRouter is available, else fallback
-    has_llm = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY)
+    has_llm = bool(get_settings().GEMINI_API_KEY or get_settings().GROQ_API_KEY or get_settings().OPENROUTER_API_KEY)
     questions = []
     if has_llm:
         try:
@@ -1452,27 +1453,29 @@ def grade_and_apply_mastery(
             logger.info(f"[Mastery] Lesson {lesson_id} scored {score}% >= 80%. Marked Tested Out.")
         elif score < 60.0:
             mastery_status = "needs_review"
-            # Generate FSRS flashcards for missed concepts
-            for mq in missed_questions:
-                front = f"Review Concept: {mq['question']}"
-                if mq.get("question_type") == "short_answer":
-                    back = f"Sample Solution:\n{mq.get('sample_solution', '')}\n\nEvidence: {mq.get('explanation', '')}"
-                else:
-                    correct_opt = mq["options"][mq["correct_index"]] if mq.get("options") else ""
-                    back = f"Correct Answer: {correct_opt}\n\nEvidence: {mq.get('explanation', '')}"
-                _create_missed_flashcard_safe(
-                    conn=conn,
-                    course_id=course_id,
-                    front=front,
-                    back=back,
-                    lesson_id=lesson_id,
-                    chunk_id=mq.get("chunk_id"),
-                    source_quote=mq.get("quote"),
-                )
-                flashcards_created += 1
-            logger.info(f"[Mastery] Lesson {lesson_id} scored {score}% < 60%. Generated {flashcards_created} FSRS flashcards.")
         else:
             mastery_status = "completed"
+
+        # Auto-add FSRS flashcards for EVERY missed question regardless of overall score
+        for mq in missed_questions:
+            front = f"Review Concept: {mq['question']}"
+            if mq.get("question_type") == "short_answer":
+                back = f"Sample Solution:\n{mq.get('sample_solution', '')}\n\nEvidence: {mq.get('explanation', '')}"
+            else:
+                correct_opt = mq["options"][mq["correct_index"]] if mq.get("options") else ""
+                back = f"Correct Answer: {correct_opt}\n\nEvidence: {mq.get('explanation', '')}"
+            _create_missed_flashcard_safe(
+                conn=conn,
+                course_id=course_id,
+                front=front,
+                back=back,
+                lesson_id=lesson_id,
+                chunk_id=mq.get("chunk_id"),
+                source_quote=mq.get("quote"),
+            )
+            flashcards_created += 1
+        if flashcards_created:
+            logger.info(f"[Mastery] Lesson {lesson_id} scored {score}%. Auto-generated {flashcards_created} FSRS flashcards for missed questions.")
 
     elif quiz_type == "diagnostic":
         mastery_status = "diagnostic_applied"
@@ -1485,25 +1488,24 @@ def grade_and_apply_mastery(
 
     elif quiz_type == "mock_exam":
         mastery_status = "mock_exam_completed"
-        # For mock exam, also generate flashcards for missed questions so student can drill them
-        if score < 80.0:
-            for mq in missed_questions:
-                front = f"Mock Exam Review: {mq['question']}"
-                if mq.get("question_type") == "short_answer":
-                    back = f"Sample Solution:\n{mq.get('sample_solution', '')}\n\nEvidence: {mq.get('explanation', '')}"
-                else:
-                    correct_opt = mq["options"][mq["correct_index"]] if mq.get("options") else ""
-                    back = f"Answer: {correct_opt}\n\nExplanation: {mq.get('explanation', '')}"
-                _create_missed_flashcard_safe(
-                    conn=conn,
-                    course_id=course_id,
-                    front=front,
-                    back=back,
-                    lesson_id=mq.get("lesson_id"),
-                    chunk_id=mq.get("chunk_id"),
-                    source_quote=mq.get("quote"),
-                )
-                flashcards_created += 1
+        # For mock exam, auto-generate flashcards for every missed question so student can drill them
+        for mq in missed_questions:
+            front = f"Mock Exam Review: {mq['question']}"
+            if mq.get("question_type") == "short_answer":
+                back = f"Sample Solution:\n{mq.get('sample_solution', '')}\n\nEvidence: {mq.get('explanation', '')}"
+            else:
+                correct_opt = mq["options"][mq["correct_index"]] if mq.get("options") else ""
+                back = f"Answer: {correct_opt}\n\nExplanation: {mq.get('explanation', '')}"
+            _create_missed_flashcard_safe(
+                conn=conn,
+                course_id=course_id,
+                front=front,
+                back=back,
+                lesson_id=mq.get("lesson_id"),
+                chunk_id=mq.get("chunk_id"),
+                source_quote=mq.get("quote"),
+            )
+            flashcards_created += 1
 
     return {
         "quiz_id": quiz_id,

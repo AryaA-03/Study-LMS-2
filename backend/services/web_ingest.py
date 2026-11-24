@@ -17,6 +17,7 @@ import trafilatura
 
 from backend.config import get_settings
 
+MAX_WEB_BYTES = 5 * 1024 * 1024
 logger = logging.getLogger("learn_lms.web_ingest")
 settings = get_settings()
 

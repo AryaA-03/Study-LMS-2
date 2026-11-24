@@ -69,7 +69,8 @@ export interface ScheduleDay {
   date: string;
   day_number?: number;
   day_label?: string;
-  total_minutes: number;
+  total_minutes?: number;
+  total_effective_minutes?: number;
   completed_minutes?: number;
   allocations: AllocationItem[];
 }
@@ -120,11 +121,14 @@ export interface QAItem {
 
 export interface QuizQuestion {
   id: string;
-  question_text: string;
+  question?: string;
+  question_text?: string;
   question_type: string;
   options: string[];
   correct_index?: number;
   explanation?: string;
+  timestamp_sec?: number;
+  timestamp_str?: string;
   source_timestamp_sec?: number;
   lesson_id?: string;
 }
@@ -208,9 +212,9 @@ export interface JobStatus {
 
 export interface SystemSettings {
   ai_provider?: string;
-  gemini_api_key_set?: boolean;
-  groq_api_key_set?: boolean;
-  openrouter_api_key_set?: boolean;
+  has_gemini_key?: boolean;
+  has_groq_key?: boolean;
+  has_openrouter_key?: boolean;
   ollama_base_url?: string;
   ollama_model?: string;
   whisper_model?: string;
@@ -253,6 +257,11 @@ export const api = {
     request<Course>(`/api/courses/${courseId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteCourse: (courseId: string) =>
     request<{ success: boolean }>(`/api/courses/${courseId}`, { method: 'DELETE' }),
+  smartPrepareCourse: (courseId: string, forceRepartition = false) =>
+    request<{ repartitioned_sources: number; new_semantic_clips: number; topics_clustered: number; background_job_id?: string }>(
+      `/api/courses/${courseId}/smart-prepare${forceRepartition ? '?force_repartition=true' : ''}`,
+      { method: 'POST' },
+    ),
   clusterTopics: (courseId: string) =>
     request<{ lessons_updated: number; topics_created: number; topics: Array<{ title: string; lesson_count: number }> }>(
       `/api/courses/${courseId}/topics/cluster`,
@@ -262,15 +271,22 @@ export const api = {
   exportCourseMarkdownUrl: (courseId: string) => `/api/courses/${courseId}/export-markdown`,
 
   // Sources & Discovery
-  discoverSources: (courseId: string, query: string) =>
-    request<{ candidates: any[] }>(`/api/courses/${courseId}/discover`, {
+  discoverSources: async (courseId: string, query: string) => {
+    const qs = query ? `?query=${encodeURIComponent(query)}` : '';
+    const raw = await request<any>(`/api/courses/${courseId}/discover${qs}`, {
       method: 'POST',
-      body: JSON.stringify({ query }),
-    }),
-  importSource: (courseId: string, url: string, auto_approve = true) =>
+    });
+    const combined = [
+      ...(raw.candidate_playlists || []),
+      ...(raw.candidate_videos || []),
+      ...(raw.candidates || []),
+    ];
+    return { candidates: combined };
+  },
+  importSource: (courseId: string, url: string, is_approved = true) =>
     request<SourceItem>(`/api/courses/${courseId}/sources/import`, {
       method: 'POST',
-      body: JSON.stringify({ url, auto_approve }),
+      body: JSON.stringify({ url, is_approved }),
     }),
   approveSources: (courseId: string, source_ids_to_approve: string[], source_ids_to_reject: string[] = []) =>
     request<SourceItem[]>(`/api/courses/${courseId}/sources/approve`, {
@@ -311,17 +327,17 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ syllabus_text, strictness }),
     }),
-  applySyllabus: (courseId: string, syllabus_text: string, selected_lesson_ids: string[]) =>
+  applySyllabus: (courseId: string, syllabus_text: string, included_lesson_ids: string[], strictness: 'strict' | 'balanced' | 'comprehensive' = 'balanced') =>
     request<any>(`/api/courses/${courseId}/syllabus/apply`, {
       method: 'POST',
-      body: JSON.stringify({ syllabus_text, selected_lesson_ids }),
+      body: JSON.stringify({ syllabus_text, included_lesson_ids, strictness, regenerate_schedule: true }),
     }),
 
   // Schedule
   getSchedule: (courseId: string) => request<ScheduleResponse>(`/api/courses/${courseId}/schedule`),
   generateSchedule: (courseId: string) =>
     request<ScheduleResponse>(`/api/courses/${courseId}/schedule/generate`, { method: 'POST' }),
-  replanSchedule: (courseId: string, mode: 'normal' | 'emergency_cram' | 'strict_pacing' = 'normal') =>
+  replanSchedule: (courseId: string, mode: 'normal' | 'compress' | 'strict_pacing' = 'normal') =>
     request<any>(`/api/courses/${courseId}/schedule/replan`, {
       method: 'POST',
       body: JSON.stringify({ mode }),
@@ -469,9 +485,11 @@ export const api = {
 
   // Settings & Data Portability
   getSettings: () => request<SystemSettings>('/api/settings'),
+  saveApiKeys: (keys: Record<string, string>) =>
+    request<any>('/api/settings/keys', { method: 'POST', body: JSON.stringify(keys) }),
   saveSettings: (payload: Record<string, any>) =>
     request<any>('/api/settings', { method: 'POST', body: JSON.stringify(payload) }),
-  testConnection: (provider?: string) =>
+  testConnection: (provider = 'gemini') =>
     request<{ success: boolean; message: string }>('/api/settings/test-connection', {
       method: 'POST',
       body: JSON.stringify({ provider }),

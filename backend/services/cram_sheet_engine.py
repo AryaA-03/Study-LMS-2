@@ -462,7 +462,8 @@ async def generate_cram_sheet_with_llm(
 ) -> Optional[str]:
     """Generates a genuinely exam-ready Cram Sheet using the unified LLM gateway."""
     settings = get_settings()
-    if not (settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY or settings.OLLAMA_BASE_URL):
+    import os
+    if not (settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY or os.getenv('OLLAMA_BASE_URL')):
         return None
 
     system_instruction = (
@@ -516,7 +517,7 @@ async def synthesize_full_syllabus_cram_sheet(
     cur = db_conn.cursor()
     cur.execute(
         """
-        SELECT l.id, l.title, l.video_id, l.source_id, l.order_index, s.url, n.content_markdown
+        SELECT l.id, l.title, l.video_id, l.source_id, l.order_index, s.url, n.content_markdown, l.start_sec, l.end_sec
         FROM lessons l
         LEFT JOIN sources s ON l.source_id = s.id
         LEFT JOIN notes n ON l.id = n.lesson_id
@@ -539,7 +540,7 @@ async def synthesize_full_syllabus_cram_sheet(
         for i in range(0, len(missing_lessons), batch_size):
             batch = missing_lessons[i:i + batch_size]
             for row in batch:
-                lid, title, vid_id, src_id, ord_idx, s_url, _ = row
+                lid, title, vid_id, src_id, ord_idx, s_url, _, l_start, l_end = row
                 target_vid = vid_id or s_url or ""
                 cur.execute("SELECT COUNT(*) FROM chunks WHERE lesson_id = ?;", (lid,))
                 if cur.fetchone()[0] == 0 and target_vid:
@@ -547,9 +548,11 @@ async def synthesize_full_syllabus_cram_sheet(
                         await ingest_lesson_transcript(
                             db_conn,
                             course_id=course_id,
-                            source_id=src_id or "",
+                            source_id=src_id or None,
                             lesson_id=lid,
                             video_id_or_url=target_vid,
+                            start_sec=int(l_start or 0),
+                            end_sec=int(l_end) if l_end else None,
                         )
                     except Exception as te:
                         logger.warning(f"[CramSheet] Transcript ingest error for {title}: {te}")

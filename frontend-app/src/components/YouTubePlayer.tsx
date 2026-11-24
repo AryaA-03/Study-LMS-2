@@ -63,7 +63,18 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
 
   useEffect(() => {
     setEmbedError(false);
-    if (!resolvedId) return;
+    if (!resolvedId) {
+      if (playerRef.current) {
+        try {
+          playerRef.current.destroy();
+        } catch {
+          // ignore
+        }
+        playerRef.current = null;
+        readyRef.current = false;
+      }
+      return;
+    }
 
     let cancelled = false;
     loadYTApi().then(() => {
@@ -119,6 +130,20 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
       cancelled = true;
     };
   }, [resolvedId, startSec, endSec]);
+
+  useEffect(() => {
+    return () => {
+      if (playerRef.current) {
+        try {
+          playerRef.current.destroy();
+        } catch {
+          // ignore
+        }
+        playerRef.current = null;
+        readyRef.current = false;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (playerRef.current && readyRef.current && playbackSpeed) {

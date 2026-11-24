@@ -61,8 +61,20 @@ export const MarkdownView: React.FC<MarkdownViewProps> = ({
 
   const sanitizedHtml = useMemo(() => {
     if (!markdown) return '';
-    // Pre-process GitHub callout markers
-    const withMath = renderLatex(markdown);
+    // Strip internal chunk reference tags like [ref:chk_abc123]
+    const cleaned = markdown.replace(/\[ref:[^\]]+\]/gi, '');
+    // Protect fenced code blocks and inline code before LaTeX rendering
+    const codePlaceholders: string[] = [];
+    const protectedMd = cleaned
+      .replace(/```[\s\S]*?```/g, (m) => {
+        codePlaceholders.push(m);
+        return `@@CODE_BLOCK_${codePlaceholders.length - 1}@@`;
+      })
+      .replace(/`[^`\n]+`/g, (m) => {
+        codePlaceholders.push(m);
+        return `@@CODE_BLOCK_${codePlaceholders.length - 1}@@`;
+      });
+    const withMath = renderLatex(protectedMd).replace(/@@CODE_BLOCK_(\d+)@@/g, (_, idx) => codePlaceholders[Number(idx)] || '');
     const rawHtml = marked.parse(withMath, { async: false, gfm: true, breaks: false }) as string;
 
     // Style [!IMPORTANT], [!TIP], [!NOTE] blockquotes cleanly
@@ -80,14 +92,21 @@ export const MarkdownView: React.FC<MarkdownViewProps> = ({
         '<blockquote class="callout-important"><div class="text-[11px] font-bold uppercase tracking-wider text-[var(--accent)] mb-1">NOTE</div><p>',
       );
 
-    // Replace [MM:SS] or [HH:MM:SS] with clickable timestamp buttons
-    const withPills = styledCallouts.replace(
-      /\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g,
-      (_, ts) => {
-        const sec = parseTimestampToSec(ts);
-        return `<button type="button" class="ts-pill" data-seek-sec="${sec}" title="Jump video to ${ts}">▶ ${ts}</button>`;
-      },
-    );
+    // Replace [MM:SS] or [HH:MM:SS] with clickable timestamp buttons (skipping <pre>/<code> blocks)
+    const htmlCodeBlocks: string[] = [];
+    const htmlProtected = styledCallouts.replace(/<(pre|code)\b[^>]*>[\s\S]*?<\/\1>/gi, (m) => {
+      htmlCodeBlocks.push(m);
+      return `@@HTML_CODE_${htmlCodeBlocks.length - 1}@@`;
+    });
+    const withPills = htmlProtected
+      .replace(
+        /\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g,
+        (_, ts) => {
+          const sec = parseTimestampToSec(ts);
+          return `<button type="button" class="ts-pill" data-seek-sec="${sec}" title="Jump video to ${ts}">▶ ${ts}</button>`;
+        },
+      )
+      .replace(/@@HTML_CODE_(\d+)@@/g, (_, idx) => htmlCodeBlocks[Number(idx)] || '');
 
     return DOMPurify.sanitize(withPills, {
       ADD_TAGS: ['button', 'svg', 'path', 'math', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub', 'mfrac', 'annotation'],

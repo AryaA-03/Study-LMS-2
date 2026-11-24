@@ -91,7 +91,7 @@ def card_to_fsrs(card_row: Dict[str, Any]) -> fsrs.Card:
     card.difficulty = card_row.get("difficulty")
     if card_row.get("due_date"):
         try:
-            due_dt = datetime.datetime.fromisoformat(card_row["due_date"])
+            due_dt = datetime.datetime.datetime.fromisoformat(card_row["due_date"])
             if due_dt.tzinfo is None:
                 due_dt = due_dt.replace(tzinfo=timezone.utc)
             card.due = due_dt
@@ -173,7 +173,7 @@ def _safe_elapsed_days(last_review, review_time: datetime) -> int:
     if not last_review:
         return 0
     try:
-        prev = last_review if isinstance(last_review, datetime) else datetime.fromisoformat(str(last_review).replace("Z", "+00:00"))
+        prev = last_review if isinstance(last_review, datetime.datetime) else datetime.datetime.fromisoformat(str(last_review).replace("Z", "+00:00"))
         if prev.tzinfo is None and review_time.tzinfo is not None:
             prev = prev.replace(tzinfo=review_time.tzinfo)
         elif prev.tzinfo is not None and review_time.tzinfo is None:
@@ -310,7 +310,8 @@ def get_due_flashcards(
         row_dict = dict(zip(col_names, r))
         fsrs_card = card_to_fsrs(row_dict)
         intervals = preview_intervals(fsrs_card, scheduler, as_of)
-        state_enum = fsrs.State(row_dict.get("state", 1))
+        _rs = int(row_dict.get("state") or 0)
+        state_enum = fsrs.State(_rs) if _rs in (1, 2, 3) else fsrs.State.Learning
         results.append({
             "id": row_dict["id"],
             "course_id": row_dict["course_id"],

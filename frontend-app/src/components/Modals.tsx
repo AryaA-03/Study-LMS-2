@@ -108,6 +108,7 @@ export const NewCourseModal: React.FC<{
           goal_query: discoverQuery.trim() || title.trim(),
           target_date: targetDate,
           minutes_per_day: minutesPerDay,
+          preferred_daily_minutes: minutesPerDay,
           playback_speed: speed,
           schedule_strategy: strategy,
           rest_days: [],
@@ -144,6 +145,7 @@ export const NewCourseModal: React.FC<{
           goal_query: title.trim(),
           target_date: targetDate,
           minutes_per_day: minutesPerDay,
+          preferred_daily_minutes: minutesPerDay,
           playback_speed: speed,
           schedule_strategy: strategy,
           rest_days: [],
@@ -372,6 +374,7 @@ export const EditCourseModal: React.FC<{
         title: title.trim() || course.title,
         target_date: targetDate,
         minutes_per_day: minutesPerDay,
+        preferred_daily_minutes: minutesPerDay,
         playback_speed: speed,
         revision_buffer_days: bufferDays,
         schedule_strategy: strategy,
@@ -716,16 +719,24 @@ export const CramSheetModal: React.FC<{
     }
   };
 
+  const eventSourceRef = React.useRef<EventSource | null>(null);
+
   useEffect(() => {
     loadSheet(false);
+    return () => {
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
 
   const handleFullSyllabusAsync = async () => {
     try {
+      eventSourceRef.current?.close();
       const res = await api.generateFullCramSheetAsync(courseId);
       setJob({ id: res.job_id, job_type: 'cram_sheet_full', status: 'queued', progress_pct: 5, message: 'Starting full syllabus synthesis...' });
       const es = new EventSource(`/api/jobs/${res.job_id}/events`);
+      eventSourceRef.current = es;
       es.onmessage = (ev) => {
         try {
           const j = JSON.parse(ev.data) as JobStatus;
@@ -923,20 +934,21 @@ export const ExamModal: React.FC<{
           )}
 
           {quiz.questions.map((q, i) => {
-            const resItem = result?.results?.find((r) => r.question_id === q.id);
-            const ts = resItem?.source_timestamp_sec ?? q.source_timestamp_sec;
+            const isGraded = !!result;
+            const ts = q.timestamp_sec ?? q.source_timestamp_sec;
             return (
               <div
                 key={q.id}
                 className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-3.5 space-y-2"
               >
                 <div className="text-xs font-semibold text-[var(--fg-primary)]">
-                  {i + 1}. {q.question_text}
+                  {i + 1}. {q.question || q.question_text}
                 </div>
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                   {(q.options || []).map((opt, oi) => {
                     const chosen = answers[q.id] === oi;
-                    const correctOpt = resItem && resItem.correct_index === oi;
+                    const correctOpt = isGraded && q.correct_index === oi;
+                    const wrongChosen = isGraded && chosen && !correctOpt;
                     return (
                       <button
                         key={oi}
@@ -946,6 +958,8 @@ export const ExamModal: React.FC<{
                         className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
                           correctOpt
                             ? 'border-[var(--success)] bg-[var(--success)]/15 font-semibold text-[var(--fg-primary)]'
+                            : wrongChosen
+                            ? 'border-[var(--danger)] bg-[var(--danger)]/15 font-semibold text-[var(--fg-primary)]'
                             : chosen
                             ? 'border-[var(--accent)] bg-[var(--accent-soft)] font-semibold text-[var(--accent-text)]'
                             : 'border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--fg-primary)]'
@@ -957,9 +971,9 @@ export const ExamModal: React.FC<{
                     );
                   })}
                 </div>
-                {resItem && (
+                {isGraded && (
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-[var(--fg-secondary)]">
-                    <span>{resItem.explanation || q.explanation}</span>
+                    <span>{q.explanation || 'Review the timestamp below for the full explanation.'}</span>
                     {ts !== undefined && ts !== null && (
                       <button
                         type="button"
@@ -1025,8 +1039,8 @@ export const SyllabusModal: React.FC<{
     if (!preview) return;
     setBusy(true);
     try {
-      const ids = preview.selected_lesson_ids || preview.matched_lessons?.map((m: any) => m.lesson_id) || [];
-      await api.applySyllabus(courseId, text.trim(), ids);
+      const ids = (preview.lessons || []).filter((m: any) => m.is_matched || m.matched).map((m: any) => m.id || m.lesson_id);
+      await api.applySyllabus(courseId, text.trim(), ids, strictness);
       onToast(`Applied syllabus alignment (${ids.length} lessons kept)`);
       onApplied();
       onClose();
@@ -1083,7 +1097,7 @@ export const SyllabusModal: React.FC<{
           <div className="rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-3 space-y-2">
             <div className="flex items-center justify-between font-bold text-[var(--fg-primary)]">
               <span>
-                Matched: {preview.selected_lesson_ids?.length ?? preview.matched_count ?? 0} lessons
+                Matched: {preview.matched_lessons_count ?? (preview.lessons || []).filter((m: any) => m.is_matched || m.matched).length} of {preview.total_lessons ?? 0} lessons
               </span>
               <button
                 type="button"
@@ -1094,6 +1108,26 @@ export const SyllabusModal: React.FC<{
                 Apply to Schedule
               </button>
             </div>
+            {(preview.lessons || []).length > 0 && (
+              <div className="max-h-44 overflow-y-auto space-y-1 border-t border-[var(--border-subtle)] pt-2">
+                {(preview.lessons || []).map((m: any, idx: number) => {
+                  const matched = Boolean(m.is_matched || m.matched);
+                  return (
+                    <div key={m.id || m.lesson_id || idx} className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className={matched ? 'text-[var(--fg-primary)] font-medium truncate' : 'text-[var(--fg-muted)] line-through truncate'}>
+                        {matched ? '✓ ' : '✗ '}
+                        {m.title || m.lesson_title || 'Lesson'}
+                      </span>
+                      {m.score !== undefined && (
+                        <span className="shrink-0 font-mono text-[10px] text-[var(--fg-muted)]">
+                          {Math.round((m.score || 0) * 100)}%
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1131,15 +1165,18 @@ export const SettingsModal: React.FC<{
   const handleSave = async () => {
     setBusy(true);
     try {
-      const payload: Record<string, any> = {
+      await api.saveSettings({
         ollama_base_url: ollamaUrl,
         ollama_model: ollamaModel,
         whisper_model: whisperModel,
-      };
-      if (geminiKey.trim()) payload.gemini_api_key = geminiKey.trim();
-      if (groqKey.trim()) payload.groq_api_key = groqKey.trim();
-      if (openrouterKey.trim()) payload.openrouter_api_key = openrouterKey.trim();
-      await api.saveSettings(payload);
+      });
+      const keyUpdates: Record<string, string> = {};
+      if (geminiKey.trim()) keyUpdates.GEMINI_API_KEY = geminiKey.trim();
+      if (groqKey.trim()) keyUpdates.GROQ_API_KEY = groqKey.trim();
+      if (openrouterKey.trim()) keyUpdates.OPENROUTER_API_KEY = openrouterKey.trim();
+      if (Object.keys(keyUpdates).length > 0) {
+        await api.saveApiKeys(keyUpdates);
+      }
       onToast('Settings saved!');
       setGeminiKey('');
       setGroqKey('');
@@ -1154,7 +1191,15 @@ export const SettingsModal: React.FC<{
   const handleTest = async () => {
     setBusy(true);
     try {
-      const res = await api.testConnection();
+      const provider =
+        geminiKey.trim() || settings.has_gemini_key
+          ? 'gemini'
+          : groqKey.trim() || settings.has_groq_key
+          ? 'groq'
+          : openrouterKey.trim() || settings.has_openrouter_key
+          ? 'openrouter'
+          : 'ollama';
+      const res = await api.testConnection(provider);
       onToast(res.message || (res.success ? 'AI connection working!' : 'Connection failed'));
     } catch (e: any) {
       onToast(`Test failed: ${e.message}`);
@@ -1176,37 +1221,37 @@ export const SettingsModal: React.FC<{
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
             <div>
               <label className="mb-1 block text-[var(--fg-secondary)]">
-                Gemini API Key {settings.gemini_api_key_set && <CheckCircle2 className="inline h-3 w-3 text-[var(--success)]" />}
+                Gemini API Key {settings.has_gemini_key && <CheckCircle2 className="inline h-3 w-3 text-[var(--success)]" />}
               </label>
               <input
                 type="password"
                 value={geminiKey}
                 onChange={(e) => setGeminiKey(e.target.value)}
-                placeholder={settings.gemini_api_key_set ? '•••••••• (saved)' : 'AIza...'}
+                placeholder={settings.has_gemini_key ? '•••••••• (saved)' : 'AIza...'}
                 className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-[var(--fg-primary)]"
               />
             </div>
             <div>
               <label className="mb-1 block text-[var(--fg-secondary)]">
-                Groq API Key {settings.groq_api_key_set && <CheckCircle2 className="inline h-3 w-3 text-[var(--success)]" />}
+                Groq API Key {settings.has_groq_key && <CheckCircle2 className="inline h-3 w-3 text-[var(--success)]" />}
               </label>
               <input
                 type="password"
                 value={groqKey}
                 onChange={(e) => setGroqKey(e.target.value)}
-                placeholder={settings.groq_api_key_set ? '•••••••• (saved)' : 'gsk_...'}
+                placeholder={settings.has_groq_key ? '•••••••• (saved)' : 'gsk_...'}
                 className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-[var(--fg-primary)]"
               />
             </div>
             <div>
               <label className="mb-1 block text-[var(--fg-secondary)]">
-                OpenRouter Key {settings.openrouter_api_key_set && <CheckCircle2 className="inline h-3 w-3 text-[var(--success)]" />}
+                OpenRouter Key {settings.has_openrouter_key && <CheckCircle2 className="inline h-3 w-3 text-[var(--success)]" />}
               </label>
               <input
                 type="password"
                 value={openrouterKey}
                 onChange={(e) => setOpenrouterKey(e.target.value)}
-                placeholder={settings.openrouter_api_key_set ? '•••••••• (saved)' : 'sk-or-...'}
+                placeholder={settings.has_openrouter_key ? '•••••••• (saved)' : 'sk-or-...'}
                 className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-[var(--fg-primary)]"
               />
             </div>

@@ -4,7 +4,7 @@ import json
 import sqlite3
 import logging
 from typing import List, Dict, Any, Optional
-from backend.deps import get_current_user
+from backend.deps import get_current_user, require_course_owner
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.database import get_db
@@ -19,7 +19,7 @@ from backend.services.quiz_engine import create_and_store_quiz, grade_and_apply_
 from backend.routers.schedule import trigger_course_reflow
 
 logger = logging.getLogger("learn_lms.quizzes_router")
-router = APIRouter(prefix="/api/courses/{course_id}/quizzes", tags=["quizzes"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/api/courses/{course_id}/quizzes", tags=["quizzes"], dependencies=[Depends(get_current_user), Depends(require_course_owner)])
 
 
 @router.post("/generate", response_model=QuizResponse)
@@ -84,6 +84,9 @@ def submit_quiz(
     course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
+    q_exists = db.execute("SELECT 1 FROM quizzes WHERE id = ? AND course_id = ?;", (quiz_id, course_id)).fetchone()
+    if not q_exists:
+        raise HTTPException(status_code=404, detail="Quiz not found in this course")
 
     try:
         result = grade_and_apply_mastery(
@@ -109,7 +112,7 @@ def submit_quiz(
                     db=db,
                 )
                 schedule_updated = True
-                diff_summary = replan_res.diff.model_dump()
+                diff_summary = replan_res.diff.model_dump() if hasattr(replan_res.diff, "model_dump") else replan_res.diff.dict()
                 logger.info(f"[Mastery Reflow] Auto-replanned schedule with snapshot for course {course_id}.")
             except Exception as e:
                 logger.warning(f"Failed to auto-replan schedule after quiz trigger: {e}")

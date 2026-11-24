@@ -13,7 +13,7 @@
   --border-strong: #CEC7BC;
   --fg-primary: #1B1E23;
   --fg-secondary: #585F6B;
-  --fg-muted: #7A828F;
+  --fg-muted: #5C6470;
   --accent: #3B67B0;
   --accent-hover: #2E5494;
   --accent-soft: #E5EDF9;
@@ -37,9 +37,9 @@
   --border-strong: #3A4252;
   --fg-primary: #F1F4F9;
   --fg-secondary: #9AA4B2;
-  --fg-muted: #6E7887;
-  --accent: #60A5FA;
-  --accent-hover: #3B82F6;
+  --fg-muted: #94A0B2;
+  --accent: #2563EB;
+  --accent-hover: #1D4ED8;
   --accent-soft: rgba(96, 165, 250, 0.15);
   --accent-text: #93C5FD;
   --success: #34D399;
@@ -293,4 +293,12 @@ html, body, #root {
   .prose-study h1 { font-size: 14pt !important; }
   .prose-study h2 { font-size: 11pt !important; page-break-after: avoid; }
   .prose-study table, .prose-study blockquote { page-break-inside: avoid; }
+}
+
+/* Prevent YouTube iframe from swallowing mousemove during splitter drag */
+.is-resizing iframe {
+  pointer-events: none !important;
+}
+.is-resizing {
+  user-select: none !important;
 }

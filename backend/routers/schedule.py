@@ -6,7 +6,7 @@ import sqlite3
 import logging
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional
-from backend.deps import get_current_user
+from backend.deps import get_current_user, require_course_owner
 from fastapi import APIRouter, Depends, HTTPException
 from backend.database import get_db
 from backend.models.schemas import (
@@ -30,7 +30,7 @@ from backend.scheduler.engine import (
 )
 
 logger = logging.getLogger("learn_lms.schedule")
-router = APIRouter(prefix="/api/courses/{course_id}/schedule", tags=["schedule"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/api/courses/{course_id}/schedule", tags=["schedule"], dependencies=[Depends(get_current_user), Depends(require_course_owner)])
 
 @router.post("/generate", response_model=ScheduleResponse)
 def generate_course_schedule(

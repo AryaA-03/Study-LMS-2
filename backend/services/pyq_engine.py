@@ -317,8 +317,35 @@ def get_course_pyq_summary(db_conn, course_id: str) -> Dict[str, Any]:
     cur.execute("SELECT COUNT(*) FROM pyq_questions WHERE course_id = ? AND matched_lesson_id IS NOT NULL;", (course_id,))
     matched_q = cur.fetchone()[0]
 
+    cur.execute(
+        """
+        SELECT q.id, q.paper_id, q.question_number, q.question_text, q.marks,
+               q.matched_lesson_id, p.title AS paper_title, l.title AS matched_lesson_title
+        FROM pyq_questions q
+        LEFT JOIN pyq_papers p ON q.paper_id = p.id
+        LEFT JOIN lessons l ON q.matched_lesson_id = l.id
+        WHERE q.course_id = ?
+        ORDER BY q.marks DESC NULLS LAST, q.id ASC;
+        """,
+        (course_id,),
+    )
+    questions = [
+        {
+            "id": r[0],
+            "paper_id": r[1],
+            "question_number": r[2],
+            "question_text": r[3],
+            "marks": r[4],
+            "matched_lesson_id": r[5],
+            "paper_title": r[6],
+            "matched_lesson_title": r[7],
+        }
+        for r in cur.fetchall()
+    ]
+
     return {
         "papers": papers,
+        "questions": questions,
         "total_questions": total_q,
         "matched_questions": matched_q,
         "high_yield_lessons": high_yield_lessons
