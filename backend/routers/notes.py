@@ -2,7 +2,7 @@
 
 import logging
 from typing import Dict, Any
-from backend.deps import get_current_user
+from backend.deps import get_current_user, require_lesson_owner
 from fastapi import APIRouter, Depends, HTTPException
 import sqlite3
 
@@ -14,7 +14,7 @@ logger = logging.getLogger("learn_lms.api.notes")
 router = APIRouter(prefix="/api/lessons", tags=["notes"], dependencies=[Depends(get_current_user)])
 
 
-@router.get("/{lesson_id}/notes", response_model=NoteResponse)
+@router.get("/{lesson_id}/notes", response_model=NoteResponse, dependencies=[Depends(require_lesson_owner)])
 async def get_lesson_notes(
     lesson_id: str,
     db: sqlite3.Connection = Depends(get_db)
@@ -39,7 +39,7 @@ async def get_lesson_notes(
     }
 
 
-@router.post("/{lesson_id}/notes/regenerate", response_model=NoteResponse)
+@router.post("/{lesson_id}/notes/regenerate", response_model=NoteResponse, dependencies=[Depends(require_lesson_owner)])
 async def regenerate_lesson_notes(
     lesson_id: str,
     db: sqlite3.Connection = Depends(get_db)
@@ -64,7 +64,7 @@ async def regenerate_lesson_notes(
     }
 
 
-@router.put("/{lesson_id}/notes/personal")
+@router.put("/{lesson_id}/notes/personal", dependencies=[Depends(require_lesson_owner)])
 def update_personal_notes(
     lesson_id: str,
     payload: PersonalNotesUpdate,
@@ -82,7 +82,7 @@ def update_personal_notes(
     return {"success": saved, "lesson_id": lesson_id}
 
 
-@router.put("/{lesson_id}/notes", response_model=NoteResponse)
+@router.put("/{lesson_id}/notes", response_model=NoteResponse, dependencies=[Depends(require_lesson_owner)])
 def update_full_notes(
     lesson_id: str,
     payload: Dict[str, Any],

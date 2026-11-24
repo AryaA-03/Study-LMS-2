@@ -381,3 +381,43 @@ def get_lesson_pyq_questions(db_conn, course_id: str, lesson_id: str) -> List[Di
         }
         for r in rows
     ]
+
+
+def rematch_course_pyqs(db_conn, course_id: str) -> Dict[str, Any]:
+    """Re-runs keyword/topic matching for all existing pyq_questions against current course lessons."""
+    cur = db_conn.cursor()
+    cur.execute(
+        "SELECT id, title, chapter_title FROM lessons WHERE course_id = ? AND COALESCE(is_excluded, 0) = 0;",
+        (course_id,),
+    )
+    lessons = [dict(r) for r in cur.fetchall()]
+    cur.execute("SELECT id, question_text FROM pyq_questions WHERE course_id = ?;", (course_id,))
+    questions = [dict(r) for r in cur.fetchall()]
+    matched_count = 0
+    for q in questions:
+        q_tokens = {w for w in re.findall(r"[a-zA-Z0-9]{3,}", (q["question_text"] or "").lower())}
+        best_lid = None
+        best_score = 0.0
+        for les in lessons:
+            l_text = f"{les.get('title', '')} {les.get('chapter_title', '')}".lower()
+            l_tokens = {w for w in re.findall(r"[a-zA-Z0-9]{3,}", l_text)}
+            if not q_tokens or not l_tokens:
+                continue
+            overlap = len(q_tokens & l_tokens) / max(1, min(len(q_tokens), len(l_tokens)))
+            if overlap > best_score:
+                best_score = overlap
+                best_lid = les["id"]
+        if best_lid and best_score >= 0.15:
+            cur.execute(
+                "UPDATE pyq_questions SET matched_lesson_id = ?, bm25_score = ? WHERE id = ?;",
+                (best_lid, round(best_score, 3), q["id"]),
+            )
+            matched_count += 1
+        else:
+            cur.execute(
+                "UPDATE pyq_questions SET matched_lesson_id = NULL, bm25_score = 0.0 WHERE id = ?;",
+                (q["id"],),
+            )
+    update_course_pyq_aggregates(db_conn, course_id)
+    db_conn.commit()
+    return {"questions_rematched": len(questions), "matched_count": matched_count}

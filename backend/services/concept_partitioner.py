@@ -1,3 +1,5 @@
+from backend.services.llm_cache import compute_prompt_hash, get_cached_response, set_cached_response
+import hashlib
 """Concept Clip Partitioner (Layer 1: Immutable Content).
 
 Partitions educational videos sequentially from 00:00 to video_end into
@@ -216,6 +218,268 @@ def split_long_segment_deterministic(
             curr_start = curr_end
 
     return slices
+
+
+
+_FILLER_WORDS = {
+    "hello", "everyone", "welcome", "basically", "actually", "video", "lecture",
+    "guys", "okay", "today", "friends", "please", "subscribe", "channel", "watch",
+    "going", "talk", "about", "learn", "understand", "thing", "things", "really",
+    "very", "just", "like", "know", "mean", "right", "here", "there", "this", "that",
+    "these", "those", "with", "from", "have", "will", "would", "could", "should",
+    "been", "being", "their", "them", "they", "what", "when", "where", "which",
+    "while", "because", "into", "over", "also", "then", "than", "some", "more",
+    "most", "such", "only", "make", "made", "take", "used", "using", "lets", "let",
+    "part", "chapter", "section", "topic", "lesson", "course", "complete", "oneshot",
+    "shot", "hindi", "english", "semester", "exam", "full",
+}
+
+
+def extract_deterministic_topic_title(
+    slice_chunks: List[Dict[str, Any]],
+    fallback_title: str,
+    part_index: int,
+) -> str:
+    """Extract a readable domain-keyword title from transcript chunks when no LLM key is configured."""
+    if not slice_chunks:
+        return f"{fallback_title} — Part {part_index}"
+    text = " ".join((c.get("content") or c.get("text") or "") for c in slice_chunks)
+    # Prefer multi-word capitalized phrases or technical acronyms/keywords
+    words = re.findall(r"[A-Za-z][A-Za-z0-9+/#-]{2,}", text)
+    freq: Dict[str, int] = {}
+    display_map: Dict[str, str] = {}
+    for w in words:
+        lw = w.lower()
+        if lw in _FILLER_WORDS or lw.isdigit() or len(lw) < 3:
+            continue
+        freq[lw] = freq.get(lw, 0) + (2 if any(ch.isupper() for ch in w) or "+" in w else 1)
+        if lw not in display_map or (w[0].isupper() and not display_map[lw][0].isupper()):
+            display_map[lw] = w
+    if not freq:
+        return f"{fallback_title} — Part {part_index}"
+    top_terms = [display_map[k].title() if display_map[k].islower() else display_map[k]
+                 for k, _ in sorted(freq.items(), key=lambda kv: (-kv[1], kv[0]))[:4]]
+    if len(top_terms) >= 2:
+        return " & ".join([", ".join(top_terms[:-1]), top_terms[-1]]) if len(top_terms) > 2 else f"{top_terms[0]} & {top_terms[1]}"
+    return f"{top_terms[0]} Concepts"
+
+
+def _sample_window_uniformly(
+    window_chunks: List[Dict[str, Any]],
+    window_start: int,
+    window_end: int,
+    bucket_sec: int = 60,
+    max_chars: int = 12000,
+) -> str:
+    """Uniformly sample 1 concise timestamped snippet per ~60s bucket across the ENTIRE window."""
+    if not window_chunks:
+        return ""
+    buckets: Dict[int, List[str]] = {}
+    for ch in window_chunks:
+        s = int(ch.get("start_sec", window_start))
+        b_idx = max(0, (s - window_start) // max(15, bucket_sec))
+        txt = (ch.get("content") or ch.get("text") or "").strip().replace("\n", " ")
+        if txt:
+            buckets.setdefault(b_idx, []).append(txt)
+
+    lines: List[str] = []
+    total_chars = 0
+    for b_idx in sorted(buckets.keys()):
+        ts = window_start + b_idx * bucket_sec
+        snippet = " ".join(buckets[b_idx])[:260]
+        line = f"[{format_timestamp_pill(ts)}] ({ts}s): {snippet}"
+        if total_chars + len(line) + 1 > max_chars:
+            break
+        lines.append(line)
+        total_chars += len(line) + 1
+    return "\n".join(lines)
+
+
+async def _call_llm_for_window_async(
+    video_title: str,
+    window_chunks: List[Dict[str, Any]],
+    window_start: int,
+    window_end: int,
+    db_conn=None,
+) -> Optional[List[Dict[str, Any]]]:
+    """Async semantic boundary detection via unified LLMGateway with full-window uniform sampling."""
+    from backend.config import get_settings
+    from backend.infra.llm_gateway import get_llm_gateway
+
+    settings = get_settings()
+    if not (settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY or settings.OLLAMA_BASE_URL):
+        return None
+
+    transcript_text = _sample_window_uniformly(window_chunks, window_start, window_end)
+    if not transcript_text.strip():
+        return None
+
+    active_model = settings.GEMINI_MODEL if settings.GEMINI_API_KEY else (
+        settings.GROQ_MODEL if settings.GROQ_API_KEY else (
+            settings.OPENROUTER_MODEL if settings.OPENROUTER_API_KEY else settings.OLLAMA_MODEL
+        )
+    )
+    prompt_sig = f"semantic_partition_v2|{active_model}|{video_title}|{window_start}|{window_end}|{hashlib.sha256(transcript_text.encode('utf-8')).hexdigest()[:16]}"
+    prompt_hash = compute_prompt_hash(prompt_sig)
+    if db_conn is not None:
+        cached = get_cached_response(db_conn, prompt_hash)
+        if cached:
+            try:
+                parsed_c = json.loads(cached)
+                if isinstance(parsed_c, list) and len(parsed_c) >= 1:
+                    return parsed_c
+            except Exception:
+                pass
+
+    system_instruction = (
+        "You are an expert university CS & engineering curriculum architect. "
+        "Split this lecture transcript window into sequential, self-contained 10-15 minute Concept Clips. "
+        "CRITICAL: Give every clip a clean Module/Unit name (`module_title`, e.g., 'B+ Tree Indexing') "
+        "AND a specific, scannable concept title (`title`, e.g., 'Insertion & Leaf-Node Splitting'). "
+        "NEVER use generic titles like 'Part 1', '[00:00 - 15:00]', or copy the raw YouTube video title. "
+        "Return ONLY valid JSON."
+    )
+    prompt = f"""Video Title: {video_title}
+Window Range: {window_start}s ({format_timestamp_pill(window_start)}) to {window_end}s ({format_timestamp_pill(window_end)})
+
+Uniformly Sampled Timestamped Transcript:
+{transcript_text}
+
+Return JSON with this exact schema:
+{{
+  "clips": [
+    {{
+      "start_sec": {window_start},
+      "end_sec": {min(window_end, window_start + 780)},
+      "module_title": "Unit/Module Name (3-5 words)",
+      "title": "Specific Concept Topic Title (4-8 words)",
+      "priority_tag": "core",
+      "clip_type": "concept",
+      "objective": "One-sentence learning outcome"
+    }}
+  ]
+}}
+Rules:
+1. Clips must be contiguous from {window_start} to {window_end} with zero gaps or overlaps.
+2. Target 8-18 minutes per clip; split at genuine topic transitions.
+3. priority_tag must be "core" or "deep-dive"; clip_type must be "concept" or "example".
+"""
+    raw_text, model_used = await get_llm_gateway().generate_text(
+        prompt=prompt,
+        system_instruction=system_instruction,
+        json_mode=True,
+        temperature=0.2,
+        max_tokens=2048,
+    )
+    if not raw_text:
+        return None
+    try:
+        cleaned = raw_text.strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+            cleaned = re.sub(r"\s*```$", "", cleaned).strip()
+        parsed = json.loads(cleaned)
+        clips_list = parsed.get("clips") if isinstance(parsed, dict) else parsed
+        if isinstance(clips_list, list) and len(clips_list) >= 1:
+            if db_conn is not None:
+                try:
+                    set_cached_response(db_conn, prompt_hash, model_used or active_model, json.dumps(clips_list))
+                except Exception:
+                    pass
+            return clips_list
+    except Exception as exc:
+        logger.warning(f"Failed parsing async semantic partition JSON: {exc}")
+    return None
+
+
+async def partition_video_semantic_ai_async(
+    video_meta: Dict[str, Any],
+    transcript_data: List[Dict[str, Any]],
+    window_duration_sec: int = 3000,
+    db_conn=None,
+) -> Optional[List[Dict[str, Any]]]:
+    """Async sliding-window semantic partitioner powered by LLMGateway."""
+    duration = int(video_meta.get("duration") or 0)
+    if duration <= 0 and transcript_data:
+        duration = max(int(c.get("end_sec", 0)) for c in transcript_data)
+    if duration <= 0 or not transcript_data:
+        return None
+
+    video_id = video_meta.get("id", "")
+    video_url = video_meta.get("url") or (f"https://www.youtube.com/watch?v={video_id}" if video_id else "")
+    title = video_meta.get("title", "Lecture")
+
+    all_clips: List[Dict[str, Any]] = []
+    current_start = 0
+    order_idx = 0
+
+    while current_start < duration:
+        window_end = min(current_start + window_duration_sec, duration)
+        if duration - window_end < 600:
+            window_end = duration
+
+        window_chunks = [
+            c for c in transcript_data
+            if int(c.get("start_sec", 0)) >= current_start - 30 and int(c.get("start_sec", 0)) <= window_end + 30
+        ]
+        llm_clips = await _call_llm_for_window_async(
+            title, window_chunks, current_start, window_end, db_conn=db_conn
+        )
+        if not llm_clips:
+            return None
+
+        prev_end = current_start
+        for item in llm_clips:
+            c_start = max(prev_end, int(item.get("start_sec", prev_end)))
+            c_end = min(window_end, int(item.get("end_sec", window_end)))
+            if c_end <= c_start:
+                continue
+            c_title = str(item.get("title") or "").strip() or f"{title} Concept {order_idx + 1}"
+            mod_title = str(item.get("module_title") or item.get("chapter_title") or "").strip()
+            if mod_title.lower() == c_title.lower():
+                mod_title = ""
+            prio = str(item.get("priority_tag") or "core").lower()
+            if prio not in ("core", "deep-dive"):
+                prio = "core"
+            all_clips.append({
+                "id": f"clip_{uuid.uuid4().hex[:10]}",
+                "title": c_title,
+                "chapter_title": mod_title,
+                "module_title": mod_title,
+                "start_sec": c_start,
+                "end_sec": c_end,
+                "raw_duration_sec": max(60, c_end - c_start),
+                "video_id": video_id,
+                "video_url": video_url,
+                "priority_tag": prio,
+                "priority": prio,
+                "clip_type": str(item.get("clip_type") or "concept"),
+                "objective": str(item.get("objective") or ""),
+                "order_index": order_idx,
+            })
+            prev_end = c_end
+            order_idx += 1
+
+        if prev_end < window_end and all_clips:
+            all_clips[-1]["end_sec"] = window_end
+            all_clips[-1]["raw_duration_sec"] = max(60, window_end - all_clips[-1]["start_sec"])
+        current_start = window_end
+
+    return all_clips if all_clips else None
+
+
+async def partition_video_async(
+    video_meta: Dict[str, Any],
+    transcript_data: Optional[List[Dict[str, Any]]] = None,
+    mode: str = "auto",
+    db_conn=None,
+) -> List[Dict[str, Any]]:
+    """Async primary entry point: uses LLMGateway semantic partitioning when transcript & key exist, else smart deterministic."""
+    if transcript_data and mode in ("auto", "semantic"):
+        res = await partition_video_semantic_ai_async(video_meta, transcript_data, db_conn=db_conn)
+        if res:
+            return res
+    return partition_video_deterministic(video_meta, transcript_data=transcript_data)
 
 
 def partition_video_deterministic(
@@ -549,7 +813,7 @@ def partition_video_semantic_ai(
         ]
         text_summary = "\n".join([
             f"[{format_timestamp_pill(int(c.get('start_sec', 0)))}] {c.get('content', '')[:120]}"
-            for c in window_chunks[:40]
+            for c in window_chunks
         ])
 
         llm_clips = _call_llm_for_window(video_title, w_start, w_end, text_summary, db_conn=db_conn)

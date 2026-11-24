@@ -3,18 +3,45 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
+import { Sparkles, BookmarkPlus } from 'lucide-react';
 
 interface MarkdownViewProps {
   markdown: string;
-  onSeekTimestamp?: (seconds: number) => void;
-  onExplainSelection?: (selectedText: string) => void;
-  onSaveSelectionToNotes?: (selectedText: string) => void;
+  onSeekTimestamp?: (sec: number) => void;
+  onExplainSelection?: (text: string) => void;
+  onSaveSelectionToNotes?: (text: string) => void;
+  activeTimeSec?: number;
   className?: string;
 }
 
+export function slugifyHeading(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\[.*?\]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+export function extractMarkdownHeadings(markdown: string): Array<{ id: string; text: string }> {
+  if (!markdown) return [];
+  const headings: Array<{ id: string; text: string }> = [];
+  const seen = new Set<string>();
+  for (const line of markdown.split('\n')) {
+    const m = line.match(/^##\s+(.+)$/);
+    if (m) {
+      const clean = m[1].replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, '').replace(/[*_`]/g, '').trim();
+      const id = slugifyHeading(clean);
+      if (clean && id && !seen.has(id)) {
+        seen.add(id);
+        headings.push({ id, text: clean });
+      }
+    }
+  }
+  return headings;
+}
+
 export function parseTimestampToSec(ts: string): number {
-  const parts = ts.split(':').map((p) => parseInt(p, 10));
-  if (parts.some((n) => Number.isNaN(n))) return 0;
+  const parts = ts.split(':').map((p) => parseInt(p, 10) || 0);
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   return parts[0] || 0;
@@ -30,15 +57,13 @@ export function formatSecToPill(sec?: number | null): string {
 }
 
 function renderLatex(raw: string): string {
-  // Display math $$...$$
   let out = raw.replace(/\$\$([\s\S]+?)\$\$/g, (_, expr) => {
     try {
-      return `<div class="my-2 overflow-x-auto">${katex.renderToString(expr.trim(), { displayMode: true, throwOnError: false })}</div>`;
+      return `<div class="my-2.5 overflow-x-auto">${katex.renderToString(expr.trim(), { displayMode: true, throwOnError: false })}</div>`;
     } catch {
       return `<code>${expr}</code>`;
     }
   });
-  // Inline math $...$
   out = out.replace(/(?<!\$)\$(?!\$)([^\n$]+?)(?<!\$)\$(?!\$)/g, (_, expr) => {
     try {
       return katex.renderToString(expr.trim(), { displayMode: false, throwOnError: false });
@@ -54,6 +79,7 @@ export const MarkdownView: React.FC<MarkdownViewProps> = ({
   onSeekTimestamp,
   onExplainSelection,
   onSaveSelectionToNotes,
+  activeTimeSec,
   className = '',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -61,9 +87,8 @@ export const MarkdownView: React.FC<MarkdownViewProps> = ({
 
   const sanitizedHtml = useMemo(() => {
     if (!markdown) return '';
-    // Strip internal chunk reference tags like [ref:chk_abc123]
-    const cleaned = markdown.replace(/\[ref:[^\]]+\]/gi, '');
-    // Protect fenced code blocks and inline code before LaTeX rendering
+    // Strip any leaked internal chunk references
+    const cleaned = markdown.replace(/\[ref:[^\]]+\]/gi, '').replace(/\bchk_[a-f0-9]{4,}\b/gi, '');
     const codePlaceholders: string[] = [];
     const protectedMd = cleaned
       .replace(/```[\s\S]*?```/g, (m) => {
@@ -77,45 +102,71 @@ export const MarkdownView: React.FC<MarkdownViewProps> = ({
     const withMath = renderLatex(protectedMd).replace(/@@CODE_BLOCK_(\d+)@@/g, (_, idx) => codePlaceholders[Number(idx)] || '');
     const rawHtml = marked.parse(withMath, { async: false, gfm: true, breaks: false }) as string;
 
+    // Add anchor IDs to H2 headings for sticky section jump bar
+    const withIds = rawHtml.replace(/<h2>([\s\S]*?)<\/h2>/gi, (_, inner) => {
+      const plain = inner.replace(/<[^>]+>/g, '').trim();
+      const slug = slugifyHeading(plain);
+      return `<h2 id="sec-${slug}">${inner}</h2>`;
+    });
+
     // Style [!IMPORTANT], [!TIP], [!NOTE] blockquotes cleanly
-    const styledCallouts = rawHtml
+    const styledCallouts = withIds
       .replace(
         /<blockquote>\s*<p>\[!IMPORTANT\]\s*/gi,
-        '<blockquote class="callout-important"><div class="text-[11px] font-bold uppercase tracking-wider text-[var(--accent)] mb-1">IMPORTANT</div><p>',
+        '<blockquote class="callout-important"><div class="text-xs font-bold uppercase tracking-wider text-[var(--accent)] mb-1">IMPORTANT</div><p>',
       )
       .replace(
         /<blockquote>\s*<p>\[!TIP\]\s*/gi,
-        '<blockquote class="callout-tip"><div class="text-[11px] font-bold uppercase tracking-wider text-[var(--success)] mb-1">EXAM TIP</div><p>',
+        '<blockquote class="callout-tip"><div class="text-xs font-bold uppercase tracking-wider text-[var(--success)] mb-1">EXAM TIP</div><p>',
       )
       .replace(
         /<blockquote>\s*<p>\[!NOTE\]\s*/gi,
-        '<blockquote class="callout-important"><div class="text-[11px] font-bold uppercase tracking-wider text-[var(--accent)] mb-1">NOTE</div><p>',
+        '<blockquote class="callout-important"><div class="text-xs font-bold uppercase tracking-wider text-[var(--accent)] mb-1">NOTE</div><p>',
       );
 
-    // Replace [MM:SS] or [HH:MM:SS] with clickable timestamp buttons (skipping <pre>/<code> blocks)
+    // Wrap <pre> blocks with a 1-click Copy button and protect code blocks before timestamp pills
     const htmlCodeBlocks: string[] = [];
-    const htmlProtected = styledCallouts.replace(/<(pre|code)\b[^>]*>[\s\S]*?<\/\1>/gi, (m) => {
+    const withCopyPre = styledCallouts.replace(/<pre\b[^>]*>[\s\S]*?<\/pre>/gi, (m) => {
+      const wrapped = `<div class="code-block-wrap"><button type="button" class="code-copy-btn" data-copy-code="1">Copy</button>${m}</div>`;
+      htmlCodeBlocks.push(wrapped);
+      return `@@HTML_CODE_${htmlCodeBlocks.length - 1}@@`;
+    });
+    const htmlProtected = withCopyPre.replace(/<code\b[^>]*>[\s\S]*?<\/code>/gi, (m) => {
       htmlCodeBlocks.push(m);
       return `@@HTML_CODE_${htmlCodeBlocks.length - 1}@@`;
     });
+
     const withPills = htmlProtected
-      .replace(
-        /\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g,
-        (_, ts) => {
-          const sec = parseTimestampToSec(ts);
-          return `<button type="button" class="ts-pill" data-seek-sec="${sec}" title="Jump video to ${ts}">▶ ${ts}</button>`;
-        },
-      )
+      .replace(/\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g, (_, ts) => {
+        const sec = parseTimestampToSec(ts);
+        const isActive =
+          activeTimeSec !== undefined && activeTimeSec >= sec && activeTimeSec < sec + 90;
+        return `<button type="button" class="ts-pill${isActive ? ' ts-pill-active' : ''}" data-seek-sec="${sec}" title="Jump video to ${ts}">▶ ${ts}</button>`;
+      })
       .replace(/@@HTML_CODE_(\d+)@@/g, (_, idx) => htmlCodeBlocks[Number(idx)] || '');
 
     return DOMPurify.sanitize(withPills, {
+      FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
       ADD_TAGS: ['button', 'svg', 'path', 'math', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub', 'mfrac', 'annotation'],
-      ADD_ATTR: ['data-seek-sec', 'type', 'class', 'title', 'aria-hidden', 'xmlns', 'encoding'],
+      ADD_ATTR: ['id', 'data-seek-sec', 'data-copy-code', 'type', 'class', 'title', 'aria-hidden', 'xmlns', 'encoding'],
     });
-  }, [markdown]);
+  }, [markdown, activeTimeSec]);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
+    const copyBtn = target.closest('[data-copy-code]') as HTMLElement | null;
+    if (copyBtn) {
+      const pre = copyBtn.parentElement?.querySelector('pre');
+      if (pre?.textContent) {
+        navigator.clipboard?.writeText(pre.textContent).catch(() => {});
+        const orig = copyBtn.textContent;
+        copyBtn.textContent = 'Copied';
+        setTimeout(() => {
+          copyBtn.textContent = orig || 'Copy';
+        }, 1500);
+      }
+      return;
+    }
     const btn = target.closest('[data-seek-sec]') as HTMLElement | null;
     if (btn && onSeekTimestamp) {
       const sec = parseInt(btn.getAttribute('data-seek-sec') || '0', 10);
@@ -126,35 +177,27 @@ export const MarkdownView: React.FC<MarkdownViewProps> = ({
   const handleMouseUp = () => {
     if (!onExplainSelection && !onSaveSelectionToNotes) return;
     const sel = window.getSelection();
-    const text = sel?.toString().trim() || '';
-    if (text.length < 4 || text.length > 400 || !containerRef.current) {
+    const txt = sel?.toString().trim() || '';
+    if (txt.length < 6 || !containerRef.current || !sel || sel.rangeCount === 0) {
       setSelectionPopup(null);
       return;
     }
-    const range = sel?.getRangeAt(0);
-    if (!range) return;
+    const range = sel.getRangeAt(0);
     const rect = range.getBoundingClientRect();
-    const hostRect = containerRef.current.getBoundingClientRect();
+    const parentRect = containerRef.current.getBoundingClientRect();
     setSelectionPopup({
-      text,
-      top: Math.max(4, rect.top - hostRect.top - 40),
-      left: Math.min(Math.max(8, rect.left - hostRect.left), Math.max(8, hostRect.width - 230)),
+      text: txt,
+      top: Math.max(4, rect.top - parentRect.top - 42),
+      left: Math.min(parentRect.width - 240, Math.max(8, rect.left - parentRect.left)),
     });
   };
 
   return (
-    <div
-      ref={containerRef}
-      className={`relative prose-study ${className}`}
-      onClick={handleClick}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={() => setTimeout(() => setSelectionPopup(null), 200)}
-    >
+    <div ref={containerRef} className="relative" onMouseUp={handleMouseUp}>
       {selectionPopup && (
         <div
-          className="no-print absolute z-30 flex items-center gap-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-card)] px-1.5 py-1 shadow-lg"
           style={{ top: selectionPopup.top, left: selectionPopup.left }}
-          onMouseDown={(e) => e.preventDefault()}
+          className="no-print absolute z-30 flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-card)] px-2.5 py-1.5 shadow-lg text-xs"
         >
           {onExplainSelection && (
             <button
@@ -163,9 +206,9 @@ export const MarkdownView: React.FC<MarkdownViewProps> = ({
                 onExplainSelection(selectionPopup.text);
                 setSelectionPopup(null);
               }}
-              className="rounded px-2 py-1 text-xs font-medium bg-[var(--accent)] text-white hover:opacity-90"
+              className="inline-flex items-center gap-1 rounded px-2 py-0.5 font-medium text-[var(--accent-text)] hover:bg-[var(--accent-soft)]"
             >
-              ✨ Explain with AI
+              <Sparkles className="h-3.5 w-3.5" /> Explain
             </button>
           )}
           {onSaveSelectionToNotes && (
@@ -175,14 +218,18 @@ export const MarkdownView: React.FC<MarkdownViewProps> = ({
                 onSaveSelectionToNotes(selectionPopup.text);
                 setSelectionPopup(null);
               }}
-              className="rounded px-2 py-1 text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--fg-primary)] hover:bg-[var(--bg-hover)]"
+              className="inline-flex items-center gap-1 rounded px-2 py-0.5 font-medium text-[var(--fg-primary)] hover:bg-[var(--bg-hover)]"
             >
-              📌 Save
+              <BookmarkPlus className="h-3.5 w-3.5" /> Save
             </button>
           )}
         </div>
       )}
-      <div dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />
+      <div
+        className={`prose-study ${className}`}
+        onClick={handleClick}
+        dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+      />
     </div>
   );
 };

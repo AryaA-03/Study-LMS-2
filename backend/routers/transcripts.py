@@ -2,7 +2,7 @@
 
 import logging
 from typing import Dict, Any, List
-from backend.deps import get_current_user
+from backend.deps import get_current_user, require_lesson_owner
 from fastapi import APIRouter, Depends, HTTPException
 import sqlite3
 
@@ -13,7 +13,7 @@ logger = logging.getLogger("learn_lms.api.transcripts")
 router = APIRouter(prefix="/api/lessons", tags=["transcripts"], dependencies=[Depends(get_current_user)])
 
 
-@router.post("/{lesson_id}/transcribe")
+@router.post("/{lesson_id}/transcribe", dependencies=[Depends(require_lesson_owner)])
 async def transcribe_lesson(
     lesson_id: str,
     db: sqlite3.Connection = Depends(get_db)
@@ -61,7 +61,7 @@ async def transcribe_lesson(
     }
 
 
-@router.get("/{lesson_id}/chunks")
+@router.get("/{lesson_id}/chunks", dependencies=[Depends(require_lesson_owner)])
 def get_lesson_chunks(
     lesson_id: str,
     db: sqlite3.Connection = Depends(get_db)
@@ -91,7 +91,7 @@ def get_lesson_chunks(
     ]
 
 
-@router.get("/{lesson_id}/status")
+@router.get("/{lesson_id}/status", dependencies=[Depends(require_lesson_owner)])
 def get_lesson_transcript_status(
     lesson_id: str,
     db: sqlite3.Connection = Depends(get_db)

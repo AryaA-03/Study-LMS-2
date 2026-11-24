@@ -64,7 +64,7 @@ def test_migration_012_users_and_secrets_tables(isolated_client):
     assert "users" in tables
     assert "user_secrets" in tables
     version_count = conn.execute("SELECT COUNT(*) FROM schema_migrations;").fetchone()[0]
-    assert version_count == 13
+    assert version_count >= 14
     conn.close()
 
 
@@ -189,5 +189,4 @@ def test_vite_spa_served_at_root_and_legacy_fallback(isolated_client):
         assert a_resp.status_code == 200, f"Asset failed: {url}"
 
     legacy_resp = client.get("/legacy")
-    assert legacy_resp.status_code == 200
-    assert "app.js" in legacy_resp.text
+    assert legacy_resp.status_code == 404

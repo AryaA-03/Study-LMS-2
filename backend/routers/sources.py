@@ -2,7 +2,7 @@
 
 import logging
 from typing import Dict, Any, Optional
-from backend.deps import get_current_user
+from backend.deps import get_current_user, require_course_owner
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 import sqlite3
 
@@ -15,7 +15,7 @@ logger = logging.getLogger("learn_lms.api.sources")
 router = APIRouter(prefix="/api/courses", tags=["sources"], dependencies=[Depends(get_current_user)])
 
 
-@router.post("/{course_id}/sources/pdf")
+@router.post("/{course_id}/sources/pdf", dependencies=[Depends(require_course_owner)])
 async def upload_pdf_source(
     course_id: str,
     file: UploadFile = File(...),
@@ -54,7 +54,7 @@ async def upload_pdf_source(
     }
 
 
-@router.post("/{course_id}/sources/web")
+@router.post("/{course_id}/sources/web", dependencies=[Depends(require_course_owner)])
 async def import_web_source(
     course_id: str,
     payload: WebSourceImportRequest,

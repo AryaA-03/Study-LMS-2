@@ -141,7 +141,7 @@ export const LeftSyllabusRail: React.FC<LeftSyllabusRailProps> = ({
                       }
                     }}
                     title={`${d.day_label || `Day ${idx + 1}`} (${mins}m)`}
-                    className={`flex h-9 w-9 items-center justify-center rounded-full border text-[11px] font-semibold transition ${
+                    className={`flex h-9 w-9 items-center justify-center rounded-full border text-xs font-semibold transition ${
                       isActiveDay
                         ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-text)] ring-2 ring-[var(--accent)]/25'
                         : allDone
@@ -159,7 +159,7 @@ export const LeftSyllabusRail: React.FC<LeftSyllabusRailProps> = ({
                   type="button"
                   onClick={() => onSelectLesson(l)}
                   title={l.title}
-                  className={`flex h-9 w-9 items-center justify-center rounded-full border text-[11px] font-semibold transition ${
+                  className={`flex h-9 w-9 items-center justify-center rounded-full border text-xs font-semibold transition ${
                     l.id === activeLessonId
                       ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-text)]'
                       : 'border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]'
@@ -189,10 +189,10 @@ export const LeftSyllabusRail: React.FC<LeftSyllabusRailProps> = ({
       {/* Clean Minimal Header: Syllabus + By Day / By Topic */}
       <div className="px-3.5 pt-3.5 pb-2.5 space-y-2.5">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--fg-muted)]">
+          <span className="text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)]">
             Syllabus
           </span>
-          <div className="inline-flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] p-0.5 text-[11px]">
+          <div className="inline-flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setViewMode('days')}
@@ -230,7 +230,7 @@ export const LeftSyllabusRail: React.FC<LeftSyllabusRailProps> = ({
               key={f.id}
               type="button"
               onClick={() => setFilter(f.id)}
-              className={`flex-1 rounded-md py-1 text-[10.5px] font-semibold transition ${
+              className={`flex-1 rounded-md py-1 text-xs font-semibold transition ${
                 filter === f.id
                   ? 'bg-[var(--bg-card)] text-[var(--fg-primary)] shadow-sm'
                   : 'text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]'
@@ -267,7 +267,7 @@ export const LeftSyllabusRail: React.FC<LeftSyllabusRailProps> = ({
                     onClick={() => toggleGroup(gKey)}
                     className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left hover:bg-[var(--bg-hover)]/70"
                   >
-                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--fg-secondary)]">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--fg-secondary)]">
                       {isCollapsed ? (
                         <ChevronRight className="h-3.5 w-3.5 text-[var(--fg-muted)]" />
                       ) : (
@@ -276,7 +276,7 @@ export const LeftSyllabusRail: React.FC<LeftSyllabusRailProps> = ({
                       <span>{day.day_label || `Day ${dIdx + 1}`}</span>
                       <span className="font-normal text-[var(--fg-muted)]">· {dayMins}m</span>
                     </div>
-                    <span className="text-[10px] font-semibold text-[var(--fg-muted)]">
+                    <span className="text-xs font-semibold text-[var(--fg-muted)]">
                       {doneCount}/{filteredAllocs.length}
                     </span>
                   </button>
@@ -316,7 +316,7 @@ export const LeftSyllabusRail: React.FC<LeftSyllabusRailProps> = ({
                                 {alloc.lesson_title}
                               </div>
                             </div>
-                            <div className="flex shrink-0 items-center gap-1 pt-0.5 text-[10px] text-[var(--fg-muted)]">
+                            <div className="flex shrink-0 items-center gap-1 pt-0.5 text-xs text-[var(--fg-muted)]">
                               {(alloc.pyq_hit_count || 0) > 0 && <Flame className="h-3 w-3 text-[var(--warning)]" />}
                               <span className="font-mono">{Math.max(1, Math.round(alloc.effective_minutes))}m</span>
                               {!alloc.is_completed && (
@@ -362,7 +362,7 @@ export const LeftSyllabusRail: React.FC<LeftSyllabusRailProps> = ({
                   onClick={() => toggleGroup(gKey)}
                   className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left hover:bg-[var(--bg-hover)]/70"
                 >
-                  <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold text-[var(--fg-secondary)]">
+                  <div className="flex min-w-0 items-center gap-1.5 text-xs font-bold text-[var(--fg-secondary)]">
                     {isCollapsed ? (
                       <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--fg-muted)]" />
                     ) : (
@@ -370,7 +370,7 @@ export const LeftSyllabusRail: React.FC<LeftSyllabusRailProps> = ({
                     )}
                     <span className="truncate">{grp.title}</span>
                   </div>
-                  <span className="shrink-0 text-[10px] text-[var(--fg-muted)]">
+                  <span className="shrink-0 text-xs text-[var(--fg-muted)]">
                     {grp.items.length} · {grp.totalMin}m
                   </span>
                 </button>
@@ -413,25 +413,25 @@ export const LeftSyllabusRail: React.FC<LeftSyllabusRailProps> = ({
       {/* Clean Compact Resources Dock */}
       <div className="border-t border-[var(--border-subtle)] px-3 py-2.5">
         <div className="mb-1.5 flex items-center justify-between">
-          <span className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--fg-muted)]">
+          <span className="text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)]">
             Resources
           </span>
           <button
             type="button"
             onClick={onOpenAddSource}
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)]"
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)]"
           >
             <FolderPlus className="h-3 w-3" /> Add
           </button>
         </div>
         <div className="max-h-24 space-y-0.5 overflow-y-auto">
           {sources.length === 0 ? (
-            <p className="text-[11px] text-[var(--fg-muted)]">No sources attached yet.</p>
+            <p className="text-xs text-[var(--fg-muted)]">No sources attached yet.</p>
           ) : (
             sources.map((src) => (
               <div
                 key={src.id}
-                className="group flex items-center justify-between gap-1.5 rounded-md px-1.5 py-1 text-[11.5px] text-[var(--fg-secondary)] hover:bg-[var(--bg-hover)]"
+                className="group flex items-center justify-between gap-1.5 rounded-md px-1.5 py-1 text-xs text-[var(--fg-secondary)] hover:bg-[var(--bg-hover)]"
               >
                 <div className="flex min-w-0 items-center gap-1.5">
                   {src.source_type === 'pdf' ? (

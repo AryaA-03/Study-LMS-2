@@ -259,6 +259,8 @@ class NoteResponse(BaseModel):
     content_markdown: str
     personal_notes: str = ""
     is_generated: int = 1
+    generation_mode: str = "deterministic"
+    lesson_title: Optional[str] = None
     updated_at: Optional[str] = None
 
 class ScreenshotResponse(BaseModel):
@@ -417,6 +419,8 @@ class PYQUploadResponse(BaseModel):
 class CramSheetGenerateRequest(BaseModel):
     force_refresh: bool = False
     full_syllabus: bool = False
+    source_id: Optional[str] = None
+    chapter_title: Optional[str] = None
 
 class CramSheetResponse(BaseModel):
     id: str

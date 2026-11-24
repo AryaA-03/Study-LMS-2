@@ -16,6 +16,7 @@ interface YouTubePlayerProps {
   playbackSpeed?: number;
   seekRequest?: { sec: number; ts: number } | null;
   lessonTitle?: string;
+  onTimeUpdate?: (sec: number) => void;
 }
 
 let ytApiPromise: Promise<void> | null = null;
@@ -52,6 +53,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   playbackSpeed = 1.0,
   seekRequest,
   lessonTitle,
+  onTimeUpdate,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
@@ -144,6 +146,24 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
       }
     };
   }, []);
+
+
+  useEffect(() => {
+    if (!onTimeUpdate) return;
+    const timer = window.setInterval(() => {
+      try {
+        if (playerRef.current && readyRef.current && typeof playerRef.current.getPlayerState === 'function') {
+          if (playerRef.current.getPlayerState() === 1) {
+            const cur = Math.floor(playerRef.current.getCurrentTime() || 0);
+            onTimeUpdate(cur);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [onTimeUpdate]);
 
   useEffect(() => {
     if (playerRef.current && readyRef.current && playbackSpeed) {

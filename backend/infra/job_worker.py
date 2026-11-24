@@ -94,6 +94,32 @@ async def _execute_job(job: Dict[str, Any]) -> None:
                     result={"cram_sheet_id": result.get("id"), "is_generated_by_llm": result.get("is_generated_by_llm")},
                 )
 
+        elif job_type == "smart_prepare":
+            from backend.services.smart_prepare import smart_prepare_course
+
+            with get_db_context() as conn:
+                update_job_progress(conn, job_id, "running", 15, "Extracting subtitles and splitting into semantic topics...")
+
+            if is_job_cancelled(job_id):
+                return
+
+            force_rep = bool(payload.get("force_repartition", False))
+            with get_db_context() as conn:
+                sp_res = await smart_prepare_course(conn, course_id, force_repartition=force_rep, job_id=job_id)
+
+            if is_job_cancelled(job_id):
+                return
+
+            with get_db_context() as conn:
+                update_job_progress(
+                    conn,
+                    job_id,
+                    "completed",
+                    100,
+                    f"Smart topic split complete ({sp_res.get('new_semantic_clips', 0)} topics)",
+                    result=sp_res,
+                )
+
         elif job_type == "study_bundle_remaining":
             from backend.services.study_bundle import process_remaining_concept_bundles
 

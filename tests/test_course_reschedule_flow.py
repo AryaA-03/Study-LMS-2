@@ -216,10 +216,6 @@ def test_instant_repack_zero_llm_and_content_preservation(temp_db, monkeypatch):
             INSERT INTO lessons (id, course_id, source_id, title, summary, start_sec, end_sec, raw_duration_sec, priority, priority_tag, order_index, is_excluded, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, 720, 'core', 'core', ?, 0, 'pending');
         """, (lid, course_id, source_id, f"Concept Clip {i}", f"Summary {i}", (i-1)*720, i*720, i))
-        conn.execute("""
-            INSERT INTO concept_clips (id, source_id, course_id, order_index, title, start_sec, end_sec, raw_duration_sec, priority_tag, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 720, 'core', 'pending');
-        """, (lid, source_id, course_id, i, f"Concept Clip {i}", (i-1)*720, i*720))
 
     # Add permanent study bundle for Clip 1 (Note + Quiz)
     conn.execute("""

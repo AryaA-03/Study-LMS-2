@@ -32,7 +32,7 @@ class TestPhase0To2Fixes(unittest.TestCase):
 
         runner_mod.BACKUPS_DIR = self.backups_dir
         applied = apply_migrations(self.db_path)
-        self.assertEqual(applied, 13)
+        self.assertEqual(applied, 14)
         reapplied = apply_migrations(self.db_path)
         self.assertEqual(reapplied, 0)
 
@@ -179,13 +179,6 @@ class TestPhase0To2Fixes(unittest.TestCase):
     def test_07_frontend_pyodide_removed_and_no_legacy_crashes(self):
         repo_root = Path(__file__).resolve().parent.parent
         self.assertFalse((repo_root / "frontend/static/js/pyodide_worker.js").exists())
-        js = (repo_root / "frontend/static/js/app.js").read_text(encoding="utf-8")
-        self.assertNotIn("loadDueFlashcards(", js)
-        self.assertNotIn("loadSettingsData(", js)
-        self.assertNotIn("formatSeconds(", js)
-        self.assertNotIn("Logger.warn(", js)
-        self.assertNotIn("bg-surface-900", js)
+        self.assertFalse((repo_root / "frontend/static/js/app.js").exists())
+        self.assertFalse((repo_root / "frontend/templates/index.html").exists())
 
-
-if __name__ == "__main__":
-    unittest.main(verbosity=2)

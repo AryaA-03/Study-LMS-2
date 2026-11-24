@@ -30,11 +30,12 @@ import {
   Sun,
   Undo2,
 } from 'lucide-react';
-import { AllocationItem, api, Course, Lesson, LessonNotes, ScheduleResponse, SourceItem } from './api/client';
+import { AllocationItem, api, Course, Lesson, LessonNotes, ScheduleResponse, SourceItem, JobStatus
+} from './api/client';
 import { LeftSyllabusRail } from './components/LeftSyllabusRail';
 import { RightStudioPanel, StudioTab } from './components/RightStudioPanel';
 import { YouTubePlayer } from './components/YouTubePlayer';
-import { MarkdownView } from './components/MarkdownView';
+import { MarkdownView, extractMarkdownHeadings } from './components/MarkdownView';
 import {
   AddSourceModal,
   CramSheetModal,
@@ -43,7 +44,7 @@ import {
   NewCourseModal,
   SettingsModal,
   SyllabusModal,
-} from './components/Modals';
+} from './components/modals';
 import { CommandPaletteModal, CurriculumDrawerModal, EditLessonModal } from './components/ExtraModals';
 
 
@@ -81,6 +82,10 @@ export const App: React.FC = () => {
   const [videoHeightPct, setVideoHeightPct] = useState<number>(() => Number(safeStorageGet('lms-vid-h')) || 38);
   const [videoHidden, setVideoHidden] = useState(false);
   const [studioTab, setStudioTab] = useState<StudioTab>('ask');
+  const [studioExpanded, setStudioExpanded] = useState(false);
+  const [focusReader, setFocusReader] = useState(false);
+  const [activeVideoSec, setActiveVideoSec] = useState(0);
+  const [activeJob, setActiveJob] = useState<JobStatus | null>(null);
 
   // Core Data State
   const [courses, setCourses] = useState<Course[]>([]);
@@ -118,6 +123,18 @@ export const App: React.FC = () => {
         setModal((m) => (m === 'cmdk' ? null : 'cmdk'));
       } else if (e.key === 'Escape') {
         setModal(null);
+      } else if (
+        (e.key === 'f' || e.key === 'F') &&
+        !e.metaKey && !e.ctrlKey && !e.altKey &&
+        !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName || '')
+      ) {
+        e.preventDefault();
+        setFocusReader((prev) => {
+          const next = !prev;
+          setLeftCollapsed(next);
+          setVideoHidden(next);
+          return next;
+        });
       }
     };
     window.addEventListener('keydown', onKey);
@@ -182,7 +199,7 @@ export const App: React.FC = () => {
         api
           .smartPrepareCourse(courseId, false)
           .then((res) => {
-            if (res.repartitioned_sources > 0) {
+            if ((res.repartitioned_sources || 0) > 0) {
               showToast(`Split video into ${res.new_semantic_clips} subtitle-based topics!`);
               loadCourseData(courseId);
             }
@@ -217,6 +234,48 @@ export const App: React.FC = () => {
     }
   }, [activeCourseId, loadCourseData]);
 
+
+  // Live SSE Background Job Pill tracker
+  useEffect(() => {
+    if (!activeCourseId) return;
+    let es: EventSource | null = null;
+    let cancelled = false;
+    api.listJobs(activeCourseId).then((res) => {
+      if (cancelled) return;
+      const running = (res?.jobs || []).find((j) => j.status === 'queued' || j.status === 'running');
+      if (!running) {
+        setActiveJob(null);
+        return;
+      }
+      setActiveJob(running);
+      es = new EventSource(`/api/jobs/${running.id}/events`);
+      es.onmessage = (ev) => {
+        try {
+          const j = JSON.parse(ev.data) as JobStatus;
+          setActiveJob(j);
+          if (j.status === 'completed') {
+            es?.close();
+            setActiveJob(null);
+            loadCourseData(activeCourseId);
+            showToast(j.message || 'Background study task completed!');
+          } else if (j.status === 'failed' || j.status === 'cancelled') {
+            es?.close();
+            setActiveJob(null);
+          }
+        } catch {
+          // ignore
+        }
+      };
+      es.onerror = () => {
+        es?.close();
+      };
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+      es?.close();
+    };
+  }, [activeCourseId, loadCourseData, showToast]);
+
   // Load pre-made standalone structured notes when activeLesson changes
   useEffect(() => {
     if (!activeLesson?.id) {
@@ -227,7 +286,13 @@ export const App: React.FC = () => {
     setNotesLoading(true);
     api
       .getLessonNotes(activeLesson.id, ctrl.signal)
-      .then((n) => setNotes(n))
+      .then((n) => {
+        setNotes(n);
+        if (n?.lesson_title && activeLesson && n.lesson_title !== activeLesson.title) {
+          setActiveLesson((prev) => (prev && prev.id === activeLesson.id ? { ...prev, title: n.lesson_title! } : prev));
+          setLessons((prev) => prev.map((l) => (l.id === activeLesson.id ? { ...l, title: n.lesson_title! } : l)));
+        }
+      })
       .catch(() => {})
       .finally(() => setNotesLoading(false));
     return () => ctrl.abort();
@@ -445,7 +510,7 @@ export const App: React.FC = () => {
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
-                <span className="whitespace-nowrap text-[11px] font-semibold text-[var(--fg-secondary)]">
+                <span className="whitespace-nowrap text-xs font-semibold text-[var(--fg-secondary)]">
                   {progressPct}% Completed
                 </span>
               </div>
@@ -454,7 +519,7 @@ export const App: React.FC = () => {
               <div
                 onClick={() => setModal('edit-course')}
                 title="Click to edit Exam Date, Pace & Rest Days"
-                className="hidden cursor-pointer items-center gap-2.5 whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2.5 py-1 text-[11px] text-[var(--fg-secondary)] hover:border-[var(--accent)] lg:flex"
+                className="hidden cursor-pointer items-center gap-2.5 whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2.5 py-1 text-xs text-[var(--fg-secondary)] hover:border-[var(--accent)] lg:flex"
               >
                 <span>
                   Study Left: <strong className="text-[var(--fg-primary)]">{formatHoursMin(remainingMin)}</strong>
@@ -576,6 +641,46 @@ export const App: React.FC = () => {
               </div>
             </>
           )}
+
+          {activeJob && (
+            <div className="hidden lg:inline-flex items-center gap-1.5 rounded-full border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--accent-text)]">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span className="max-w-[140px] truncate">{activeJob.message || activeJob.job_type}</span>
+              <span>{activeJob.progress_pct ?? 0}%</span>
+              <button
+                type="button"
+                onClick={async () => {
+                  await api.cancelJob(activeJob.id).catch(() => {});
+                  setActiveJob(null);
+                  showToast('Background job cancelled');
+                }}
+                title="Cancel background job"
+                className="ml-0.5 rounded px-1 hover:bg-[var(--bg-card)]"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setFocusReader((prev) => {
+                const next = !prev;
+                setLeftCollapsed(next);
+                setVideoHidden(next);
+                return next;
+              });
+            }}
+            title="Toggle Focus Reader Mode (F)"
+            className={`hidden md:inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+              focusReader
+                ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
+                : 'border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--fg-primary)] hover:bg-[var(--bg-hover)]'
+            }`}
+          >
+            Focus
+          </button>
 
           <button
             type="button"
@@ -709,7 +814,7 @@ export const App: React.FC = () => {
             {!videoHidden && (
               <div
                 style={{ height: `${videoHeightPct}%` }}
-                className="no-print shrink-0 bg-[var(--bg-sidebar)]/50 p-2.5"
+                className="no-print min-h-[180px] max-h-[55vh] shrink-0 bg-[var(--bg-sidebar)]/50 p-2.5"
               >
                 <div className="mx-auto h-full max-w-4xl">
                   <YouTubePlayer
@@ -720,6 +825,7 @@ export const App: React.FC = () => {
                     playbackSpeed={activeCourse.playback_speed || 1.25}
                     seekRequest={seekRequest}
                     lessonTitle={activeLesson?.title}
+                    onTimeUpdate={setActiveVideoSec}
                   />
                 </div>
               </div>
@@ -737,7 +843,7 @@ export const App: React.FC = () => {
               title="Drag vertically to resize Video vs Notes (double-click to reset)"
             >
               <div
-                className="flex items-center gap-1 rounded-full border border-[var(--border-strong)] bg-[var(--bg-card)] px-2 py-0.5 text-[10px] font-semibold text-[var(--fg-secondary)] shadow-sm"
+                className="flex items-center gap-1 rounded-full border border-[var(--border-strong)] bg-[var(--bg-card)] px-2 py-0.5 text-xs font-semibold text-[var(--fg-secondary)] shadow-sm"
                 onMouseDown={(e) => e.stopPropagation()}
               >
                 <button
@@ -762,6 +868,21 @@ export const App: React.FC = () => {
                 >
                   38%
                 </button>
+                <span className="mx-0.5 text-[var(--border-strong)]">|</span>
+                {[1, 1.25, 1.5, 2].map((spd) => (
+                  <button
+                    key={spd}
+                    type="button"
+                    onClick={() => handleQuickUpdateSchedule({ playback_speed: spd })}
+                    className={`rounded px-1.5 py-0.5 text-xs ${
+                      (activeCourse.playback_speed || 1.25) === spd
+                        ? 'bg-[var(--accent-soft)] font-bold text-[var(--accent-text)]'
+                        : 'hover:bg-[var(--bg-hover)] hover:text-[var(--fg-primary)]'
+                    }`}
+                  >
+                    {spd}x
+                  </button>
+                ))}
                 <button
                   type="button"
                   onClick={() => setVideoHidden((h) => !h)}
@@ -791,13 +912,25 @@ export const App: React.FC = () => {
                               loadCourseData(activeCourse.id);
                             }}
                             title="Click to toggle Core / Deep-Dive priority"
-                            className="rounded-full border border-[var(--border-subtle)] bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--accent-text)]"
+                            className="rounded-full border border-[var(--border-subtle)] bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-[var(--accent-text)]"
                           >
                             {(activeLesson.priority === 'deep-dive' || activeLesson.priority === 'deep_dive') ? 'Deep-Dive' : 'Core'}
                           </button>
-                          {activeLesson.chapter_title && (
-                            <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
-                              {activeLesson.chapter_title}
+                          {activeLesson.chapter_title && activeLesson.chapter_title.trim().toLowerCase() !== activeLesson.title.trim().toLowerCase() && (
+                            <span className="truncate text-xs font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
+                              {activeLesson.chapter_title} ›
+                            </span>
+                          )}
+                          <span className="text-xs font-medium text-[var(--fg-muted)]">
+                            Clip {Math.max(1, lessons.findIndex((l) => l.id === activeLesson.id) + 1)} of {lessons.length}
+                          </span>
+                          {notes?.generation_mode && (
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                              notes.generation_mode === 'llm'
+                                ? 'bg-[var(--success)]/15 text-[var(--success)]'
+                                : 'bg-[var(--bg-elevated)] text-[var(--fg-secondary)] border border-[var(--border-subtle)]'
+                            }`}>
+                              {notes.generation_mode === 'llm' ? 'AI Notes' : 'Transcript Outline'}
                             </span>
                           )}
                         </div>
@@ -984,7 +1117,7 @@ export const App: React.FC = () => {
               activeLesson={activeLesson}
               activeTab={studioTab}
               onTabChange={setStudioTab}
-              width={rightWidth}
+              width={studioExpanded ? Math.round(window.innerWidth * 0.5) : rightWidth}
               personalNotes={notes?.personal_notes || ''}
               onSavePersonalNotes={handleSavePersonalNotes}
               onAppendToPersonalNotes={handleAppendToPersonalNotes}

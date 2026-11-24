@@ -117,9 +117,9 @@ def test_generate_no_key_structured_notes():
     assert "# DFA Fundamentals" in notes
     assert "[00:00]" in notes
     assert "[02:00]" in notes
-    assert "chk_001" in notes
-    assert "chk_002" in notes
-    assert "Grounding & Source Chunks" in notes
+    assert "chk_001" not in notes
+    assert "chk_002" not in notes
+    assert "Timestamped Lecture Outline" in notes
 
 
 @pytest.mark.asyncio

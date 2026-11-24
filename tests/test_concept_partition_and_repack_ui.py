@@ -74,13 +74,7 @@ def concept_test_server():
                 """,
                 (lid, cid, sid, title, s_sec, e_sec, duration, priority, priority, idx),
             )
-            conn.execute(
-                """
-                INSERT INTO concept_clips (id, source_id, course_id, order_index, title, start_sec, end_sec, raw_duration_sec, priority_tag, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending');
-                """,
-                (lid, sid, cid, idx, title, s_sec, e_sec, duration, priority),
-            )
+
 
         # Standalone Notes for clip-ui-1 with clickable [MM:SS] pills
         notes_md = """# DFA — Part 1: Definition & 5-Tuples

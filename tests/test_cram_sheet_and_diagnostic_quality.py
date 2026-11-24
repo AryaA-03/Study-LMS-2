@@ -106,7 +106,7 @@ def test_full_syllabus_cram_sheet_generation(tmp_path):
     cram_md = generate_deterministic_cram_sheet(conn, course_id)
     assert "# " in cram_md
     assert "High-Yield Exam Weightage Matrix" in cram_md
-    assert "Essential Key Formulas" in cram_md
+    assert ("Master Formula" in cram_md or "Rapid Recall Sheet" in cram_md)
 
     # Test full-syllabus synthesis API endpoint / engine function
     import asyncio

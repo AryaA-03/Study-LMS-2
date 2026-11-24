@@ -305,10 +305,6 @@ def toggle_allocation(
         "UPDATE lessons SET status = ?, completed_at = ? WHERE id = ?;",
         (new_status, completed_at, row["lesson_id"]),
     )
-    db.execute(
-        "UPDATE concept_clips SET status = ?, completed_at = ? WHERE id = ?;",
-        (new_status, completed_at, row["lesson_id"]),
-    )
     db.commit()
     logger.info(f"[Schedule] Toggled allocation {allocation_id} completion: {bool(new_completed)}")
 
@@ -373,10 +369,6 @@ def complete_allocation(
         "UPDATE lessons SET status = 'completed', completed_at = ? WHERE id = ?;",
         (completed_at, target_alloc["lesson_id"]),
     )
-    db.execute(
-        "UPDATE concept_clips SET status = 'completed', completed_at = ? WHERE id = ?;",
-        (completed_at, target_alloc["lesson_id"]),
-    )
     db.commit()
     logger.info(f"[Schedule] Marked allocation {allocation_id} complete for course {course_id}")
     return get_course_schedule(course_id, db)
@@ -421,10 +413,6 @@ def skip_allocation(
     )
     db.execute(
         "UPDATE lessons SET status = 'skipped', skipped_at = ? WHERE id = ?;",
-        (skipped_at, target_alloc["lesson_id"]),
-    )
-    db.execute(
-        "UPDATE concept_clips SET status = 'skipped', skipped_at = ? WHERE id = ?;",
         (skipped_at, target_alloc["lesson_id"]),
     )
     db.commit()

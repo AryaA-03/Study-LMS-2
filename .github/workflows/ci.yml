@@ -24,9 +24,6 @@ jobs:
         run: ruff check backend tests
       - name: Run isolated unit and integration tests
         run: pytest -m "not e2e and not live" -q
-      - name: Verify JS syntax
-        run: node --check frontend/static/js/app.js
-
       - name: Build React/TypeScript Frontend
         run: |
           cd frontend-app

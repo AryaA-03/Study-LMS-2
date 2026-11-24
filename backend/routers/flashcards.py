@@ -195,7 +195,7 @@ def update_flashcard(
         "difficulty": row_dict.get("difficulty", 0.0),
         "reps": row_dict.get("reps", 0),
         "source_quote": row_dict.get("source_quote"),
-        "intervals": intervals,
+        "interval_previews": intervals,
     }
 
 

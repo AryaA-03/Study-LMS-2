@@ -1,3 +1,4 @@
+import { TimestampInsertButton, CitationChip } from './studio';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   BookmarkPlus,
@@ -43,6 +44,9 @@ interface RightStudioPanelProps {
   externalAskPrompt: { text: string; ts: number } | null;
   onScheduleChanged: () => void;
   onToast: (msg: string) => void;
+  currentTimeSec?: number;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
@@ -58,6 +62,9 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
   externalAskPrompt,
   onScheduleChanged,
   onToast,
+  currentTimeSec = 0,
+  expanded = false,
+  onToggleExpand,
 }) => {
   // My Notes state
   const [myNotesDraft, setMyNotesDraft] = useState(personalNotes);
@@ -437,7 +444,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-xs font-bold text-[var(--fg-primary)]">Active Recall Quiz</h3>
-              <p className="text-[11px] text-[var(--fg-secondary)]">
+              <p className="text-xs text-[var(--fg-secondary)]">
                 Wrong answers jump straight to the exact video clip & add FSRS flashcards.
               </p>
             </div>
@@ -458,7 +465,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                 <span className="text-sm font-bold text-[var(--fg-primary)]">
                   Score: {Math.round(quizResult.score)}% ({quizResult.correct_count}/{quizResult.total_questions})
                 </span>
-                <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-bold uppercase text-[var(--accent-text)]">
+                <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-bold uppercase text-[var(--accent-text)]">
                   {quizResult.mastery_status || 'reviewed'}
                 </span>
               </div>
@@ -532,7 +539,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                                 : 'border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--fg-primary)] hover:border-[var(--border-strong)]'
                             }`}
                           >
-                            <span className="font-mono text-[10px] font-bold opacity-70">
+                            <span className="font-mono text-xs font-bold opacity-70">
                               {String.fromCharCode(65 + oIdx)}
                             </span>
                             <span className="flex-1">{opt}</span>
@@ -545,13 +552,13 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                     )}
 
                     {isGraded && (
-                      <div className="rounded-lg bg-[var(--bg-elevated)] p-2 text-[11px] text-[var(--fg-secondary)] space-y-1">
+                      <div className="rounded-lg bg-[var(--bg-elevated)] p-2 text-xs text-[var(--fg-secondary)] space-y-1">
                         <p>{q.explanation || (isCorrectAnswer ? 'Correct!' : 'Review this concept in the lecture clip below.')}</p>
                         {!isCorrectAnswer && ts !== undefined && ts !== null && (
                           <button
                             type="button"
                             onClick={() => onSeekTimestamp(ts)}
-                            className="inline-flex items-center gap-1 rounded bg-[var(--accent)] px-2 py-0.5 text-[11px] font-semibold text-white"
+                            className="inline-flex items-center gap-1 rounded bg-[var(--accent)] px-2 py-0.5 text-xs font-semibold text-white"
                           >
                             <Play className="h-3 w-3" /> Watch Explanation at {formatSecToPill(ts)}
                           </button>
@@ -581,7 +588,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
       {activeTab === 'flashcards' && (
         <div className="flex flex-1 flex-col overflow-y-auto p-3 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-1.5">
-            <div className="flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] p-0.5 text-[11px]">
+            <div className="flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] p-0.5 text-xs">
               <button
                 type="button"
                 onClick={() => setDueOnly(false)}
@@ -607,7 +614,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                 type="button"
                 onClick={handleGenerateLessonCards}
                 disabled={cardsLoading || !activeLesson}
-                className="inline-flex items-center gap-1 rounded-md bg-[var(--accent)] px-2 py-1 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-md bg-[var(--accent)] px-2 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
                 title="Auto-generate FSRS cards from active lesson"
               >
                 <Sparkles className="h-3 w-3" /> Auto-Gen
@@ -615,7 +622,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setShowNewCard((s) => !s)}
-                className="inline-flex items-center gap-1 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 text-[11px] font-semibold text-[var(--fg-primary)] hover:bg-[var(--bg-hover)]"
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 text-xs font-semibold text-[var(--fg-primary)] hover:bg-[var(--bg-hover)]"
               >
                 <Plus className="h-3 w-3" /> Add
               </button>
@@ -653,7 +660,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
             </div>
           ) : currentCard ? (
             <div className="flex flex-1 flex-col justify-between space-y-3">
-              <div className="text-center text-[11px] text-[var(--fg-muted)]">
+              <div className="text-center text-xs text-[var(--fg-muted)]">
                 Card {cardIndex + 1} of {cards.length}
               </div>
 
@@ -662,7 +669,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                 className="flex min-h-[210px] cursor-pointer flex-col justify-between rounded-xl border border-[var(--border-strong)] bg-[var(--bg-card)] p-4 shadow-sm transition hover:border-[var(--accent)]"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--accent)]">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[var(--accent)]">
                     {flipped ? 'Answer' : 'Question — Tap to Flip'}
                   </span>
                   <div className="flex items-center gap-1">
@@ -711,7 +718,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                   {flipped ? currentCard.back : currentCard.front}
                 </div>
 
-                <div className="flex items-center justify-center gap-1 text-[10px] text-[var(--fg-muted)]">
+                <div className="flex items-center justify-center gap-1 text-xs text-[var(--fg-muted)]">
                   <RotateCcw className="h-3 w-3" /> Click card to flip
                 </div>
               </div>
@@ -814,14 +821,13 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                   {item.citations && item.citations.filter((c) => c.start_sec !== undefined && c.start_sec !== null).length > 0 && (
                     <div className="flex flex-wrap gap-1 pt-1">
                       {item.citations.filter((c) => c.start_sec !== undefined && c.start_sec !== null).map((c, ci) => (
-                        <button
+                        <CitationChip
                           key={ci}
-                          type="button"
-                          onClick={() => onSeekTimestamp(c.start_sec || 0)}
-                          className="ts-pill"
-                        >
-                          ▶ {c.timestamp_label || formatSecToPill(c.start_sec)}
-                        </button>
+                          startSec={c.start_sec || 0}
+                          label={c.timestamp_label}
+                          quote={(c as any).quote || (c as any).snippet || (c as any).content}
+                          onSeek={onSeekTimestamp}
+                        />
                       ))}
                     </div>
                   )}
@@ -871,7 +877,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                   key={chip}
                   type="button"
                   onClick={() => handleAskAI(chip)}
-                  className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 text-[11px] font-medium text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--fg-primary)]"
+                  className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 text-xs font-medium text-[var(--fg-secondary)] hover:border-[var(--accent)] hover:text-[var(--fg-primary)]"
                 >
                   {chip}
                 </button>
@@ -885,7 +891,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
       {activeTab === 'pyqs' && (
         <div className="flex flex-1 flex-col overflow-y-auto p-3 space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] p-0.5 text-[11px]">
+            <div className="flex rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] p-0.5 text-xs">
               <button
                 type="button"
                 onClick={() => setPyqScope('lesson')}
@@ -906,7 +912,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
               </button>
             </div>
 
-            <label className="inline-flex cursor-pointer items-center gap-1 rounded-md bg-[var(--accent)] px-2.5 py-1 text-[11px] font-semibold text-white hover:opacity-90">
+            <label className="inline-flex cursor-pointer items-center gap-1 rounded-md bg-[var(--accent)] px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90">
               {pyqUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileUp className="h-3 w-3" />}
               Upload PDF
               <input type="file" accept=".pdf,.txt" className="hidden" onChange={handlePyqFileUpload} />
@@ -948,7 +954,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                   key={q.id}
                   className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-2.5 text-xs space-y-1"
                 >
-                  <div className="flex items-center justify-between text-[10px] font-bold text-[var(--warning)]">
+                  <div className="flex items-center justify-between text-xs font-bold text-[var(--warning)]">
                     <span className="inline-flex items-center gap-1">
                       <Flame className="h-3 w-3" /> {q.question_number || 'PYQ'} {q.marks ? `• ${q.marks} Marks` : ''}
                     </span>
@@ -956,7 +962,7 @@ export const RightStudioPanel: React.FC<RightStudioPanelProps> = ({
                   </div>
                   <p className="text-[var(--fg-primary)] leading-snug">{q.question_text}</p>
                   {q.matched_lesson_title && (
-                    <div className="text-[10px] text-[var(--accent-text)]">
+                    <div className="text-xs text-[var(--accent-text)]">
                       Matched: {q.matched_lesson_title}
                     </div>
                   )}

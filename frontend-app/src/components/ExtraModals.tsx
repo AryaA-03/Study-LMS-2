@@ -82,7 +82,7 @@ export const CurriculumDrawerModal: React.FC<{
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3">
           <div>
             <h2 className="text-sm font-bold text-[var(--fg-primary)]">Curriculum Inspector</h2>
-            <p className="text-[11px] text-[var(--fg-secondary)]">
+            <p className="text-xs text-[var(--fg-secondary)]">
               {includedCount} of {lessons.length} lessons active in your schedule
             </p>
           </div>
@@ -124,7 +124,7 @@ export const CurriculumDrawerModal: React.FC<{
                 onClose();
                 onOpenSyllabus();
               }}
-              className="ml-auto inline-flex items-center gap-1 rounded-md bg-[var(--accent)] px-2.5 py-1 text-[11px] font-semibold text-white"
+              className="ml-auto inline-flex items-center gap-1 rounded-md bg-[var(--accent)] px-2.5 py-1 text-xs font-semibold text-white"
             >
               <Layers className="h-3 w-3" /> Match Syllabus
             </button>
@@ -148,10 +148,10 @@ export const CurriculumDrawerModal: React.FC<{
                   {l.title}
                 </div>
                 {l.chapter_title && (
-                  <div className="truncate text-[10px] text-[var(--fg-muted)]">{l.chapter_title}</div>
+                  <div className="truncate text-xs text-[var(--fg-muted)]">{l.chapter_title}</div>
                 )}
               </div>
-              <span className="shrink-0 rounded bg-[var(--bg-elevated)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--fg-secondary)]">
+              <span className="shrink-0 rounded bg-[var(--bg-elevated)] px-1.5 py-0.5 font-mono text-xs text-[var(--fg-secondary)]">
                 {Math.max(1, Math.round((l.raw_duration_sec || 600) / 60))}m
               </span>
             </div>
@@ -296,13 +296,13 @@ export const CommandPaletteModal: React.FC<{
             placeholder="Jump to lesson or run command..."
             className="flex-1 bg-transparent text-xs text-[var(--fg-primary)] outline-none"
           />
-          <kbd className="rounded border border-[var(--border-subtle)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--fg-muted)]">ESC</kbd>
+          <kbd className="rounded border border-[var(--border-subtle)] px-1.5 py-0.5 font-mono text-xs text-[var(--fg-muted)]">ESC</kbd>
         </div>
 
         <div className="max-h-80 overflow-y-auto p-2 space-y-2 text-xs">
           {matchedActions.length > 0 && (
             <div>
-              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--fg-muted)]">Commands</div>
+              <div className="px-2 py-1 text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)]">Commands</div>
               {matchedActions.map((a) => (
                 <button
                   key={a.id}
@@ -320,7 +320,7 @@ export const CommandPaletteModal: React.FC<{
 
           {matchedLessons.length > 0 && (
             <div>
-              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--fg-muted)]">Lessons</div>
+              <div className="px-2 py-1 text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)]">Lessons</div>
               {matchedLessons.map((l) => (
                 <button
                   key={l.id}
@@ -332,7 +332,7 @@ export const CommandPaletteModal: React.FC<{
                   className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[var(--fg-primary)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-text)]"
                 >
                   <span className="truncate">{l.title}</span>
-                  {l.chapter_title && <span className="ml-2 shrink-0 text-[10px] text-[var(--fg-muted)]">{l.chapter_title}</span>}
+                  {l.chapter_title && <span className="ml-2 shrink-0 text-xs text-[var(--fg-muted)]">{l.chapter_title}</span>}
                 </button>
               ))}
             </div>

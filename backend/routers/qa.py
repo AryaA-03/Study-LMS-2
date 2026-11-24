@@ -2,7 +2,7 @@
 
 import logging
 from typing import List, Dict, Any
-from backend.deps import get_current_user
+from backend.deps import get_current_user, require_course_owner
 from fastapi import APIRouter, Depends, HTTPException
 import sqlite3
 
@@ -14,7 +14,7 @@ logger = logging.getLogger("learn_lms.api.qa")
 router = APIRouter(prefix="/api/courses", tags=["qa"], dependencies=[Depends(get_current_user)])
 
 
-@router.post("/{course_id}/qa", response_model=QAResponse)
+@router.post("/{course_id}/qa", response_model=QAResponse, dependencies=[Depends(require_course_owner)])
 async def ask_question(
     course_id: str,
     req: QARequest,
@@ -30,7 +30,7 @@ async def ask_question(
     return result
 
 
-@router.get("/{course_id}/qa")
+@router.get("/{course_id}/qa", dependencies=[Depends(require_course_owner)])
 def get_qa_history(
     course_id: str,
     db: sqlite3.Connection = Depends(get_db)
@@ -43,7 +43,7 @@ def get_qa_history(
 
     return get_course_qa_history(db, course_id)
 
-@router.delete("/{course_id}/qa/{thread_id}")
+@router.delete("/{course_id}/qa/{thread_id}", dependencies=[Depends(require_course_owner)])
 def delete_qa_thread(
     course_id: str,
     thread_id: str,

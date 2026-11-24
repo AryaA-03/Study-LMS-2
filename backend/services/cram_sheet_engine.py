@@ -1,506 +1,408 @@
-"""Last-Night Cram Sheet Synthesis Service.
+"""2-Pass Map-Reduce Last-Night Exam Cram Sheet Engine.
 
-Condenses course lesson notes, transcript chunks, high-yield PYQ patterns, essential
-definitions, LaTeX formulas, algorithms, worked examples, and comparison tables into a
-genuinely useful, print-ready 1-2 page revision cheat sheet — with ZERO generic boilerplate.
-Cached in SQLite by SHA-256 hash of underlying notes, chunks, and PYQs.
+Produces a dense, A4-printable Master Exam Cheat Sheet across:
+  - Full Course (default)
+  - Single Video (`source_id`)
+  - Single Module (`chapter_title`)
+
+Architecture:
+  - Pass 1 (Map): Group lessons by Module (`chapter_title`) and compress each module
+    into a high-density Module Fact Block cached per-module in `llm_cache`.
+  - Pass 2 (Reduce): Assemble all Module Fact Blocks + top PYQ hits into a complete
+    6-section Master Cram Sheet with ZERO 24,000-character truncation and ZERO chunk deletion.
 """
 
 import hashlib
 import logging
 import re
 import uuid
-from collections import OrderedDict
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend.config import get_settings
 from backend.infra.llm_gateway import get_llm_gateway
+from backend.services.llm_cache import compute_prompt_hash, get_cached_response, set_cached_response
 
 logger = logging.getLogger("learn_lms.cram_sheet")
 
+_RAW_CHK_RE = re.compile(r"\[ref:[^\]]+\]|\bchk_[a-f0-9]{4,}\b", re.IGNORECASE)
+
 
 def format_seconds_to_mm_ss(seconds: Optional[int]) -> str:
-    """Formats integer seconds to [MM:SS] or [HH:MM:SS]."""
-    if seconds is None:
-        return "[00:00]"
-    hours, remainder = divmod(max(0, int(seconds)), 3600)
-    minutes, secs = divmod(remainder, 60)
-    if hours > 0:
-        return f"[{hours:02d}:{minutes:02d}:{secs:02d}]"
-    return f"[{minutes:02d}:{secs:02d}]"
+    if seconds is None or seconds < 0:
+        return "00:00"
+    sec = int(seconds)
+    h, rem = divmod(sec, 3600)
+    m, s = divmod(rem, 60)
+    if h > 0:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
 
 
-def compute_course_notes_hash(db_conn, course_id: str) -> str:
-    """Computes SHA-256 hash across course title, target date, lesson notes, chunks, and PYQs."""
+def _fetch_scoped_lessons(
+    db_conn,
+    course_id: str,
+    source_id: Optional[str] = None,
+    chapter_title: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    sql = """
+        SELECT l.id, l.title, l.chapter_title, l.source_id, l.video_id, l.start_sec, l.end_sec,
+               COALESCE(l.pyq_hit_count, 0) AS pyq_hit_count, l.order_index,
+               n.content_markdown, n.personal_notes, s.url AS source_url
+        FROM lessons l
+        LEFT JOIN notes n ON n.lesson_id = l.id
+        LEFT JOIN sources s ON s.id = l.source_id
+        WHERE l.course_id = ? AND COALESCE(l.is_excluded, 0) = 0
+    """
+    params: List[Any] = [course_id]
+    if source_id:
+        sql += " AND l.source_id = ?"
+        params.append(source_id)
+    if chapter_title:
+        sql += " AND COALESCE(l.chapter_title, '') = ?"
+        params.append(chapter_title)
+    sql += " ORDER BY l.order_index ASC;"
     cur = db_conn.cursor()
-    cur.execute("SELECT title, target_date FROM courses WHERE id = ?;", (course_id,))
-    c_row = cur.fetchone()
-    c_info = f"{c_row[0] if c_row else ''}:{c_row[1] if c_row else ''}"
+    cur.execute(sql, params)
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, r)) for r in cur.fetchall()]
 
-    cur.execute(
-        """
-        SELECT n.content_markdown
-        FROM notes n
-        JOIN lessons l ON n.lesson_id = l.id
-        WHERE l.course_id = ?
-        ORDER BY l.order_index ASC;
-        """,
+
+def compute_course_notes_hash(
+    db_conn,
+    course_id: str,
+    source_id: Optional[str] = None,
+    chapter_title: Optional[str] = None,
+) -> str:
+    """Computes a deterministic SHA-256 hash over scoped lesson notes + PYQ hits for cache invalidation."""
+    lessons = _fetch_scoped_lessons(db_conn, course_id, source_id=source_id, chapter_title=chapter_title)
+    pyq_rows = db_conn.execute(
+        "SELECT id, question_text, matched_lesson_id FROM pyq_questions WHERE course_id = ? ORDER BY id ASC;",
         (course_id,),
-    )
-    notes_parts = [r[0] for r in cur.fetchall() if r[0]]
-
-    cur.execute(
-        """
-        SELECT COUNT(*), COALESCE(SUM(LENGTH(content)), 0)
-        FROM chunks
-        WHERE course_id = ?;
-        """,
-        (course_id,),
-    )
-    ch_row = cur.fetchone()
-    chunk_sig = f"{ch_row[0] if ch_row else 0}:{ch_row[1] if ch_row else 0}"
-
-    cur.execute(
-        """
-        SELECT question_text, marks
-        FROM pyq_questions
-        WHERE course_id = ?
-        ORDER BY id ASC;
-        """,
-        (course_id,),
-    )
-    pyq_parts = [f"{r[0]}:{r[1]}" for r in cur.fetchall()]
-
-    full_payload = "v2||" + c_info + "||" + chunk_sig + "||" + "||".join(notes_parts) + "||" + "||".join(pyq_parts)
-    return hashlib.sha256(full_payload.encode("utf-8")).hexdigest()
+    ).fetchall()
+    h = hashlib.sha256()
+    h.update(f"scope:{source_id or 'all'}|{chapter_title or 'all'}|v2".encode("utf-8"))
+    for les in lessons:
+        h.update(f"{les['id']}|{les['title']}|{les['chapter_title']}|{les['pyq_hit_count']}|".encode("utf-8"))
+        h.update((les.get("content_markdown") or "")[:500].encode("utf-8"))
+    for p in pyq_rows:
+        h.update(f"{p[0]}|{p[2]}|".encode("utf-8"))
+    return h.hexdigest()
 
 
-def _extract_structured_elements(md: str, fallback_pill: str) -> Dict[str, Any]:
-    """Extract real definitions, formulas, callouts, tables, and concise key points from lesson notes."""
-    definitions: List[str] = []
+def _extract_lesson_highlights(db_conn, lesson: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract real formulas, tables, definitions, and tips from lesson notes or transcript chunks."""
+    md = _RAW_CHK_RE.sub("", lesson.get("content_markdown") or "")
+    # Ignore poisoned legacy fallback text if any remains
+    if "Aspect 1 (" in md or "Watch for empty strings" in md:
+        md = ""
+    pill = f"[{format_seconds_to_mm_ss(lesson.get('start_sec'))}]"
     formulas: List[str] = []
-    key_points: List[str] = []
+    tips: List[str] = []
+    bullets: List[str] = []
     tables: List[str] = []
-    callouts: List[str] = []
 
-    if not md:
-        return {
-            "definitions": definitions,
-            "formulas": formulas,
-            "key_points": key_points,
-            "tables": tables,
-            "callouts": callouts,
-        }
-
-    lines = md.split("\n")
-    in_table = False
-    cur_table: List[str] = []
-    in_math_block = False
-    cur_math: List[str] = []
-    in_code_block = False
-
-    for raw_line in lines:
-        s = raw_line.strip()
-
-        if s.startswith("```"):
-            in_code_block = not in_code_block
-            continue
-        if in_code_block:
-            continue
-
-        # Capture display LaTeX blocks $$...$$
-        if s.startswith("$$"):
-            if s.endswith("$$") and len(s) > 4:
-                formulas.append(f"{s} {fallback_pill}")
-            else:
-                if in_math_block:
-                    cur_math.append(s)
-                    formulas.append(" ".join(cur_math) + f" {fallback_pill}")
-                    cur_math = []
-                    in_math_block = False
-                else:
-                    in_math_block = True
-                    cur_math = [s]
-            continue
-        if in_math_block:
-            cur_math.append(s)
-            continue
-
-        # Capture Markdown tables
-        if s.startswith("|") and s.endswith("|"):
-            in_table = True
-            cur_table.append(s)
-            continue
-        elif in_table:
-            if len(cur_table) >= 3:
-                tables.append("\n".join(cur_table))
-            cur_table = []
-            in_table = False
-
-        # Skip metadata/headers/horizontal rules/HTML comments
-        if not s or s.startswith("#") or s.startswith("---") or s.startswith("<!--") or s.startswith("!["):
-            continue
-        if "Grounded strictly across" in s or "Concept Clip Time Range" in s or s.startswith("- Sources:"):
-            continue
-
-        # Capture callout lines (> **Exam Tip**, > [!IMPORTANT] content)
-        if s.startswith(">"):
-            clean_q = s.lstrip(">").strip()
-            if clean_q and not clean_q.startswith("[!"):
-                callouts.append(clean_q)
-            continue
-
-        # Inline LaTeX / formula equations
-        if ("$" in s and re.search(r"\$[^$]+\$", s)) or re.search(r"[=→∈∀∃∑∏δΣΓΩΘ≤≥≠]|O\([^)]+\)", s):
-            clean_f = re.sub(r"^[-*•]\s+", "", s)
-            if 8 <= len(clean_f) <= 240:
-                if "[" not in clean_f:
-                    clean_f = f"{clean_f} {fallback_pill}"
-                formulas.append(clean_f)
-
-        # Bold definitions: - **Term**: explanation
-        m_def = re.match(r"^[-*•]\s+(?:\[[\d:]+\]\s*)?\*\*([^*]{2,60})\*\*\s*[:—-]\s*(.+)$", s)
-        if m_def:
-            term, desc = m_def.group(1).strip(), m_def.group(2).strip()
-            if term.lower() not in {"sources", "concept clip time range", "note", "tip"} and len(desc) >= 12:
-                pill_part = "" if re.search(r"\[\d{1,2}:\d{2}", desc) else f" {fallback_pill}"
-                definitions.append(f"- **{term}**: {desc[:220]}{pill_part}")
+    if md.strip():
+        in_table = False
+        cur_table: List[str] = []
+        for raw_line in md.splitlines():
+            line = raw_line.strip()
+            if line.startswith("|") and line.endswith("|"):
+                in_table = True
+                cur_table.append(line)
                 continue
+            elif in_table:
+                if len(cur_table) >= 3:
+                    tables.append("\n".join(cur_table[:8]))
+                cur_table = []
+                in_table = False
 
-        # Numbered steps or concise bullets
-        if re.match(r"^([-*•]|\d+\.)\s+", s) and 18 <= len(s) <= 240:
-            cleaned = re.sub(r"^[-*•]\s+", "- ", s)
-            if not re.search(r"\[\d{1,2}:\d{2}", cleaned):
-                cleaned = f"{cleaned} {fallback_pill}"
-            key_points.append(cleaned)
-
-    if in_table and len(cur_table) >= 3:
-        tables.append("\n".join(cur_table))
+            if "$$" in line or (re.search(r"[A-Za-z]\s*=\s*[A-Za-z0-9(\\]|O\([^)]+\)", line) and len(line) < 160):
+                clean_f = line.lstrip("-* ").strip()
+                if clean_f and clean_f not in formulas:
+                    formulas.append(clean_f if "[" in clean_f else f"{clean_f} {pill}")
+            elif line.startswith("> [!IMPORTANT]") or line.startswith("> [!TIP]"):
+                clean_t = re.sub(r"^>\s*\[!(?:IMPORTANT|TIP)\]\s*", "", line).strip()
+                if clean_t:
+                    tips.append(clean_t if "[" in clean_t else f"{clean_t} {pill}")
+            elif line.startswith("- ") and len(line) > 22:
+                b = line[2:].strip()
+                if not b.lower().startswith("sources:"):
+                    bullets.append(b if "[" in b else f"{b} {pill}")
+        if in_table and len(cur_table) >= 3:
+            tables.append("\n".join(cur_table[:8]))
+    else:
+        rows = db_conn.execute(
+            "SELECT start_sec, content FROM chunks WHERE lesson_id = ? ORDER BY chunk_index ASC LIMIT 8;",
+            (lesson["id"],),
+        ).fetchall()
+        for r in rows:
+            txt = _RAW_CHK_RE.sub("", (r[1] or "").strip())
+            if len(txt) >= 25:
+                bullets.append(f"{txt[:180]} [{format_seconds_to_mm_ss(r[0])}]")
 
     return {
-        "definitions": definitions,
-        "formulas": formulas,
-        "key_points": key_points,
-        "tables": tables,
-        "callouts": callouts,
+        "lesson_id": lesson["id"],
+        "title": lesson["title"],
+        "module": (lesson.get("chapter_title") or "Core Syllabus").strip() or "Core Syllabus",
+        "pill": pill,
+        "pyq_hits": int(lesson.get("pyq_hit_count") or 0),
+        "formulas": formulas[:5],
+        "tips": tips[:3],
+        "bullets": bullets[:6],
+        "tables": tables[:2],
+        "raw_md": md[:3500],
     }
 
 
-def _extract_transcript_highlights(db_conn, lesson_id: str) -> List[str]:
-    """When lesson notes aren't generated yet, extract real high-signal sentences from transcript chunks."""
-    cur = db_conn.cursor()
-    cur.execute(
-        """
-        SELECT start_sec, content
-        FROM chunks
-        WHERE lesson_id = ?
-        ORDER BY chunk_index ASC
-        LIMIT 8;
-        """,
-        (lesson_id,),
-    )
-    rows = cur.fetchall()
-    highlights: List[str] = []
-    signal_re = re.compile(
-        r"\b(defined as|definition|consists of|formula|equation|theorem|lemma|property|complexity|difference between|whereas|algorithm|step|means that|transition|important|remember|exam|rule|condition)\b",
-        re.IGNORECASE,
-    )
-    for start_sec, content in rows:
-        if not content:
-            continue
-        pill = format_seconds_to_mm_ss(start_sec)
-        sentences = re.split(r"(?<=[.!?])\s+", content.strip())
-        for sent in sentences:
-            s = sent.strip()
-            if 35 <= len(s) <= 220 and (signal_re.search(s) or len(highlights) < 2):
-                highlights.append(f"- {pill} {s}")
-                if len(highlights) >= 3:
-                    return highlights
-    return highlights
-
-
-def _build_structured_digest(db_conn, course_id: str) -> Tuple[str, Dict[str, Any]]:
-    """Collect real notes, transcript excerpts, topics, and PYQs for both deterministic and LLM synthesis."""
-    cur = db_conn.cursor()
-    cur.execute("SELECT title, target_date FROM courses WHERE id = ?;", (course_id,))
-    c_row = cur.fetchone()
+def generate_deterministic_cram_sheet(
+    db_conn,
+    course_id: str,
+    source_id: Optional[str] = None,
+    chapter_title: Optional[str] = None,
+) -> str:
+    """Clean, duplicate-free deterministic A4 Last-Night Exam Cram Sheet."""
+    c_row = db_conn.execute("SELECT title FROM courses WHERE id = ?;", (course_id,)).fetchone()
     course_title = (c_row[0] if c_row else "Course") or "Course"
-    target_date = (c_row[1] if c_row else "Upcoming") or "Upcoming"
+    lessons = _fetch_scoped_lessons(db_conn, course_id, source_id=source_id, chapter_title=chapter_title)
+    if not lessons:
+        return f"# {course_title} — Last-Night Exam Cram Sheet\n\nNo active lessons found for this scope yet."
 
-    cur.execute(
+    scope_label = f"Module: {chapter_title}" if chapter_title else ("Single Video Scope" if source_id else "Full Course Syllabus")
+    pyqs = db_conn.execute(
         """
-        SELECT l.id, l.title, l.chapter_title, l.pyq_hit_count, l.pyq_total_marks,
-               n.content_markdown, l.start_sec, l.end_sec, l.is_excluded
-        FROM lessons l
-        LEFT JOIN notes n ON l.id = n.lesson_id
-        WHERE l.course_id = ? AND COALESCE(l.is_excluded, 0) = 0
-        ORDER BY l.order_index ASC;
+        SELECT pq.question_text, pq.marks, l.title AS lesson_title, l.start_sec
+        FROM pyq_questions pq
+        LEFT JOIN lessons l ON l.id = pq.matched_lesson_id
+        WHERE pq.course_id = ?
+        ORDER BY pq.marks DESC, pq.id ASC
+        LIMIT 12;
         """,
         (course_id,),
-    )
-    lessons = cur.fetchall()
+    ).fetchall()
 
-    cur.execute(
-        """
-        SELECT q.question_number, q.question_text, q.marks, p.title as paper_title, l.title as lesson_title, l.start_sec
-        FROM pyq_questions q
-        LEFT JOIN pyq_papers p ON q.paper_id = p.id
-        LEFT JOIN lessons l ON q.matched_lesson_id = l.id
-        WHERE q.course_id = ?
-        ORDER BY q.marks DESC NULLS LAST, COALESCE(l.pyq_hit_count, 0) DESC
-        LIMIT 15;
-        """,
-        (course_id,),
-    )
-    top_pyqs = cur.fetchall()
-
-    # Group lessons by chapter_title (Topic Group)
-    topics: "OrderedDict[str, List[Dict[str, Any]]]" = OrderedDict()
-    studied_count = 0
-    pending_titles: List[str] = []
-
-    for row in lessons:
-        lid, title, chapter_title, hits, marks, md, start_sec, end_sec, _ = row
-        pill = format_seconds_to_mm_ss(start_sec or 0)
-        topic_name = (chapter_title or "").strip() or re.sub(r"\|.*$", "", title).strip()
-
-        extracted = _extract_structured_elements(md or "", pill)
-        transcript_pts: List[str] = []
-        has_real_content = bool(
-            extracted["definitions"] or extracted["formulas"] or extracted["key_points"] or extracted["tables"]
-        )
-        if not has_real_content:
-            transcript_pts = _extract_transcript_highlights(db_conn, lid)
-            has_real_content = bool(transcript_pts)
-
-        if has_real_content:
-            studied_count += 1
-        else:
-            pending_titles.append(f"{pill} {title}")
-
-        topics.setdefault(topic_name, []).append(
-            {
-                "id": lid,
-                "title": title,
-                "pill": pill,
-                "hits": hits or 0,
-                "marks": marks or 0,
-                "extracted": extracted,
-                "transcript_pts": transcript_pts,
-                "has_real_content": has_real_content,
-            }
-        )
-
-    # Build a clean, high-density digest for the LLM (up to 24,000 chars)
-    digest_lines: List[str] = [f"Course: {course_title} | Exam Date: {target_date}"]
-    for topic_name, items in topics.items():
-        total_hits = sum(i["hits"] for i in items)
-        total_marks = sum(i["marks"] for i in items)
-        digest_lines.append(f"\n### TOPIC: {topic_name} (PYQ hits: {total_hits}, marks: {total_marks})")
-        for item in items:
-            if not item["has_real_content"]:
-                continue
-            digest_lines.append(f"Lesson {item['pill']} {item['title']}:")
-            for d in item["extracted"]["definitions"][:4]:
-                digest_lines.append(d)
-            for f in item["extracted"]["formulas"][:3]:
-                digest_lines.append(f"- FORMULA: {f}")
-            for t in item["extracted"]["tables"][:2]:
-                digest_lines.append(t)
-            for k in item["extracted"]["key_points"][:3]:
-                digest_lines.append(k)
-            for tp in item["transcript_pts"][:3]:
-                digest_lines.append(tp)
-
-    if top_pyqs:
-        digest_lines.append("\n### PAST EXAM QUESTIONS (PYQs):")
-        for q_num, q_text, marks, paper, l_title, l_start in top_pyqs:
-            pill = format_seconds_to_mm_ss(l_start)
-            digest_lines.append(f"- {q_num or 'Q'} [{marks or '?'}M] ({l_title or 'General'} {pill}): {q_text}")
-
-    meta = {
-        "course_title": course_title,
-        "target_date": target_date,
-        "topics": topics,
-        "top_pyqs": top_pyqs,
-        "total_lessons": len(lessons),
-        "studied_count": studied_count,
-        "pending_titles": pending_titles,
-    }
-    return "\n".join(digest_lines), meta
-
-
-def generate_deterministic_cram_sheet(db_conn, course_id: str) -> str:
-    """Deterministically compiles a genuinely useful, zero-boilerplate Cram Sheet from notes, transcripts & PYQs."""
-    _, meta = _build_structured_digest(db_conn, course_id)
-    course_title = meta["course_title"]
-    target_date = meta["target_date"]
-    topics = meta["topics"]
-    top_pyqs = meta["top_pyqs"]
-    total_lessons = meta["total_lessons"]
-    studied_count = meta["studied_count"]
-    pending_titles = meta["pending_titles"]
-
-    lines: List[str] = []
-    lines.append(f"# {course_title} — Last-Night Exam Cram Sheet\n")
-    lines.append(
-        f"> [!IMPORTANT]\n"
-        f"> **Exam Date:** {target_date} • **Grounded Coverage:** {studied_count}/{total_lessons} lessons synthesized • "
-        f"Click any `[MM:SS]` pill to jump straight to that moment in the lecture.\n"
-    )
-
-    if studied_count == 0:
-        lines.append(
-            "> [!TIP]\n"
-            "> No lesson notes or transcripts have been generated yet. Click **Synthesize Full Syllabus** above "
-            "to automatically transcribe your lectures and build a complete formula & concept cheat sheet.\n"
-        )
-
-    # 1. High-Yield Topic Priority Matrix (grouped by Topic, not 50 noisy rows)
-    lines.append("## ⚡ High-Yield Exam Weightage Matrix\n")
-    lines.append("| Topic Unit | Lessons | Exam Priority | PYQ Hits / Marks | Jump |")
-    lines.append("| :--- | :---: | :--- | :---: | :---: |")
-    for topic_name, items in topics.items():
-        total_hits = sum(i["hits"] for i in items)
-        total_marks = sum(i["marks"] for i in items)
-        first_pill = items[0]["pill"]
-        if total_hits >= 2 or total_marks >= 10:
-            priority = "**HIGH YIELD 🔥**"
-        elif total_hits == 1:
-            priority = "Medium Yield"
-        else:
-            priority = "Core Syllabus"
-        pyq_str = f"{total_hits} Qs ({total_marks}M)" if total_hits > 0 else "—"
-        lines.append(f"| {topic_name} | {len(items)} | {priority} | {pyq_str} | {first_pill} |")
-    lines.append("")
-
-    # 2. Key Formulas, Formal Rules & Complexity Cheatsheet
+    modules: Dict[str, List[Dict[str, Any]]] = {}
     all_formulas: List[str] = []
-    seen_f = set()
-    for topic_name, items in topics.items():
-        for item in items:
-            for f in item["extracted"]["formulas"]:
-                key = f.lower()[:60]
-                if key not in seen_f:
-                    seen_f.add(key)
-                    all_formulas.append(f"- **{topic_name}**: {f}")
+    all_tables: List[Tuple[str, str]] = []
+    all_tips: List[str] = []
+
+    for les in lessons:
+        hl = _extract_lesson_highlights(db_conn, les)
+        modules.setdefault(hl["module"], []).append(hl)
+        for f in hl["formulas"]:
+            if f not in all_formulas:
+                all_formulas.append(f)
+        for t in hl["tables"]:
+            all_tables.append((hl["title"], t))
+        for tip in hl["tips"]:
+            if tip not in all_tips:
+                all_tips.append(tip)
+
+    out: List[str] = [
+        f"# {course_title} — Last-Night Exam Cram Sheet",
+        f"*{scope_label} · {len(lessons)} Topics across {len(modules)} Modules*",
+        "",
+        "## 1. High-Yield Exam Weightage Matrix",
+        "| Module | Topics | PYQ Hits | Start Jump |",
+        "|---|---|---|---|",
+    ]
+    for mod_name, items in modules.items():
+        hits = sum(i["pyq_hits"] for i in items)
+        first_pill = items[0]["pill"]
+        out.append(f"| **{mod_name}** | {len(items)} | {hits} | {first_pill} |")
+    out.append("")
 
     if all_formulas:
-        lines.append("## 📐 Must-Know Formulas, Formal Tuples & Rules\n")
-        for f_line in all_formulas[:18]:
-            lines.append(f_line)
-        lines.append("")
+        out.append("## 2. Master Formula, Theorem & Complexity Reference")
+        for f in all_formulas[:25]:
+            out.append(f"- {f}")
+        out.append("")
 
-    # 3. Topic-by-Topic Rapid Revision Breakdown (ONLY real extracted content — ZERO filler!)
-    lines.append("## 📐 Essential Key Formulas, Definitions & Rapid Revision\n")
-    tables_collected: List[Tuple[str, str, str]] = []
+    if all_tables:
+        out.append("## 3. Core Distinctions & Comparison Matrices")
+        for title, tbl in all_tables[:5]:
+            out.append(f"### {title}")
+            out.append(tbl)
+            out.append("")
 
-    for topic_name, items in topics.items():
-        real_items = [i for i in items if i["has_real_content"]]
-        if not real_items:
-            continue
+    pending_lessons: List[str] = []
+    out.append("## 4. Module-by-Module Rapid Recall Sheet")
+    for mod_name, items in modules.items():
+        out.append(f"### {mod_name}")
+        for it in items:
+            pyq_tag = f" *(PYQ ×{it['pyq_hits']})*" if it["pyq_hits"] > 0 else ""
+            if it["bullets"] or it["raw_md"]:
+                out.append(f"**{it['title']}** {it['pill']}{pyq_tag}")
+                for b in (it["bullets"][:4] or [f"Review core concept at {it['pill']}."]):
+                    out.append(f"- {b}")
+                out.append("")
+            else:
+                pending_lessons.append(f"- {it['title']} {it['pill']}")
+    if pending_lessons:
+        out.append("## Lessons Pending Notes Synthesis")
+        out.extend(pending_lessons)
+        out.append("")
 
-        total_hits = sum(i["hits"] for i in real_items)
-        badge = " 🔥" if total_hits > 0 else ""
-        lines.append(f"### {topic_name}{badge}\n")
+    if all_tips:
+        out.append("## 5. Common Exam Traps & Key Rules")
+        for tip in all_tips[:12]:
+            out.append(f"- {tip}")
+        out.append("")
 
-        for item in real_items:
-            ex = item["extracted"]
-            for tbl in ex["tables"]:
-                tables_collected.append((topic_name, item["pill"], tbl))
+    if pyqs:
+        out.append("## 6. Top Repeated PYQs & Focus Areas")
+        for idx, p in enumerate(pyqs, start=1):
+            pill = f" [{format_seconds_to_mm_ss(p[3])}]" if p[3] is not None else ""
+            marks = f" ({p[1]})" if p[1] else ""
+            out.append(f"{idx}. **{p[0]}**{marks}{pill}")
+        out.append("")
 
-            # Prefer formal definitions, then key points, then transcript highlights
-            emitted = 0
-            for d in ex["definitions"][:3]:
-                lines.append(d)
-                emitted += 1
-            for k in ex["key_points"][:3]:
-                if emitted >= 5:
-                    break
-                lines.append(k)
-                emitted += 1
-            if emitted == 0:
-                for tp in item["transcript_pts"][:3]:
-                    lines.append(tp)
-                    emitted += 1
-            for c in ex["callouts"][:1]:
-                lines.append(f"> **Exam Trap / Note ({item['pill']}):** {c}")
-        lines.append("")
+    return "\n".join(out).strip()
 
-    # 4. Comparison & Distinction Tables
-    if tables_collected:
-        lines.append("## 📊 Key Comparison & Complexity Tables\n")
-        for t_name, t_pill, tbl in tables_collected[:6]:
-            lines.append(f"#### {t_name} {t_pill}\n{tbl}\n")
 
-    # 5. Real Past Exam Questions (PYQs)
-    if top_pyqs:
-        lines.append("## 🎯 Past Exam Questions (PYQ Focus)\n")
-        for q_num, q_text, marks, paper, l_title, l_start in top_pyqs[:10]:
-            mark_tag = f"[{marks}M]" if marks else ""
-            pill = format_seconds_to_mm_ss(l_start)
-            loc = f"({l_title} {pill})" if l_title else ""
-            lines.append(f"- **{q_num or 'Q'} {mark_tag}** {loc}: {q_text}")
-        lines.append("")
+async def _compress_module_pass1(
+    db_conn,
+    course_title: str,
+    module_name: str,
+    module_lessons: List[Dict[str, Any]],
+    force_refresh: bool = False,
+    user_secrets: Optional[Dict[str, str]] = None,
+) -> Optional[str]:
+    """Pass 1 (Map): Compress a single module's lessons into a high-density Module Fact Block."""
+    parts: List[str] = []
+    for hl in module_lessons:
+        body = hl["raw_md"][:2400] if hl["raw_md"] else "\n".join(f"- {b}" for b in hl["bullets"])
+        parts.append(f"### {hl['title']} {hl['pill']} (PYQ hits: {hl['pyq_hits']})\n{body}")
+    module_raw = "\n\n".join(parts)[:18000]
 
-    # 6. Pending lessons disclosure (transparent instead of fake boilerplate)
-    if pending_titles:
-        lines.append("## ⏳ Lessons Pending Notes Synthesis\n")
-        preview = ", ".join(pending_titles[:10])
-        more = f" (+{len(pending_titles) - 10} more)" if len(pending_titles) > 10 else ""
-        lines.append(
-            f"Run **Synthesize Full Syllabus** to automatically include these unstudied lessons: {preview}{more}.\n"
-        )
+    prompt_hash = compute_prompt_hash(f"cram_pass1_v2|{course_title}|{module_name}|{module_raw}")
+    if not force_refresh:
+        cached = get_cached_response(db_conn, prompt_hash)
+        if cached:
+            return cached
 
-    return "\n".join(lines)
+    system_inst = (
+        "You are an exam-prep distillation specialist. Compress this module into a razor-sharp, zero-fluff Fact Block "
+        "preserving ALL exact formulas (KaTeX), complexities, comparison pairs, numerical steps, and `[MM:SS]` timestamps."
+    )
+    prompt = f"""Course: {course_title}
+Module: {module_name}
+
+Source Notes & Transcripts:
+{module_raw}
+
+Output a dense Markdown Fact Block (max 450 words) with:
+- Exact definitions & rules `[MM:SS]`
+- Formulas / complexities in KaTeX (`$...$`)
+- Key comparisons / contrasts
+- Common exam traps / edge cases
+"""
+    fact_block, model_used = await get_llm_gateway().generate_text(
+        prompt=prompt,
+        system_instruction=system_inst,
+        json_mode=False,
+        temperature=0.15,
+        max_tokens=1500,
+        user_secrets=user_secrets,
+    )
+    if fact_block:
+        fact_block = _RAW_CHK_RE.sub("", fact_block).strip()
+        try:
+            set_cached_response(db_conn, prompt_hash, model_used or "gateway", fact_block)
+        except Exception:
+            pass
+    return fact_block
 
 
 async def generate_cram_sheet_with_llm(
-    course_title: str,
-    target_date: str,
-    raw_content_summary: str,
+    db_conn,
+    course_id: str,
+    source_id: Optional[str] = None,
+    chapter_title: Optional[str] = None,
+    force_refresh: bool = False,
+    user_secrets: Optional[Dict[str, str]] = None,
 ) -> Optional[str]:
-    """Generates a genuinely exam-ready Cram Sheet using the unified LLM gateway."""
-    settings = get_settings()
-    import os
-    if not (settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENROUTER_API_KEY or os.getenv('OLLAMA_BASE_URL')):
+    """2-Pass Map-Reduce Exam Cram Sheet Synthesis covering ALL modules without 24k truncation."""
+    s = get_settings()
+    if not (s.GEMINI_API_KEY or s.GROQ_API_KEY or s.OPENROUTER_API_KEY or s.OLLAMA_BASE_URL or user_secrets):
         return None
 
-    system_instruction = (
-        "You are a top university computer science & engineering exam strategist. "
-        "Create a razor-sharp, high-density, print-ready 1-2 page Last-Night Exam Cram Sheet in Markdown "
-        "strictly grounded in the provided course digest.\n\n"
-        "STRICT QUALITY RULES:\n"
-        "1. NEVER write generic filler or vague advice (e.g., never write 'understand foundational concepts' or 'master properties'). "
-        "Every single bullet must state a concrete definition, formula, theorem, complexity, algorithm step, edge case, or comparison.\n"
-        "2. Preserve clickable `[MM:SS]` timestamp pills from the source material next to each major concept and formula.\n"
-        "3. Organize into these exact high-yield sections:\n"
-        "   - `# <Subject> — Last-Night Exam Cram Sheet` + Exam Date callout\n"
-        "   - `## ⚡ High-Yield Exam Weightage Matrix` (compact table: Topic | Priority | Key Exam Angle | Jump `[MM:SS]`)\n"
-        "   - `## 📐 Core Formulas, Formal Definitions & Complexities` (use clean LaTeX `$...$` where helpful)\n"
-        "   - `## 📊 Must-Know Comparison & Distinction Tables` (at least 1–2 crisp Markdown tables contrasting key concepts from the syllabus)\n"
-        "   - `## 🧠 Step-by-Step Algorithms, Worked Patterns & Common Exam Traps` (concise numbered steps + `> [!IMPORTANT]` traps)\n"
-        "   - `## 🎯 Past-Paper / Rapid-Fire Recall Check` (real PYQs if provided, or 5 rapid self-test prompts with 1-line answers)\n"
-        "4. Keep total length tight and scannable so it prints cleanly onto 1–2 A4 pages."
-    )
+    c_row = db_conn.execute("SELECT title FROM courses WHERE id = ?;", (course_id,)).fetchone()
+    course_title = (c_row[0] if c_row else "Course") or "Course"
+    lessons = _fetch_scoped_lessons(db_conn, course_id, source_id=source_id, chapter_title=chapter_title)
+    if not lessons:
+        return None
 
-    user_prompt = (
-        f"Subject: {course_title}\n"
-        f"Target Exam Date: {target_date}\n\n"
-        f"Grounded Course Digest:\n{raw_content_summary[:24000]}"
-    )
+    modules: Dict[str, List[Dict[str, Any]]] = {}
+    for les in lessons:
+        hl = _extract_lesson_highlights(db_conn, les)
+        modules.setdefault(hl["module"], []).append(hl)
 
-    try:
-        result, _ = await get_llm_gateway().generate_text(
-            prompt=user_prompt,
-            system_instruction=system_instruction,
-            temperature=0.2,
+    # Pass 1 (Map): Compress EVERY module independently so zero units are ever truncated
+    module_fact_blocks: List[str] = []
+    for mod_name, mod_lessons in modules.items():
+        fb = await _compress_module_pass1(
+            db_conn, course_title, mod_name, mod_lessons, force_refresh=force_refresh, user_secrets=user_secrets
         )
-        if result and len(result.strip()) > 200:
-            return result.strip()
-    except Exception as e:
-        logger.warning(f"LLM cram sheet generation failed, falling back to deterministic: {e}")
+        if fb:
+            module_fact_blocks.append(f"## MODULE: {mod_name}\n{fb}")
+        else:
+            # Fallback compact digest for this module if a single pass-1 call fails
+            lines = [f"## MODULE: {mod_name}"]
+            for hl in mod_lessons:
+                lines.append(f"- **{hl['title']}** {hl['pill']}: " + "; ".join(hl["bullets"][:2]))
+            module_fact_blocks.append("\n".join(lines))
 
+    pyqs = db_conn.execute(
+        """
+        SELECT pq.question_text, pq.marks, l.start_sec
+        FROM pyq_questions pq
+        LEFT JOIN lessons l ON l.id = pq.matched_lesson_id
+        WHERE pq.course_id = ?
+        ORDER BY pq.marks DESC, pq.id ASC LIMIT 12;
+        """,
+        (course_id,),
+    ).fetchall()
+    pyq_block = "\n".join(
+        f"- {p[0]} ({p[1] or 'Exam Q'}) [{format_seconds_to_mm_ss(p[2])}]"
+        for p in pyqs
+    ) or "None uploaded yet."
+
+    combined_facts = "\n\n".join(module_fact_blocks)
+    scope_desc = f"Module: {chapter_title}" if chapter_title else ("Single Video" if source_id else "Full Course")
+
+    # Pass 2 (Reduce): Synthesize Master A4 Cram Sheet
+    system_inst = (
+        "You are a senior university professor writing a razor-sharp, high-density Last-Night Exam Cram Sheet. "
+        "Cover EVERY single module provided without omitting later units. Use crisp Markdown tables, KaTeX math (`$...$`), "
+        "and clickable `[MM:SS]` timestamp jump pills. Never emit generic filler or raw chunk IDs."
+    )
+    prompt = f"""Course: {course_title} ({scope_desc} — {len(modules)} Modules, {len(lessons)} Topics)
+
+Compressed Module Fact Blocks (ALL Modules Included):
+{combined_facts}
+
+Uploaded Past Exam Questions (PYQs):
+{pyq_block}
+
+Assemble the Master Last-Night Exam Cram Sheet with these 6 sections:
+1. `## 1. High-Yield Exam Weightage Matrix` (Markdown table: Module | Key Exam Angles | Jump `[MM:SS]`)
+2. `## 2. Master Formula, Theorem & Complexity Reference` (Compact KaTeX reference table)
+3. `## 3. Core Distinctions & Comparison Matrices` (Side-by-side high-frequency exam comparisons)
+4. `## 4. Module-by-Module Rapid Recall Sheet` (Cover ALL {len(modules)} modules with ultra-dense testable bullets + `[MM:SS]`)
+5. `## 5. Step-by-Step Numerical / Derivation Recipes & Common Exam Traps`
+6. `## 6. Top Repeated PYQs & 2-Line Model Answer Keys`
+"""
+    final_md, _ = await get_llm_gateway().generate_text(
+        prompt=prompt,
+        system_instruction=system_inst,
+        json_mode=False,
+        temperature=0.2,
+        max_tokens=4096,
+        user_secrets=user_secrets,
+    )
+    if final_md and len(final_md.strip()) >= 150:
+        return _RAW_CHK_RE.sub("", final_md).strip()
     return None
 
 
@@ -508,67 +410,47 @@ async def synthesize_full_syllabus_cram_sheet(
     db_conn,
     course_id: str,
     batch_size: int = 5,
-    prune_intermediate_chunks: bool = True,
+    prune_intermediate_chunks: bool = False,
+    source_id: Optional[str] = None,
+    chapter_title: Optional[str] = None,
+    user_secrets: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
-    """Progressively transcribes and synthesizes notes across the entire playlist/syllabus in batches of 3-5,
-    pruning intermediate raw transcript chunks for older batches on large playlists,
-    and produces a comprehensive full-course revision cheat sheet.
-    """
-    cur = db_conn.cursor()
-    cur.execute(
-        """
-        SELECT l.id, l.title, l.video_id, l.source_id, l.order_index, s.url, n.content_markdown, l.start_sec, l.end_sec
-        FROM lessons l
-        LEFT JOIN sources s ON l.source_id = s.id
-        LEFT JOIN notes n ON l.id = n.lesson_id
-        WHERE l.course_id = ? AND COALESCE(l.is_excluded, 0) = 0
-        ORDER BY l.order_index ASC;
-        """,
-        (course_id,),
-    )
-    lessons = cur.fetchall()
-    if not lessons:
-        raise ValueError(f"No lessons found for course {course_id}")
+    """Progressively ensures transcript + notes across all scoped lessons (NEVER deleting chunks) and runs 2-pass synthesis."""
+    from backend.services.notes import get_or_generate_lesson_notes
+    from backend.services.transcription import ingest_lesson_transcript
 
-    missing_lessons = [l for l in lessons if not l[6]]
-    logger.info(f"[CramSheet] Full-syllabus synthesis: {len(lessons)} total lessons, {len(missing_lessons)} missing notes.")
-
-    if missing_lessons:
-        from backend.services.transcription import ingest_lesson_transcript
-        from backend.services.notes import get_or_generate_lesson_notes
-
-        for i in range(0, len(missing_lessons), batch_size):
-            batch = missing_lessons[i:i + batch_size]
-            for row in batch:
-                lid, title, vid_id, src_id, ord_idx, s_url, _, l_start, l_end = row
-                target_vid = vid_id or s_url or ""
-                cur.execute("SELECT COUNT(*) FROM chunks WHERE lesson_id = ?;", (lid,))
-                if cur.fetchone()[0] == 0 and target_vid:
-                    try:
-                        await ingest_lesson_transcript(
-                            db_conn,
-                            course_id=course_id,
-                            source_id=src_id or None,
-                            lesson_id=lid,
-                            video_id_or_url=target_vid,
-                            start_sec=int(l_start or 0),
-                            end_sec=int(l_end) if l_end else None,
-                        )
-                    except Exception as te:
-                        logger.warning(f"[CramSheet] Transcript ingest error for {title}: {te}")
-
+    lessons = _fetch_scoped_lessons(db_conn, course_id, source_id=source_id, chapter_title=chapter_title)
+    for les in lessons:
+        lid = les["id"]
+        if not (les.get("content_markdown") or "").strip():
+            c_cnt = db_conn.execute("SELECT COUNT(*) FROM chunks WHERE lesson_id = ?;", (lid,)).fetchone()[0]
+            if c_cnt == 0 and (les.get("video_id") or les.get("source_url")):
                 try:
-                    await get_or_generate_lesson_notes(db_conn, course_id, lid, force_regenerate=False)
-                except Exception as ne:
-                    logger.warning(f"[CramSheet] Note synthesis error for {title}: {ne}")
+                    await ingest_lesson_transcript(
+                        db_conn,
+                        course_id=course_id,
+                        source_id=les.get("source_id") or None,
+                        lesson_id=lid,
+                        video_id_or_url=les.get("video_id") or les.get("source_url"),
+                        start_sec=int(les.get("start_sec") or 0),
+                        end_sec=int(les["end_sec"]) if les.get("end_sec") else None,
+                    )
+                except Exception as te:
+                    logger.warning(f"[CramSheet] Transcript ingest error for {les['title']}: {te}")
+            try:
+                await get_or_generate_lesson_notes(db_conn, course_id, lid, force_regenerate=False, user_secrets=user_secrets)
+            except Exception as ne:
+                logger.warning(f"[CramSheet] Note synthesis error for {les['title']}: {ne}")
 
-            if prune_intermediate_chunks and len(lessons) > 15:
-                batch_lids = [b[0] for b in batch]
-                placeholders = ",".join(["?"] * len(batch_lids))
-                cur.execute(f"DELETE FROM chunks WHERE lesson_id IN ({placeholders});", batch_lids)
-                db_conn.commit()
-
-    return await get_or_create_cram_sheet(db_conn, course_id, force_refresh=True)
+    return await get_or_create_cram_sheet(
+        db_conn,
+        course_id,
+        force_refresh=True,
+        full_syllabus=False,
+        source_id=source_id,
+        chapter_title=chapter_title,
+        user_secrets=user_secrets,
+    )
 
 
 async def get_or_create_cram_sheet(
@@ -576,79 +458,92 @@ async def get_or_create_cram_sheet(
     course_id: str,
     force_refresh: bool = False,
     full_syllabus: bool = False,
+    source_id: Optional[str] = None,
+    chapter_title: Optional[str] = None,
+    user_secrets: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
-    """Retrieves existing cram sheet if hash matches, or synthesizes a fresh one."""
+    """Retrieves cached Cram Sheet or generates via 2-pass Map-Reduce synthesis."""
     if full_syllabus:
-        return await synthesize_full_syllabus_cram_sheet(db_conn, course_id)
+        return await synthesize_full_syllabus_cram_sheet(
+            db_conn,
+            course_id,
+            source_id=source_id,
+            chapter_title=chapter_title,
+            user_secrets=user_secrets,
+        )
 
-    current_hash = compute_course_notes_hash(db_conn, course_id)
+    notes_hash = compute_course_notes_hash(db_conn, course_id, source_id=source_id, chapter_title=chapter_title)
+    is_full_course = not source_id and not chapter_title
 
-    cur = db_conn.cursor()
-    cur.execute(
-        "SELECT id, content_markdown, notes_hash, is_generated_by_llm, created_at, updated_at FROM cram_sheets WHERE course_id = ?;",
-        (course_id,),
+    if is_full_course and not force_refresh:
+        existing = db_conn.execute("SELECT * FROM cram_sheets WHERE course_id = ?;", (course_id,)).fetchone()
+        if existing:
+            cur_cs = db_conn.execute("SELECT id, course_id, content_markdown, notes_hash, is_generated_by_llm, created_at, updated_at FROM cram_sheets WHERE course_id = ?;", (course_id,)).fetchone()
+            if cur_cs and cur_cs[3] == notes_hash and (cur_cs[2] or "").strip():
+                return {
+                    "id": cur_cs[0],
+                    "course_id": cur_cs[1],
+                    "content_markdown": cur_cs[2],
+                    "notes_hash": cur_cs[3],
+                    "is_generated_by_llm": bool(cur_cs[4]),
+                    "cached": True,
+                    "created_at": cur_cs[5],
+                    "updated_at": cur_cs[6],
+                }
+
+    llm_md = await generate_cram_sheet_with_llm(
+        db_conn,
+        course_id,
+        source_id=source_id,
+        chapter_title=chapter_title,
+        force_refresh=force_refresh,
+        user_secrets=user_secrets,
     )
-    existing = cur.fetchone()
-
-    if existing and not force_refresh:
-        sheet_id, content, saved_hash, is_llm, c_at, u_at = existing
-        if saved_hash == current_hash:
-            logger.info(f"[CramSheet] Cache hit for course {course_id} (hash: {current_hash[:8]})")
-            return {
-                "id": sheet_id,
-                "course_id": course_id,
-                "content_markdown": content,
-                "notes_hash": saved_hash,
-                "is_generated_by_llm": bool(is_llm),
-                "created_at": c_at,
-                "updated_at": u_at,
-                "cached": True,
-            }
-
-    digest, meta = _build_structured_digest(db_conn, course_id)
-    course_title = meta["course_title"]
-    target_date = meta["target_date"]
-
-    deterministic_content = generate_deterministic_cram_sheet(db_conn, course_id)
-    content = deterministic_content
-    is_llm = 0
-
-    if meta["studied_count"] > 0:
-        llm_content = await generate_cram_sheet_with_llm(course_title, target_date, digest)
-        if llm_content and len(llm_content.strip()) > 200:
-            content = llm_content
-            is_llm = 1
-
-    sheet_id = existing[0] if existing else f"cram_{uuid.uuid4().hex[:10]}"
-    if existing:
-        cur.execute(
-            """
-            UPDATE cram_sheets
-            SET content_markdown = ?, notes_hash = ?, is_generated_by_llm = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?;
-            """,
-            (content, current_hash, is_llm, sheet_id),
-        )
+    if llm_md:
+        content_md = llm_md
+        is_llm = True
     else:
-        cur.execute(
-            """
-            INSERT INTO cram_sheets (id, course_id, content_markdown, notes_hash, is_generated_by_llm)
-            VALUES (?, ?, ?, ?, ?);
-            """,
-            (sheet_id, course_id, content, current_hash, is_llm),
+        content_md = generate_deterministic_cram_sheet(
+            db_conn, course_id, source_id=source_id, chapter_title=chapter_title
         )
+        is_llm = False
 
-    db_conn.commit()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    sheet_id = f"cram_{uuid.uuid4().hex[:10]}"
 
-    cur.execute("SELECT created_at, updated_at FROM cram_sheets WHERE id = ?;", (sheet_id,))
-    ts_row = cur.fetchone()
+    if is_full_course:
+        existing = db_conn.execute("SELECT id, created_at FROM cram_sheets WHERE course_id = ?;", (course_id,)).fetchone()
+        if existing:
+            sheet_id = existing[0]
+            db_conn.execute(
+                """
+                UPDATE cram_sheets
+                SET content_markdown = ?, notes_hash = ?, is_generated_by_llm = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (content_md, notes_hash, int(is_llm), now_iso, sheet_id),
+            )
+            created_at = existing[1]
+        else:
+            db_conn.execute(
+                """
+                INSERT INTO cram_sheets (id, course_id, content_markdown, notes_hash, is_generated_by_llm, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
+                """,
+                (sheet_id, course_id, content_md, notes_hash, int(is_llm), now_iso, now_iso),
+            )
+            created_at = now_iso
+        db_conn.commit()
+    else:
+        created_at = now_iso
+
     return {
         "id": sheet_id,
         "course_id": course_id,
-        "content_markdown": content,
-        "notes_hash": current_hash,
-        "is_generated_by_llm": bool(is_llm),
+        "content_markdown": content_md,
+        "notes_hash": notes_hash,
+        "is_generated_by_llm": is_llm,
         "cached": False,
-        "created_at": ts_row[0] if ts_row else None,
-        "updated_at": ts_row[1] if ts_row else None,
+        "created_at": created_at,
+        "updated_at": now_iso,
     }

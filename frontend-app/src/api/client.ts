@@ -97,6 +97,8 @@ export interface LessonNotes {
   lesson_id: string;
   content_markdown: string;
   personal_notes?: string;
+  generation_mode?: 'llm' | 'deterministic' | string;
+  lesson_title?: string;
   is_generated_by_llm?: boolean;
   updated_at?: string;
 }
@@ -257,11 +259,16 @@ export const api = {
     request<Course>(`/api/courses/${courseId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteCourse: (courseId: string) =>
     request<{ success: boolean }>(`/api/courses/${courseId}`, { method: 'DELETE' }),
-  smartPrepareCourse: (courseId: string, forceRepartition = false) =>
-    request<{ repartitioned_sources: number; new_semantic_clips: number; topics_clustered: number; background_job_id?: string }>(
-      `/api/courses/${courseId}/smart-prepare${forceRepartition ? '?force_repartition=true' : ''}`,
+  smartPrepareCourse: (courseId: string, forceRepartition = false, background = false) => {
+    const qs = new URLSearchParams();
+    if (forceRepartition) qs.set('force_repartition', 'true');
+    if (background) qs.set('background', 'true');
+    const qstr = qs.toString();
+    return request<{ repartitioned_sources?: number; new_semantic_clips?: number; topics_clustered?: number; background_job_id?: string; job_id?: string; status?: string }>(
+      `/api/courses/${courseId}/smart-prepare${qstr ? `?${qstr}` : ''}`,
       { method: 'POST' },
-    ),
+    );
+  },
   clusterTopics: (courseId: string) =>
     request<{ lessons_updated: number; topics_created: number; topics: Array<{ title: string; lesson_count: number }> }>(
       `/api/courses/${courseId}/topics/cluster`,
@@ -444,17 +451,29 @@ export const api = {
     request<{ success: boolean }>(`/api/courses/${courseId}/pyq/papers/${paperId}`, { method: 'DELETE' }),
 
   // Cram Sheet & Background Jobs
-  getCramSheet: (courseId: string) => request<CramSheet>(`/api/courses/${courseId}/cram-sheet`),
-  generateCramSheet: (courseId: string, force_refresh = true) =>
+  getCramSheet: (courseId: string, scope?: { source_id?: string; chapter_title?: string }) => {
+    const qs = new URLSearchParams();
+    if (scope?.source_id) qs.set('source_id', scope.source_id);
+    if (scope?.chapter_title) qs.set('chapter_title', scope.chapter_title);
+    const qstr = qs.toString();
+    return request<CramSheet>(`/api/courses/${courseId}/cram-sheet${qstr ? `?${qstr}` : ''}`);
+  },
+  generateCramSheet: (
+    courseId: string,
+    force_refresh = true,
+    scope?: { source_id?: string; chapter_title?: string },
+  ) =>
     request<CramSheet>(`/api/courses/${courseId}/cram-sheet/generate`, {
       method: 'POST',
-      body: JSON.stringify({ force_refresh }),
+      body: JSON.stringify({ force_refresh, ...(scope || {}) }),
     }),
   generateFullCramSheetAsync: (courseId: string) =>
     request<{ job_id: string; status: string }>(`/api/courses/${courseId}/cram-sheet/generate-full-async`, {
       method: 'POST',
     }),
   getJob: (jobId: string) => request<JobStatus>(`/api/jobs/${jobId}`),
+  listJobs: (courseId?: string) => request<{ jobs: JobStatus[] }>(`/api/jobs${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ''}`),
+  cancelJob: (jobId: string) => request<{ success: boolean }>(`/api/jobs/${jobId}/cancel`, { method: 'POST' }),
   downloadCramSheetUrl: (courseId: string) => `/api/courses/${courseId}/cram-sheet/download`,
 
 

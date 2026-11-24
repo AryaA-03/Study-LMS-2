@@ -317,7 +317,7 @@ def compute_course_stats(
         created_at=str(course_row["created_at"]),
     )
 
-@router.post("/{course_id}/discover", response_model=CandidateDiscoveryResponse)
+@router.post("/{course_id}/discover", response_model=CandidateDiscoveryResponse, dependencies=[Depends(require_course_owner)])
 def discover_sources(
     course_id: str,
     query: Optional[str] = None,
@@ -382,7 +382,7 @@ def discover_sources(
         candidate_playlists=discovery["candidate_playlists"],
     )
 
-@router.post("/{course_id}/sources/import", response_model=SourceResponse)
+@router.post("/{course_id}/sources/import", response_model=SourceResponse, dependencies=[Depends(require_course_owner)])
 def import_source(
     course_id: str,
     req: SourceImportRequest,
@@ -480,24 +480,6 @@ def create_lessons_from_meta(
                         l.get("chapter_title", ""),
                     ),
                 )
-                db.execute(
-                    """
-                    INSERT OR REPLACE INTO concept_clips (
-                        id, course_id, source_id, order_index, title, start_sec, end_sec, raw_duration_sec, priority_tag, status
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'not_started');
-                    """,
-                    (
-                        lid,
-                        course_id,
-                        source_id,
-                        len(created_lesson_ids),
-                        l["title"],
-                        l["start_sec"],
-                        l["end_sec"],
-                        l["raw_duration_sec"],
-                        priority_tag,
-                    ),
-                )
                 created_lesson_ids.append(lid)
     else:
         # Single video
@@ -532,30 +514,12 @@ def create_lessons_from_meta(
                     l.get("chapter_title", ""),
                 ),
             )
-            db.execute(
-                """
-                INSERT OR REPLACE INTO concept_clips (
-                    id, course_id, source_id, order_index, title, start_sec, end_sec, raw_duration_sec, priority_tag, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'not_started');
-                """,
-                (
-                    lid,
-                    course_id,
-                    source_id,
-                    len(created_lesson_ids),
-                    l["title"],
-                    l["start_sec"],
-                    l["end_sec"],
-                    l["raw_duration_sec"],
-                    priority_tag,
-                ),
-            )
             created_lesson_ids.append(lid)
 
     return created_lesson_ids
 
-@router.post("/{course_id}/sources/approve", response_model=List[SourceResponse])
-@router.post("/{course_id}/sources/confirm", response_model=List[SourceResponse])
+@router.post("/{course_id}/sources/approve", response_model=List[SourceResponse], dependencies=[Depends(require_course_owner)])
+@router.post("/{course_id}/sources/confirm", response_model=List[SourceResponse], dependencies=[Depends(require_course_owner)])
 def approve_sources(
     course_id: str,
     req: SourceApprovalRequest,
@@ -611,12 +575,15 @@ def approve_sources(
         approved_sources.append(get_source_by_id(sid, db))
 
     if req.source_ids_to_approve:
-        background_tasks.add_task(generate_initial_concept_bundles, course_id)
+        from pathlib import Path as _Path
+        _db_row = db.execute("PRAGMA database_list;").fetchone()
+        _target_db = _Path(_db_row[2]) if (_db_row and _db_row[2]) else None
+        background_tasks.add_task(generate_initial_concept_bundles, course_id, None, 3, _target_db)
 
     return approved_sources
 
 
-@router.post("/{course_id}/lessons/filter", response_model=List[LessonResponse])
+@router.post("/{course_id}/lessons/filter", response_model=List[LessonResponse], dependencies=[Depends(require_course_owner)])
 def filter_course_lessons(
     course_id: str,
     req: LessonFilterRequest,
@@ -707,7 +674,7 @@ def filter_course_lessons(
 
     return list_lessons(course_id, db)
 
-@router.post("/{course_id}/lessons/{lesson_id}/toggle-exclude", response_model=LessonResponse)
+@router.post("/{course_id}/lessons/{lesson_id}/toggle-exclude", response_model=LessonResponse, dependencies=[Depends(require_course_owner)])
 def toggle_lesson_exclusion(
     course_id: str,
     lesson_id: str,
@@ -741,7 +708,7 @@ def toggle_lesson_exclusion(
     )
 
 # --- Syllabus Alignment Endpoints ---
-@router.post("/{course_id}/syllabus/match", response_model=SyllabusMatchResponse)
+@router.post("/{course_id}/syllabus/match", response_model=SyllabusMatchResponse, dependencies=[Depends(require_course_owner)])
 def match_course_syllabus(
     course_id: str,
     req: SyllabusMatchRequest,
@@ -764,7 +731,7 @@ def match_course_syllabus(
         logger.error(f"[Courses] Syllabus matching error: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/{course_id}/syllabus/apply", response_model=SyllabusApplyResponse)
+@router.post("/{course_id}/syllabus/apply", response_model=SyllabusApplyResponse, dependencies=[Depends(require_course_owner)])
 def apply_syllabus_alignment(
     course_id: str,
     req: SyllabusApplyRequest,
@@ -862,7 +829,7 @@ def apply_syllabus_alignment(
         message=f"Syllabus successfully applied! {inc_count} videos matched & scheduled ({exc_count} out-of-syllabus videos excluded)."
     )
 
-@router.get("/{course_id}/syllabus", response_model=SyllabusInfoResponse)
+@router.get("/{course_id}/syllabus", response_model=SyllabusInfoResponse, dependencies=[Depends(require_course_owner)])
 def get_course_syllabus(course_id: str, db: sqlite3.Connection = Depends(get_db)):
     """Retrieves previously saved syllabus text and metadata for a course."""
     course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
@@ -940,7 +907,7 @@ def update_lesson(
         is_excluded=bool(updated["is_excluded"]),
     )
 
-@router.put("/{course_id}/lessons/{lesson_id}/notes")
+@router.put("/{course_id}/lessons/{lesson_id}/notes", dependencies=[Depends(require_course_owner)])
 def update_course_lesson_notes(
     course_id: str,
     lesson_id: str,
@@ -962,7 +929,7 @@ def update_course_lesson_notes(
     saved = save_personal_notes(db, course_id, lesson_id, personal_text)
     return {"success": saved, "course_id": course_id, "lesson_id": lesson_id}
 
-@router.get("/{course_id}/sources", response_model=List[SourceResponse])
+@router.get("/{course_id}/sources", response_model=List[SourceResponse], dependencies=[Depends(require_course_owner)])
 def list_sources(course_id: str, db: sqlite3.Connection = Depends(get_db)):
     rows = db.execute(
         "SELECT * FROM sources WHERE course_id = ? ORDER BY created_at ASC;", (course_id,)
@@ -987,7 +954,7 @@ def list_sources(course_id: str, db: sqlite3.Connection = Depends(get_db)):
         )
     return res
 
-@router.get("/{course_id}/lessons", response_model=List[LessonResponse])
+@router.get("/{course_id}/lessons", response_model=List[LessonResponse], dependencies=[Depends(require_course_owner)])
 def list_lessons(course_id: str, db: sqlite3.Connection = Depends(get_db)):
     rows = db.execute(
         "SELECT * FROM lessons WHERE course_id = ? ORDER BY order_index ASC;", (course_id,)
@@ -1033,7 +1000,7 @@ def get_source_by_id(source_id: str, db: sqlite3.Connection) -> SourceResponse:
     )
 
 
-@router.get("/{course_id}/export")
+@router.get("/{course_id}/export", dependencies=[Depends(require_course_owner)])
 def export_course_bundle(
     course_id: str,
     db: sqlite3.Connection = Depends(get_db),
@@ -1064,7 +1031,7 @@ def export_course_bundle(
     return bundle
 
 
-@router.get("/{course_id}/export-markdown")
+@router.get("/{course_id}/export-markdown", dependencies=[Depends(require_course_owner)])
 def export_course_markdown(
     course_id: str,
     db: sqlite3.Connection = Depends(get_db),
@@ -1119,7 +1086,7 @@ def export_course_markdown(
     )
 
 
-@router.post("/{course_id}/sources/manual-transcript")
+@router.post("/{course_id}/sources/manual-transcript", dependencies=[Depends(require_course_owner)])
 def import_manual_transcript(
     course_id: str,
     req: ManualTranscriptRequest,
@@ -1207,7 +1174,7 @@ def import_manual_transcript(
     return {"success": True, "source_id": source_id, "lesson_id": lesson_id, "message": "Manual transcript ingested and schedule regenerated."}
 
 
-@router.get("/{course_id}/sources/discover-web")
+@router.get("/{course_id}/sources/discover-web", dependencies=[Depends(require_course_owner)])
 def discover_web_candidates(course_id: str, db: sqlite3.Connection = Depends(get_db)):
     """Suggests curated web documentation and guides for the course topic with an approval step."""
     course = db.execute("SELECT * FROM courses WHERE id = ?;", (course_id,)).fetchone()
@@ -1254,7 +1221,7 @@ def delete_course(course_id: str, db: sqlite3.Connection = Depends(get_db)):
     return {"success": True, "deleted_course_id": course_id}
 
 
-@router.delete("/{course_id}/sources/{source_id}")
+@router.delete("/{course_id}/sources/{source_id}", dependencies=[Depends(require_course_owner)])
 def delete_course_source(course_id: str, source_id: str, db: sqlite3.Connection = Depends(get_db)):
     """Delete a single source from a course, cascading its lessons and chunks."""
     row = db.execute(
@@ -1268,7 +1235,7 @@ def delete_course_source(course_id: str, source_id: str, db: sqlite3.Connection 
     return {"success": True, "deleted_source_id": source_id}
 
 
-@router.post("/{course_id}/topics/cluster")
+@router.post("/{course_id}/topics/cluster", dependencies=[Depends(require_course_owner)])
 def cluster_topics_endpoint(course_id: str, db: sqlite3.Connection = Depends(get_db)):
     """Group related playlist videos and lessons into structured Topic Units."""
     row = db.execute("SELECT id FROM courses WHERE id = ?;", (course_id,)).fetchone()
@@ -1277,15 +1244,33 @@ def cluster_topics_endpoint(course_id: str, db: sqlite3.Connection = Depends(get
     from backend.services.topic_grouper import cluster_course_topics
     return cluster_course_topics(db, course_id)
 
-@router.post("/{course_id}/smart-prepare")
+@router.post("/{course_id}/smart-prepare", dependencies=[Depends(require_course_owner)])
 async def smart_prepare_course_endpoint(
     course_id: str,
     force_repartition: bool = False,
+    background: bool = False,
+    user: CurrentUser = Depends(get_current_user),
     db: sqlite3.Connection = Depends(get_db),
 ):
     """Upgrade long fixed-slice videos via subtitle-based semantic partitioning, cluster playlists, and start background study bundle generation."""
     row = db.execute("SELECT id FROM courses WHERE id = ?;", (course_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Course not found")
+    if background:
+        from backend.infra.job_queue import enqueue_job
+        existing = db.execute(
+            "SELECT id FROM jobs WHERE course_id = ? AND job_type = 'smart_prepare' AND status IN ('queued', 'running') LIMIT 1;",
+            (course_id,),
+        ).fetchone()
+        if existing:
+            return {"job_id": existing["id"], "status": "queued", "course_id": course_id}
+        jid = enqueue_job(
+            db,
+            "smart_prepare",
+            course_id=course_id,
+            payload={"course_id": course_id, "force_repartition": force_repartition},
+            owner_id=user.id,
+        )
+        return {"job_id": jid, "status": "queued", "course_id": course_id}
     from backend.services.smart_prepare import smart_prepare_course
     return await smart_prepare_course(db, course_id, force_repartition=force_repartition)

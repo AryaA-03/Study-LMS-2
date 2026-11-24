@@ -111,11 +111,10 @@ def test_async_cram_sheet_job_returns_202(tmp_path):
 
 def test_phase4_ui_cmdk_aria_and_docker_files_present():
     root = Path(__file__).resolve().parent.parent
-    html = (root / "frontend/templates/index.html").read_text(encoding="utf-8")
-    js = (root / "frontend/static/js/app.js").read_text(encoding="utf-8")
-    assert 'id="command-palette-modal"' in html
-    assert 'role="dialog" aria-modal="true"' in html
-    assert "initCommandPalette" in js
-    assert "pendingVideoSlice" in js
+    assert not (root / "frontend/templates/index.html").exists()
+    assert not (root / "frontend/static/js/app.js").exists()
     assert (root / "Dockerfile").exists()
     assert (root / "docker-compose.yml").exists()
+    assert (root / "pyproject.toml").exists()
+    assert (root / ".github/workflows/ci.yml").exists()
+

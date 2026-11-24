@@ -10,7 +10,6 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
 # Configure Rich Terminal Logging
 logging.basicConfig(
@@ -34,6 +33,7 @@ from backend.services.llm_cache import prune_expired_cache
 install_secret_redaction()
 from backend.database import get_db
 from backend.routers import (
+    auth,
     courses,
     cram_sheet,
     flashcards,
@@ -76,6 +76,11 @@ async def lifespan(_app: FastAPI):
         yield
     finally:
         await job_worker.stop()
+        try:
+            from backend.infra.llm_gateway import get_llm_gateway
+            await get_llm_gateway().aclose()
+        except Exception:
+            pass
 
 
 app = FastAPI(
@@ -109,7 +114,7 @@ app.add_middleware(
 @app.middleware("http")
 async def security_and_logging_middleware(request: Request, call_next):
     start_time = time.time()
-    if os.getenv("RATE_LIMIT_ENABLED", "false").lower() == "true" and request.url.path.startswith("/api/"):
+    if os.getenv("RATE_LIMIT_ENABLED", "true" if os.getenv("AUTH_MODE", "local").strip().lower() != "local" else "false").lower() == "true" and request.url.path.startswith("/api/"):
         client_key = request.client.host if request.client else "unknown"
         allowed, retry_after = _rate_limiter.allow(client_key)
         if not allowed:
@@ -160,6 +165,7 @@ async def security_and_logging_middleware(request: Request, call_next):
 
 
 # Include Routers
+app.include_router(auth.router)
 app.include_router(courses.router)
 app.include_router(schedule.router)
 app.include_router(settings.router)
@@ -177,26 +183,19 @@ app.include_router(cram_sheet.router)
 # Mount Static Assets & Templates
 STATIC_DIR = BASE_DIR / "frontend" / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
-TEMPLATES_DIR = BASE_DIR / "frontend" / "templates"
-TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
-
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
 @app.get("/", response_class=HTMLResponse)
 def index_page(request: Request):
-    """Serves the modern compiled Vite SPA if built (frontend/static/dist/index.html), else legacy shell."""
+    """Serves the compiled React/Vite SPA (frontend/static/dist/index.html)."""
     dist_index = STATIC_DIR / "dist" / "index.html"
     if dist_index.exists():
         return HTMLResponse(content=dist_index.read_text(encoding="utf-8"))
-    return HTMLResponse(content=(TEMPLATES_DIR / "index.html").read_text(encoding="utf-8"))
-
-
-@app.get("/legacy", response_class=HTMLResponse)
-def legacy_index_page(request: Request):
-    """Fallback route to the legacy vanilla-JS single-page shell."""
-    return HTMLResponse(content=(TEMPLATES_DIR / "index.html").read_text(encoding="utf-8"))
+    return HTMLResponse(
+        content="<!doctype html><html><body style='font-family:sans-serif;padding:2rem'><h2>Study-LMS-2 Frontend Not Built</h2><p>Run <code>cd frontend-app && npm ci && npm run build</code> and reload.</p></body></html>",
+        status_code=503,
+    )
 
 
 @app.get("/healthz")
@@ -219,19 +218,11 @@ def health_check(db: sqlite3.Connection = Depends(get_db)):
         )
 
 
-@app.get("/api/auth/me")
-def get_auth_me(user: CurrentUser = Depends(get_current_user)):
-    """Returns the authenticated user context (local owner in AUTH_MODE=local, JWT user in hosted mode)."""
-    return {"id": user.id, "email": user.email, "role": user.role}
 
 
-def export_openapi_spec(output_path: Path = BASE_DIR / "openapi.json"):
-    """Dumps locked OpenAPI specification to openapi.json."""
+def export_openapi_spec(out_path: Path | None = None) -> dict:
+    """Export the canonical OpenAPI 3.x specification to openapi.json."""
+    target = out_path or (BASE_DIR / "openapi.json")
     spec = app.openapi()
-    output_path.write_text(json.dumps(spec, indent=2), encoding="utf-8")
+    target.write_text(json.dumps(spec, indent=2), encoding="utf-8")
     return spec
-
-
-if __name__ == "__main__":
-    export_openapi_spec()
-    print("Locked openapi.json generated successfully.")

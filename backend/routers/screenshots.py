@@ -4,7 +4,7 @@ import logging
 import mimetypes
 from pathlib import Path
 from typing import List, Dict, Any
-from backend.deps import get_current_user
+from backend.deps import get_current_user, require_course_owner, require_lesson_owner
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 import sqlite3
@@ -19,7 +19,7 @@ router = APIRouter(tags=["screenshots"], dependencies=[Depends(get_current_user)
 settings = get_settings()
 
 
-@router.post("/api/lessons/{lesson_id}/screenshots", response_model=List[ScreenshotResponse])
+@router.post("/api/lessons/{lesson_id}/screenshots", response_model=List[ScreenshotResponse], dependencies=[Depends(require_lesson_owner)])
 async def capture_screenshots(
     lesson_id: str,
     db: sqlite3.Connection = Depends(get_db)
@@ -58,7 +58,7 @@ async def capture_screenshots(
     return results
 
 
-@router.get("/api/lessons/{lesson_id}/screenshots", response_model=List[ScreenshotResponse])
+@router.get("/api/lessons/{lesson_id}/screenshots", response_model=List[ScreenshotResponse], dependencies=[Depends(require_lesson_owner)])
 def list_screenshots(
     lesson_id: str,
     db: sqlite3.Connection = Depends(get_db)
@@ -67,7 +67,7 @@ def list_screenshots(
     return get_lesson_screenshots(db, lesson_id)
 
 
-@router.get("/api/screenshots/{course_id}/{lesson_id}/{filename}")
+@router.get("/api/screenshots/{course_id}/{lesson_id}/{filename}", dependencies=[Depends(require_course_owner)])
 def serve_screenshot(
     course_id: str,
     lesson_id: str,

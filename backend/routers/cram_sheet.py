@@ -15,7 +15,7 @@ logger = logging.getLogger("learn_lms.api.cram_sheet")
 router = APIRouter(prefix="/api/courses", tags=["cram_sheet"], dependencies=[Depends(get_current_user)])
 
 
-@router.post("/{course_id}/cram-sheet/generate", response_model=CramSheetResponse)
+@router.post("/{course_id}/cram-sheet/generate", response_model=CramSheetResponse, dependencies=[Depends(require_course_owner)])
 async def generate_cram_sheet(
     course_id: str,
     payload: CramSheetGenerateRequest = CramSheetGenerateRequest(),
@@ -31,12 +31,14 @@ async def generate_cram_sheet(
         db,
         course_id=course_id,
         force_refresh=payload.force_refresh,
-        full_syllabus=payload.full_syllabus
+        full_syllabus=payload.full_syllabus,
+        source_id=payload.source_id,
+        chapter_title=payload.chapter_title,
     )
     return sheet
 
 
-@router.post("/{course_id}/cram-sheet/generate-full", response_model=CramSheetResponse)
+@router.post("/{course_id}/cram-sheet/generate-full", response_model=CramSheetResponse, dependencies=[Depends(require_course_owner)])
 async def generate_full_cram_sheet(
     course_id: str,
     db: sqlite3.Connection = Depends(get_db)
@@ -56,9 +58,11 @@ async def generate_full_cram_sheet(
     return sheet
 
 
-@router.get("/{course_id}/cram-sheet", response_model=CramSheetResponse)
+@router.get("/{course_id}/cram-sheet", response_model=CramSheetResponse, dependencies=[Depends(require_course_owner)])
 async def get_cram_sheet(
     course_id: str,
+    source_id: Optional[str] = None,
+    chapter_title: Optional[str] = None,
     db: sqlite3.Connection = Depends(get_db)
 ):
     """Retrieves the current course Cram Sheet, generating one if not yet present."""
@@ -67,11 +71,13 @@ async def get_cram_sheet(
     if not cur.fetchone():
         raise HTTPException(status_code=404, detail="Course not found")
 
-    sheet = await get_or_create_cram_sheet(db, course_id=course_id, force_refresh=False)
+    sheet = await get_or_create_cram_sheet(
+        db, course_id=course_id, force_refresh=False, source_id=source_id, chapter_title=chapter_title
+    )
     return sheet
 
 
-@router.get("/{course_id}/cram-sheet/download")
+@router.get("/{course_id}/cram-sheet/download", dependencies=[Depends(require_course_owner)])
 def download_cram_sheet_markdown(
     course_id: str,
     db: sqlite3.Connection = Depends(get_db)

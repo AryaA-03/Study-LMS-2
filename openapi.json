@@ -6,6 +6,151 @@
     "version": "0.9.0"
   },
   "paths": {
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Get Auth Me",
+        "description": "Returns active user identity and auto-upserts into `users` in hosted mode.",
+        "operationId": "get_auth_me_api_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/auth/secrets": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Get My Secrets Mask",
+        "description": "Returns boolean presence mask for each BYOK provider (never returns plaintext keys).",
+        "operationId": "get_my_secrets_mask_api_auth_secrets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get My Secrets Mask Api Auth Secrets Get",
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Put My Secret",
+        "description": "Encrypts and stores a user's BYOK API key using AES-256-GCM + HKDF.",
+        "operationId": "put_my_secret_api_auth_secrets_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserSecretUpsertRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/auth/secrets/{provider}": {
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Remove My Secret",
+        "description": "Deletes a stored encrypted BYOK API key for the current user.",
+        "operationId": "remove_my_secret_api_auth_secrets__provider__delete",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            },
+            "name": "provider",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/courses": {
       "get": {
         "tags": [
@@ -1417,6 +1562,16 @@
               "default": false
             },
             "name": "force_repartition",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "title": "Background",
+              "type": "boolean",
+              "default": false
+            },
+            "name": "background",
             "in": "query"
           }
         ],
@@ -3996,7 +4151,7 @@
           "pyq"
         ],
         "summary": "Upload Pyq Text",
-        "description": "Ingests pasted past exam questions text, splitting and matching against course lessons.",
+        "description": "Ingests pasted past exam paper questions and matches them against course lessons.",
         "operationId": "upload_pyq_text_api_courses__course_id__pyq_upload_text_post",
         "parameters": [
           {
@@ -4013,7 +4168,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PYQUploadTextRequest"
+                "$ref": "#/components/schemas/Body_upload_pyq_text_api_courses__course_id__pyq_upload_text_post"
               }
             }
           },
@@ -4053,9 +4208,9 @@
         "tags": [
           "pyq"
         ],
-        "summary": "Get Pyq Summary",
-        "description": "Retrieves all past papers and high-yield topic stats for a course.",
-        "operationId": "get_pyq_summary_api_courses__course_id__pyq_get",
+        "summary": "List Course Pyq",
+        "description": "Returns summary of uploaded past papers, questions, and per-lesson PYQ weightage.",
+        "operationId": "list_course_pyq_api_courses__course_id__pyq_get",
         "parameters": [
           {
             "required": true,
@@ -4099,9 +4254,9 @@
         "tags": [
           "pyq"
         ],
-        "summary": "Get Lesson Pyqs",
+        "summary": "List Lesson Pyq",
         "description": "Retrieves all past paper questions matched to a specific lesson.",
-        "operationId": "get_lesson_pyqs_api_courses__course_id__lessons__lesson_id__pyq_get",
+        "operationId": "list_lesson_pyq_api_courses__course_id__lessons__lesson_id__pyq_get",
         "parameters": [
           {
             "required": true,
@@ -4119,6 +4274,52 @@
               "type": "string"
             },
             "name": "lesson_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/courses/{course_id}/pyq/rematch": {
+      "post": {
+        "tags": [
+          "pyq"
+        ],
+        "summary": "Rematch Course Pyq Weights",
+        "description": "Re-matches all uploaded past paper questions against current course lessons (useful after repartitioning).",
+        "operationId": "rematch_course_pyq_weights_api_courses__course_id__pyq_rematch_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            },
+            "name": "course_id",
             "in": "path"
           }
         ],
@@ -4335,6 +4536,24 @@
             },
             "name": "course_id",
             "in": "path"
+          },
+          {
+            "required": false,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            },
+            "name": "source_id",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "title": "Chapter Title",
+              "type": "string"
+            },
+            "name": "chapter_title",
+            "in": "query"
           }
         ],
         "responses": {
@@ -4461,27 +4680,8 @@
     "/": {
       "get": {
         "summary": "Index Page",
-        "description": "Serves the modern compiled Vite SPA if built (frontend/static/dist/index.html), else legacy shell.",
+        "description": "Serves the compiled React/Vite SPA (frontend/static/dist/index.html).",
         "operationId": "index_page__get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/legacy": {
-      "get": {
-        "summary": "Legacy Index Page",
-        "description": "Fallback route to the legacy vanilla-JS single-page shell.",
-        "operationId": "legacy_index_page_legacy_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -4511,28 +4711,6 @@
             }
           }
         }
-      }
-    },
-    "/api/auth/me": {
-      "get": {
-        "summary": "Get Auth Me",
-        "description": "Returns the authenticated user context (local owner in AUTH_MODE=local, JWT user in hosted mode).",
-        "operationId": "get_auth_me_api_auth_me_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
       }
     }
   },
@@ -4698,6 +4876,24 @@
           },
           "title": {
             "title": "Title",
+            "type": "string"
+          }
+        }
+      },
+      "Body_upload_pyq_text_api_courses__course_id__pyq_upload_text_post": {
+        "title": "Body_upload_pyq_text_api_courses__course_id__pyq_upload_text_post",
+        "required": [
+          "title",
+          "raw_text"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "raw_text": {
+            "title": "Raw Text",
             "type": "string"
           }
         }
@@ -5025,6 +5221,14 @@
             "title": "Full Syllabus",
             "type": "boolean",
             "default": false
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "chapter_title": {
+            "title": "Chapter Title",
+            "type": "string"
           }
         }
       },
@@ -5583,6 +5787,15 @@
             "type": "integer",
             "default": 1
           },
+          "generation_mode": {
+            "title": "Generation Mode",
+            "type": "string",
+            "default": "deterministic"
+          },
+          "lesson_title": {
+            "title": "Lesson Title",
+            "type": "string"
+          },
           "updated_at": {
             "title": "Updated At",
             "type": "string"
@@ -5671,26 +5884,6 @@
             "items": {
               "$ref": "#/components/schemas/PYQQuestionItem"
             }
-          }
-        }
-      },
-      "PYQUploadTextRequest": {
-        "title": "PYQUploadTextRequest",
-        "required": [
-          "title",
-          "raw_text"
-        ],
-        "type": "object",
-        "properties": {
-          "title": {
-            "title": "Title",
-            "maxLength": 256,
-            "type": "string"
-          },
-          "raw_text": {
-            "title": "Raw Text",
-            "minLength": 10,
-            "type": "string"
           }
         }
       },
@@ -6795,6 +6988,27 @@
           },
           "ollama_model": {
             "title": "Ollama Model",
+            "type": "string"
+          }
+        }
+      },
+      "UserSecretUpsertRequest": {
+        "title": "UserSecretUpsertRequest",
+        "required": [
+          "provider",
+          "api_key"
+        ],
+        "type": "object",
+        "properties": {
+          "provider": {
+            "title": "Provider",
+            "type": "string",
+            "description": "One of: gemini, groq, openrouter"
+          },
+          "api_key": {
+            "title": "Api Key",
+            "maxLength": 512,
+            "minLength": 4,
             "type": "string"
           }
         }

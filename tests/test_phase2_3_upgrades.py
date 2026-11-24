@@ -15,9 +15,9 @@ from backend.services.quiz_engine import grade_and_apply_mastery
 
 
 def test_live_bug_1_no_undeclared_inputCourseTitle_in_app_js():
-    js = (Path(__file__).resolve().parent.parent / "frontend/static/js/app.js").read_text(encoding="utf-8")
-    assert "inputCourseTitle." not in js
-    assert "inputGoalQuery." not in js
+    root = Path(__file__).resolve().parent.parent
+    assert not (root / "frontend/static/js/app.js").exists()
+    assert (root / "frontend-app/src/App.tsx").exists()
 
 
 def test_live_bug_2_quiz_submit_with_synthetic_chunk_id_no_fk_crash(tmp_path):
@@ -67,7 +67,7 @@ def test_notes_embeds_captured_screenshots():
     md = generate_no_key_structured_notes("DFA", chunks, screenshots=screenshots)
     assert "## Captured Slides & Keyframes" in md
     assert "![DFA Diagram](/api/screenshots/c1/l1/f1.jpg)" in md
-    assert "## Grounding & Source Chunks" in md
+    assert "chk_1" not in md
 
 
 def test_text_utils_timestamps_and_fenced_json():

@@ -80,17 +80,18 @@ html, body, #root {
 .prose-study {
   color: var(--fg-primary);
   line-height: 1.72;
-  font-size: 15px;
+  font-size: 16px;
+  max-width: 74ch;
 }
 .prose-study h1 {
-  font-size: 1.55rem;
+  font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   margin: 0 0 0.85rem 0;
   color: var(--fg-primary);
 }
 .prose-study h2 {
-  font-size: 1.15rem;
+  font-size: 1.1875rem;
   font-weight: 700;
   margin: 1.4rem 0 0.6rem 0;
   padding-bottom: 0.3rem;
@@ -98,7 +99,7 @@ html, body, #root {
   color: var(--fg-primary);
 }
 .prose-study h3 {
-  font-size: 1.02rem;
+  font-size: 1.03125rem;
   font-weight: 650;
   margin: 1.1rem 0 0.45rem 0;
   color: var(--fg-primary);
@@ -301,4 +302,35 @@ html, body, #root {
 }
 .is-resizing {
   user-select: none !important;
+}
+
+/* Udemy-style live playback timestamp highlight */
+.ts-pill-active {
+  background: var(--accent) !important;
+  color: #ffffff !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+/* 1-click Copy button on Markdown code blocks */
+.code-block-wrap {
+  position: relative;
+  margin: 0.9rem 0;
+}
+.code-copy-btn {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.5rem;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0.18rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--fg-secondary);
+  cursor: pointer;
+}
+.code-copy-btn:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
 }
