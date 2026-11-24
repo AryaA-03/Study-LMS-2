@@ -508,10 +508,10 @@ export const api = {
     request<any>('/api/settings/keys', { method: 'POST', body: JSON.stringify(keys) }),
   saveSettings: (payload: Record<string, any>) =>
     request<any>('/api/settings', { method: 'POST', body: JSON.stringify(payload) }),
-  testConnection: (provider = 'gemini') =>
+  testConnection: (provider = 'gemini', apiKey?: string, model?: string) =>
     request<{ success: boolean; message: string }>('/api/settings/test-connection', {
       method: 'POST',
-      body: JSON.stringify({ provider }),
+      body: JSON.stringify({ provider, api_key: apiKey, model }),
     }),
   cleanupCache: () => request<any>('/api/settings/cleanup-cache', { method: 'POST' }),
   vacuumDb: () => request<any>('/api/settings/vacuum', { method: 'POST' }),

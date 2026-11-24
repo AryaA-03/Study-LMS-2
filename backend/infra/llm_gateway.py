@@ -80,20 +80,25 @@ class LLMGateway:
         url: str,
         payload: Dict[str, Any],
         headers: Dict[str, str],
+        has_fallback: bool = False,
     ) -> httpx.Response:
         last_exc: Optional[Exception] = None
-        for attempt in range(self.max_retries):
+        retries = 1 if has_fallback else self.max_retries
+        for attempt in range(retries):
             await self._pacer.wait(provider)
             try:
                 resp = await client.post(url, json=payload, headers=headers)
                 if resp.status_code not in RETRYABLE_STATUSES:
                     return resp
+                if resp.status_code == 429 and has_fallback:
+                    logger.warning(f"LLM [{provider}] HTTP 429 quota/rate-limit; failing over immediately to next provider.")
+                    return resp
                 retry_after = resp.headers.get("Retry-After")
                 if retry_after and retry_after.isdigit():
-                    delay = min(float(retry_after), 15.0)
+                    delay = min(float(retry_after), 8.0)
                 else:
-                    delay = min(2**attempt + random.uniform(0.1, 0.5), 10.0)
-                if attempt < self.max_retries - 1:
+                    delay = min(1.5**attempt + random.uniform(0.1, 0.4), 5.0)
+                if attempt < retries - 1:
                     logger.warning(f"LLM [{provider}] HTTP {resp.status_code} on attempt {attempt+1}, retrying in {delay:.1f}s")
                     await asyncio.sleep(delay)
                 else:
@@ -130,117 +135,128 @@ class LLMGateway:
         ollama_raw = sec.get("ollama_base_url") or s.OLLAMA_BASE_URL
 
         client = self._get_client()
+        active_provider = (s.ACTIVE_LLM_PROVIDER or "auto").lower()
+        provider_order = ["gemini", "groq", "openrouter", "ollama"]
+        if active_provider in provider_order:
+            provider_order.remove(active_provider)
+            provider_order.insert(0, active_provider)
 
-        # 1. Gemini (x-goog-api-key header — never in URL query string)
-        if gemini_key:
-            model = s.GEMINI_MODEL
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-            body: Dict[str, Any] = {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "temperature": temperature,
-                    "maxOutputTokens": max_tokens,
-                },
-            }
-            if system_instruction:
-                body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
-            if json_mode:
-                body["generationConfig"]["responseMimeType"] = "application/json"
-            try:
-                resp = await self._post_with_retry(
-                    client, "gemini", url, body, {"x-goog-api-key": gemini_key}
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    candidates = data.get("candidates") or []
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts") or []
-                        if parts and parts[0].get("text"):
-                            return parts[0]["text"], f"gemini:{model}"
-            except Exception as exc:
-                logger.warning(f"Gemini call failed ({type(exc).__name__})")
+        for provider in provider_order:
+            # 1. Gemini
+            if provider == "gemini" and gemini_key:
+                model = s.GEMINI_MODEL
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                body: Dict[str, Any] = {
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "temperature": temperature,
+                        "maxOutputTokens": max_tokens,
+                    },
+                }
+                if system_instruction:
+                    body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+                if json_mode:
+                    body["generationConfig"]["responseMimeType"] = "application/json"
+                try:
+                    resp = await self._post_with_retry(
+                        client, "gemini", url, body, {"x-goog-api-key": gemini_key},
+                        has_fallback=bool(groq_key or openrouter_key),
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get("candidates") or []
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts") or []
+                            if parts and parts[0].get("text"):
+                                return parts[0]["text"], f"gemini:{model}"
+                except Exception as exc:
+                    logger.warning(f"Gemini call failed ({type(exc).__name__})")
 
-        # 2. Groq (OpenAI-compatible)
-        if groq_key:
-            model = s.GROQ_MODEL
-            messages = []
-            if system_instruction:
-                messages.append({"role": "system", "content": system_instruction})
-            messages.append({"role": "user", "content": prompt})
-            body = {
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            }
-            if json_mode:
-                body["response_format"] = {"type": "json_object"}
-            try:
-                resp = await self._post_with_retry(
-                    client,
-                    "groq",
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    body,
-                    {"Authorization": f"Bearer {groq_key}"},
-                )
-                if resp.status_code == 200:
-                    choices = resp.json().get("choices") or []
-                    if choices and choices[0].get("message", {}).get("content"):
-                        return choices[0]["message"]["content"], f"groq:{model}"
-            except Exception as exc:
-                logger.warning(f"Groq call failed ({type(exc).__name__})")
-
-        # 3. OpenRouter (OpenAI-compatible)
-        if openrouter_key:
-            model = s.OPENROUTER_MODEL
-            try:
-                base_url = validate_public_url(s.OPENROUTER_BASE_URL.rstrip("/"))
-            except Exception:
-                base_url = "https://openrouter.ai/api/v1"
-            messages = []
-            if system_instruction:
-                messages.append({"role": "system", "content": system_instruction})
-            messages.append({"role": "user", "content": prompt})
-            body = {
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            }
-            try:
-                resp = await self._post_with_retry(
-                    client,
-                    "openrouter",
-                    f"{base_url}/chat/completions",
-                    body,
-                    {"Authorization": f"Bearer {openrouter_key}"},
-                )
-                if resp.status_code == 200:
-                    choices = resp.json().get("choices") or []
-                    if choices and choices[0].get("message", {}).get("content"):
-                        return choices[0]["message"]["content"], f"openrouter:{model}"
-            except Exception as exc:
-                logger.warning(f"OpenRouter call failed ({type(exc).__name__})")
-
-        # 4. Local Ollama fallback (loopback-only in local mode)
-        if ollama_raw and os.getenv("AUTH_MODE", "local").strip().lower() == "local":
-            try:
-                ollama_base = validate_ollama_url(ollama_raw, auth_mode="local")
-                model = s.OLLAMA_MODEL
+            # 2. Groq
+            elif provider == "groq" and groq_key:
+                model = s.GROQ_MODEL
                 messages = []
                 if system_instruction:
                     messages.append({"role": "system", "content": system_instruction})
                 messages.append({"role": "user", "content": prompt})
-                body = {"model": model, "messages": messages, "stream": False}
+                body = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                }
                 if json_mode:
-                    body["format"] = "json"
-                resp = await client.post(f"{ollama_base}/api/chat", json=body, timeout=15.0)
-                if resp.status_code == 200:
-                    msg = resp.json().get("message", {}).get("content")
-                    if msg:
-                        return msg, f"ollama:{model}"
-            except Exception:
-                pass
+                    body["response_format"] = {"type": "json_object"}
+                try:
+                    resp = await self._post_with_retry(
+                        client,
+                        "groq",
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        body,
+                        {"Authorization": f"Bearer {groq_key}"},
+                        has_fallback=bool(openrouter_key),
+                    )
+                    if resp.status_code == 200:
+                        choices = resp.json().get("choices") or []
+                        if choices and choices[0].get("message", {}).get("content"):
+                            return choices[0]["message"]["content"], f"groq:{model}"
+                except Exception as exc:
+                    logger.warning(f"Groq call failed ({type(exc).__name__})")
+
+            # 3. OpenRouter
+            elif provider == "openrouter" and openrouter_key:
+                model = s.OPENROUTER_MODEL
+                try:
+                    base_url = validate_public_url(s.OPENROUTER_BASE_URL.rstrip("/"))
+                except Exception:
+                    base_url = "https://openrouter.ai/api/v1"
+                messages = []
+                if system_instruction:
+                    messages.append({"role": "system", "content": system_instruction})
+                messages.append({"role": "user", "content": prompt})
+                body = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                }
+                try:
+                    resp = await self._post_with_retry(
+                        client,
+                        "openrouter",
+                        f"{base_url}/chat/completions",
+                        body,
+                        {"Authorization": f"Bearer {openrouter_key}"},
+                    )
+                    if resp.status_code == 200:
+                        choices = resp.json().get("choices") or []
+                        if choices:
+                            msg = choices[0].get("message") or {}
+                            text = msg.get("content") or msg.get("reasoning")
+                            if text:
+                                return text, f"openrouter:{model}"
+                except Exception as exc:
+                    logger.warning(f"OpenRouter call failed ({type(exc).__name__})")
+
+            # 4. Ollama
+            elif provider == "ollama" and ollama_raw and os.getenv("AUTH_MODE", "local").strip().lower() == "local":
+                try:
+                    ollama_base = validate_ollama_url(ollama_raw, auth_mode="local")
+                    model = s.OLLAMA_MODEL
+                    messages = []
+                    if system_instruction:
+                        messages.append({"role": "system", "content": system_instruction})
+                    messages.append({"role": "user", "content": prompt})
+                    body = {"model": model, "messages": messages, "stream": False}
+                    if json_mode:
+                        body["format"] = "json"
+                    resp = await client.post(f"{ollama_base}/api/chat", json=body, timeout=15.0)
+                    if resp.status_code == 200:
+                        msg = resp.json().get("message", {}).get("content")
+                        if msg:
+                            return msg, f"ollama:{model}"
+                except Exception:
+                    pass
 
         return None, None
 

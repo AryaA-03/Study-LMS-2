@@ -169,6 +169,7 @@ async def process_remaining_concept_bundles(
     course_id: str,
     db: Optional[sqlite3.Connection] = None,
     job_id: Optional[str] = None,
+    db_path: Optional[Path] = None,
 ) -> None:
     """Silently processes remaining Concept Clips in a resumable background queue without holding SQLite locks."""
     from backend.infra.job_queue import update_job_progress

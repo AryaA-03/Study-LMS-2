@@ -155,6 +155,10 @@ class Settings:
         return LOCAL_TZ
 
     @property
+    def ACTIVE_LLM_PROVIDER(self) -> str:
+        return os.getenv("ACTIVE_LLM_PROVIDER") or ENV_VARS.get("ACTIVE_LLM_PROVIDER") or "auto"
+
+    @property
     def GEMINI_API_KEY(self) -> Optional[str]:
         return os.getenv("GEMINI_API_KEY") or ENV_VARS.get("GEMINI_API_KEY")
 

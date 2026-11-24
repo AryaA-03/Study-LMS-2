@@ -249,28 +249,121 @@ def _group_words_into_chunks(
 # Caption Fetching via yt-dlp (Captions First, Zero Video Download)
 # ---------------------------------------------------------------------------
 
+def _parse_description_timestamps(description: str, total_duration: int) -> List[Dict[str, Any]]:
+    """Parse YouTube description timestamp lines like '00:15:30 SDLC Waterfall Model' into chapter dicts."""
+    if not description:
+        return []
+    ts_line_re = re.compile(
+        r"(?:^|\n)\s*(?:[-•*]\s*)?(?:\[)?(\d{1,2}:\d{2}(?::\d{2})?)(?:\])?\s*[-–—:|]?\s*([^\n]{3,120})"
+    )
+    raw_points: List[Tuple[int, str]] = []
+    for m in ts_line_re.finditer(description):
+        parts = [int(x) for x in m.group(1).split(":")]
+        sec = parts[0] * 3600 + parts[1] * 60 + parts[2] if len(parts) == 3 else parts[0] * 60 + parts[1]
+        label = re.sub(r"\s+", " ", m.group(2)).strip(" -–—:|•*")
+        if label and not label.startswith("http"):
+            raw_points.append((sec, label))
+    if len(raw_points) < 2:
+        return []
+    # Sort & deduplicate by start_sec
+    raw_points.sort(key=lambda x: x[0])
+    dedup: List[Tuple[int, str]] = []
+    for sec, label in raw_points:
+        if not dedup or sec - dedup[-1][0] >= 30:
+            dedup.append((sec, label))
+    if len(dedup) < 2:
+        return []
+    chapters: List[Dict[str, Any]] = []
+    dur = max(total_duration or 0, dedup[-1][0] + 300)
+    for i, (st, label) in enumerate(dedup):
+        en = dedup[i + 1][0] if i + 1 < len(dedup) else dur
+        if en > st:
+            chapters.append({"title": label, "start_time": st, "end_time": en})
+    return chapters
+
+
+def extract_youtube_chapters(video_url_or_id: str) -> Tuple[List[Dict[str, Any]], int]:
+    """Extract official YouTube chapters or description timestamps via yt-dlp (immune to timedtext 429)."""
+    video_url = video_url_or_id
+    if not video_url.startswith("http"):
+        video_url = f"https://www.youtube.com/watch?v={video_url_or_id}"
+    try:
+        with yt_dlp.YoutubeDL({"skip_download": True, "quiet": True, "no_warnings": True}) as ydl:
+            info = ydl.extract_info(video_url, download=False) or {}
+        dur = int(info.get("duration") or 0)
+        chapters = info.get("chapters") or []
+        if chapters and len(chapters) >= 2:
+            return chapters, dur
+        desc_chapters = _parse_description_timestamps(info.get("description") or "", dur)
+        return desc_chapters, dur
+    except Exception as e:
+        logger.warning(f"yt-dlp chapter metadata extraction failed for {video_url_or_id}: {e}")
+        return [], 0
+
+
+def _download_subtitles_via_ytdlp(video_url: str, start_sec: int, end_sec: int) -> Optional[List[Dict[str, Any]]]:
+    """Fallback: let yt-dlp natively download subtitles to a temp dir (avoids raw httpx timedtext 429s)."""
+    try:
+        with tempfile.TemporaryDirectory(prefix="lms_subs_") as tmpdir:
+            ydl_opts = {
+                "skip_download": True,
+                "writesubtitles": True,
+                "writeautomaticsub": True,
+                "subtitleslangs": ["en", "en-orig", "en-IN", "hi", "hi-orig"],
+                "subtitlesformat": "json3/vtt/best",
+                "outtmpl": str(Path(tmpdir) / "sub.%(ext)s"),
+                "quiet": True,
+                "no_warnings": True,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([video_url])
+            files = sorted(Path(tmpdir).glob("sub*"))
+            # Prefer json3, then vtt
+            for ext in (".json3", ".vtt"):
+                for fp in files:
+                    if fp.name.endswith(ext):
+                        raw = fp.read_text(encoding="utf-8", errors="replace")
+                        if ext == ".json3":
+                            chunks = parse_and_deduplicate_json3(json.loads(raw), start_sec=start_sec, end_sec=end_sec)
+                        else:
+                            chunks = parse_and_deduplicate_vtt(raw, start_sec=start_sec, end_sec=end_sec)
+                        if chunks:
+                            return chunks
+    except Exception as exc:
+        logger.warning(f"yt-dlp native subtitle download fallback failed: {exc}")
+    return None
+
+
 async def fetch_youtube_captions(
     video_url_or_id: str,
     start_sec: int = 0,
     end_sec: Optional[int] = sys.maxsize,
 ) -> Optional[List[Dict[str, Any]]]:
-    """Fetches manual or auto-generated captions for a YouTube video.
-    
-    Prefers json3 for exact word-level timing, falls back to vtt.
-    Returns chunked transcript dicts, or None if no captions exist.
-    """
+    """Fetches manual or auto-generated captions for a YouTube video with disk cache, native-track preference, and yt-dlp fallback."""
     start_sec = max(0, int(start_sec or 0))
     end_sec = int(end_sec) if (end_sec is not None and int(end_sec) > start_sec) else sys.maxsize
     video_url = video_url_or_id
+    vid_id = video_url_or_id
     if not video_url.startswith("http"):
         video_url = f"https://www.youtube.com/watch?v={video_url_or_id}"
+    else:
+        m = re.search(r"(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})", video_url)
+        if m:
+            vid_id = m.group(1)
 
-    ydl_opts = {
-        "skip_download": True,
-        "quiet": True,
-        "no_warnings": True,
-    }
+    # 0. Check on-disk full-video caption cache first (zero network / zero 429!)
+    cache_file = get_caption_cache_path(vid_id)
+    if cache_file.exists():
+        try:
+            cached_all = json.loads(cache_file.read_text(encoding="utf-8"))
+            if isinstance(cached_all, list) and cached_all:
+                sliced = [c for c in cached_all if int(c.get("start_sec", 0)) >= start_sec and int(c.get("start_sec", 0)) <= end_sec]
+                if sliced:
+                    return sliced
+        except Exception:
+            pass
 
+    ydl_opts = {"skip_download": True, "quiet": True, "no_warnings": True}
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
@@ -281,10 +374,18 @@ async def fetch_youtube_captions(
     subtitles = info.get("subtitles") or {}
     auto_captions = info.get("automatic_captions") or {}
 
-    # Prefer English/Hinglish/Hindi manual captions, then auto-captions (handles en-IN, en-orig, hi, hi-orig)
+    def _is_translated(fmts: list) -> bool:
+        return any("tlang=" in (f.get("url") or "") for f in fmts if isinstance(f, dict))
+
     def _pick_track(track_map: dict):
         if not track_map:
             return None
+        # First pass: prefer NATIVE (non-tlang) tracks so YouTube doesn't 429 server-side translation!
+        for code in ("en-orig", "en", "en-IN", "en-US", "hi-orig", "hi"):
+            fmts = track_map.get(code)
+            if fmts and not _is_translated(fmts):
+                return fmts
+        # Second pass: any en/hi track (including translated)
         for code in ("en", "en-orig", "en-IN", "en-US", "en-GB", "hi", "hi-orig"):
             if track_map.get(code):
                 return track_map[code]
@@ -294,41 +395,49 @@ async def fetch_youtube_captions(
         return next(iter(track_map.values()), None)
 
     en_formats = _pick_track(subtitles) or _pick_track(auto_captions)
+    full_chunks: Optional[List[Dict[str, Any]]] = None
 
-    if not en_formats:
-        logger.info(f"No subtitle tracks found for video {video_url_or_id}")
+    if en_formats:
+        req_headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9,hi;q=0.8",
+        }
+        json3_fmt = next((f for f in en_formats if f.get("ext") == "json3"), None)
+        if json3_fmt and json3_fmt.get("url"):
+            try:
+                async with httpx.AsyncClient(timeout=15.0, headers=req_headers) as client:
+                    resp = await client.get(json3_fmt["url"])
+                    if resp.status_code == 200:
+                        full_chunks = parse_and_deduplicate_json3(resp.json(), start_sec=0, end_sec=sys.maxsize)
+            except Exception as e:
+                logger.warning(f"Failed to parse json3 captions: {e}; falling back to vtt")
+
+        if not full_chunks:
+            vtt_fmt = next((f for f in en_formats if f.get("ext") == "vtt"), None)
+            if vtt_fmt and vtt_fmt.get("url"):
+                try:
+                    async with httpx.AsyncClient(timeout=15.0, headers=req_headers) as client:
+                        resp = await client.get(vtt_fmt["url"])
+                        if resp.status_code == 200:
+                            full_chunks = parse_and_deduplicate_vtt(resp.text, start_sec=0, end_sec=sys.maxsize)
+                except Exception as e:
+                    logger.warning(f"Failed to parse VTT captions: {e}")
+
+    # Fallback: yt-dlp native subtitle download (bypasses raw httpx timedtext 429s)
+    if not full_chunks:
+        import asyncio
+        full_chunks = await asyncio.to_thread(_download_subtitles_via_ytdlp, video_url, 0, sys.maxsize)
+
+    if not full_chunks:
         return None
 
-    # Check for json3 first
-    json3_fmt = next((f for f in en_formats if f.get("ext") == "json3"), None)
-    if json3_fmt and json3_fmt.get("url"):
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.get(json3_fmt["url"])
-                if resp.status_code == 200:
-                    data = resp.json()
-                    chunks = parse_and_deduplicate_json3(data, start_sec=start_sec, end_sec=end_sec)
-                    if chunks:
-                        logger.info(f"Successfully extracted {len(chunks)} chunks from json3 captions for {video_url_or_id}")
-                        return chunks
-        except Exception as e:
-            logger.warning(f"Failed to parse json3 captions: {e}; falling back to vtt")
+    # Save full-video chunks to disk cache
+    try:
+        cache_file.write_text(json.dumps(full_chunks), encoding="utf-8")
+    except Exception:
+        pass
 
-    # Fallback to VTT
-    vtt_fmt = next((f for f in en_formats if f.get("ext") == "vtt"), None)
-    if vtt_fmt and vtt_fmt.get("url"):
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.get(vtt_fmt["url"])
-                if resp.status_code == 200:
-                    chunks = parse_and_deduplicate_vtt(resp.text, start_sec=start_sec, end_sec=end_sec)
-                    if chunks:
-                        logger.info(f"Successfully extracted {len(chunks)} chunks from VTT captions for {video_url_or_id}")
-                        return chunks
-        except Exception as e:
-            logger.error(f"Failed to parse VTT captions: {e}")
-
-    return None
+    return [c for c in full_chunks if int(c.get("start_sec", 0)) >= start_sec and int(c.get("start_sec", 0)) <= end_sec]
 
 
 # ---------------------------------------------------------------------------

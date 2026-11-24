@@ -202,6 +202,7 @@ class SystemSettingsResponse(BaseModel):
     db_size_bytes: int
     transcripts_size_bytes: int
     screenshots_size_bytes: int
+    active_llm_provider: str = "auto"
     has_gemini_key: bool
     has_groq_key: bool
     has_openrouter_key: bool
@@ -218,6 +219,7 @@ class SystemSettingsResponse(BaseModel):
     default_revision_buffer_days: int = 2
 
 class UpdateSettingsRequest(BaseModel):
+    active_llm_provider: Optional[str] = None
     cookies_browser: Optional[str] = Field(None, description="Browser name for --cookies-from-browser (e.g. 'chrome', 'firefox', 'safari', 'brave')")
     minutes_per_day: Optional[int] = Field(None, ge=10, le=720)
     playback_speed: Optional[float] = Field(None, ge=0.5, le=3.0)

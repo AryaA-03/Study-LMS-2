@@ -515,58 +515,51 @@ export const App: React.FC = () => {
                 </span>
               </div>
 
-              {/* Live Schedule Telemetry */}
-              <div
+              {/* Compact Live Schedule Pill (Zero Overlap at 1280px & 1440px) */}
+              <button
+                type="button"
                 onClick={() => setModal('edit-course')}
                 title="Click to edit Exam Date, Pace & Rest Days"
-                className="hidden cursor-pointer items-center gap-2.5 whitespace-nowrap rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2.5 py-1 text-xs text-[var(--fg-secondary)] hover:border-[var(--accent)] lg:flex"
+                className="hidden min-w-0 max-w-[360px] truncate items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-1 text-xs text-[var(--fg-secondary)] hover:border-[var(--accent)] lg:inline-flex"
               >
-                <span>
-                  Study Left: <strong className="text-[var(--fg-primary)]">{formatHoursMin(remainingMin)}</strong>
+                <span className="shrink-0">
+                  <strong className="text-[var(--fg-primary)]">{formatHoursMin(remainingMin)}</strong> left
                 </span>
                 {schedule?.projected_finish_date && (
-                  <span>
-                    • Finish: <strong className="text-[var(--success)]">{schedule.projected_finish_date}</strong>
+                  <span className="shrink-0">
+                    · Finish <strong className="text-[var(--success)]">{schedule.projected_finish_date}</strong>
                   </span>
                 )}
                 {activeCourse.target_date && (
-                  <span>
-                    • Exam: <strong className="text-[var(--accent)]">{activeCourse.target_date}</strong>
+                  <span className="hidden xl:inline shrink-0">
+                    · Exam <strong className="text-[var(--accent)]">{activeCourse.target_date}</strong>
                   </span>
                 )}
-                <span className="hidden xl:inline">
-                  • Pace: <strong className="text-[var(--fg-primary)]">{activeCourse.minutes_per_day || 60}m@{activeCourse.playback_speed || 1}x</strong>
-                </span>
-              </div>
+              </button>
             </div>
           )}
         </div>
 
-        {/* Right: + New Goal, Cram Sheet, Mock Exam, Edit Course, Settings, Toggle Studio, Theme */}
+        {/* Right: Whisper-quiet 5-control bar (Cram Sheet, Plan ▾, Focus, Settings, Studio, Theme) */}
         <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setModal('new-course')}
-            className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent)] px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:opacity-90"
-          >
-            <Plus className="h-3.5 w-3.5" /> New Goal
-          </button>
+          {!activeCourse && (
+            <button
+              type="button"
+              onClick={() => setModal('new-course')}
+              className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[var(--accent-hover)]"
+            >
+              <Plus className="h-3.5 w-3.5" /> New Goal
+            </button>
+          )}
 
           {activeCourse && (
             <>
               <button
                 type="button"
                 onClick={() => setModal('cram')}
-                className="inline-flex items-center gap-1 rounded-lg border border-amber-500/35 bg-amber-500/10 px-2.5 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-500/20"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300 hover:bg-amber-500/20"
               >
                 <FileSpreadsheet className="h-3.5 w-3.5" /> Cram Sheet
-              </button>
-              <button
-                type="button"
-                onClick={() => setModal('mock_exam')}
-                className="hidden sm:inline-flex items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2.5 py-1.5 text-xs font-semibold text-[var(--fg-primary)] hover:bg-[var(--bg-hover)]"
-              >
-                <GraduationCap className="h-3.5 w-3.5" /> Mock Exam
               </button>
               <div className="relative">
                 <button
@@ -578,9 +571,24 @@ export const App: React.FC = () => {
                 </button>
                 {planMenuOpen && (
                   <div
-                    className="absolute right-0 top-10 z-40 w-60 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-card)] p-1.5 shadow-xl text-xs"
+                    className="absolute right-0 top-10 z-40 w-64 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-card)] p-1.5 shadow-xl text-xs"
                     onMouseLeave={() => setPlanMenuOpen(false)}
                   >
+                    <button
+                      type="button"
+                      onClick={() => { setPlanMenuOpen(false); setModal('new-course'); }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left font-semibold text-[var(--accent-text)] hover:bg-[var(--accent-soft)]"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> New Study Goal / Course
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setPlanMenuOpen(false); setModal('mock_exam'); }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-hover)]"
+                    >
+                      <GraduationCap className="h-3.5 w-3.5 text-[var(--accent)]" /> Timed Mock Exam
+                    </button>
+                    <div className="my-1 h-px bg-[var(--border-subtle)]" />
                     <button
                       type="button"
                       onClick={() => { setPlanMenuOpen(false); setModal('edit-course'); }}

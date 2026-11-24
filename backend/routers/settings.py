@@ -81,6 +81,7 @@ def get_system_settings(db: sqlite3.Connection = Depends(get_db)):
         db_size_bytes=db_size,
         transcripts_size_bytes=transcripts_size,
         screenshots_size_bytes=screenshots_size,
+        active_llm_provider=ENV_VARS.get("ACTIVE_LLM_PROVIDER", "auto"),
         has_gemini_key=has_gemini,
         has_groq_key=has_groq,
         has_openrouter_key=has_openrouter,
@@ -152,6 +153,7 @@ def update_settings(
 
     # Model and Base URL updates in .env
     env_updates = {}
+    if req.active_llm_provider: env_updates["ACTIVE_LLM_PROVIDER"] = req.active_llm_provider.strip().lower()
     if req.gemini_model: env_updates["GEMINI_MODEL"] = req.gemini_model
     if req.groq_model: env_updates["GROQ_MODEL"] = req.groq_model
     if req.openrouter_model: env_updates["OPENROUTER_MODEL"] = req.openrouter_model
@@ -201,7 +203,7 @@ async def test_connection(req: TestConnectionRequest):
                 if r.status_code == 200:
                     return TestConnectionResponse(
                         success=True, provider="gemini",
-                        message=f"Connection verified: Google Gemini API responded successfully ({req.model or 'gemini-2.5-flash'} ready)."
+                        message=f"Connection verified: Google Gemini API responded successfully ({req.model or cfg.GEMINI_MODEL} ready)."
                     )
                 elif r.status_code == 400:
                     return TestConnectionResponse(
@@ -268,7 +270,7 @@ async def test_connection(req: TestConnectionRequest):
                 if r.status_code == 200:
                     return TestConnectionResponse(
                         success=True, provider="openrouter",
-                        message=f"Connection verified: OpenRouter API responded successfully ({req.model or 'google/gemini-2.5-flash'} available)."
+                        message=f"Connection verified: OpenRouter API responded successfully ({req.model or cfg.OPENROUTER_MODEL} available)."
                     )
                 else:
                     return TestConnectionResponse(
@@ -346,7 +348,8 @@ def update_api_keys(keys: Dict[str, str]):
     allowed_keys = {
         "GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY",
         "OLLAMA_BASE_URL", "GEMINI_MODEL", "GROQ_MODEL",
-        "OPENROUTER_MODEL", "OPENROUTER_BASE_URL", "OLLAMA_MODEL"
+        "OPENROUTER_MODEL", "OPENROUTER_BASE_URL", "OLLAMA_MODEL",
+        "ACTIVE_LLM_PROVIDER"
     }
     filtered_updates = {k: v for k, v in keys.items() if k in allowed_keys}
     if filtered_updates.get("OPENROUTER_BASE_URL"):

@@ -120,63 +120,71 @@ Output pure JSON adhering to this exact schema:
     groq_key = get_settings().GROQ_API_KEY
     openrouter_key = get_settings().OPENROUTER_API_KEY
 
+    active_provider = (get_settings().ACTIVE_LLM_PROVIDER or "auto").lower()
+    providers = ["gemini", "groq", "openrouter"]
+    if active_provider in providers:
+        providers.remove(active_provider)
+        providers.insert(0, active_provider)
+
     async with httpx.AsyncClient(timeout=25.0) as client:
-        if api_key:
-            try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-                _gemini_headers = {"x-goog-api-key": api_key}
-                payload = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "systemInstruction": {"parts": [{"text": system_instruction}]},
-                    "generationConfig": {"responseMimeType": "application/json", "temperature": 0.1}
-                }
-                resp = await client.post(url, json=payload, headers=_gemini_headers)
-                if resp.status_code == 200:
-                    raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-                    return json.loads(raw_text)
-                else:
-                    logger.warning(f"Gemini rubric eval returned {resp.status_code}; trying fallback providers")
-            except Exception as e:
-                logger.warning(f"Gemini rubric eval failed: {e}; trying fallback providers")
+        for p in providers:
+            if p == "gemini" and api_key:
+                try:
+                    gemini_model = get_settings().GEMINI_MODEL
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent"
+                    _gemini_headers = {"x-goog-api-key": api_key}
+                    payload = {
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "systemInstruction": {"parts": [{"text": system_instruction}]},
+                        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.1}
+                    }
+                    resp = await client.post(url, json=payload, headers=_gemini_headers)
+                    if resp.status_code == 200:
+                        raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                        return json.loads(raw_text)
+                    else:
+                        logger.warning(f"Gemini rubric eval returned {resp.status_code}; trying fallback providers")
+                except Exception as e:
+                    logger.warning(f"Gemini rubric eval failed: {e}; trying fallback providers")
 
-        if groq_key:
-            try:
-                url = "https://api.groq.com/openai/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
-                payload = {
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}],
-                    "response_format": {"type": "json_object"},
-                    "temperature": 0.1
-                }
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    raw_text = resp.json()["choices"][0]["message"]["content"]
-                    return json.loads(raw_text)
-                else:
-                    logger.warning(f"Groq rubric eval returned {resp.status_code}; trying fallback providers")
-            except Exception as e:
-                logger.warning(f"Groq rubric eval failed: {e}; trying fallback providers")
+            elif p == "groq" and groq_key:
+                try:
+                    url = "https://api.groq.com/openai/v1/chat/completions"
+                    headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+                    payload = {
+                        "model": get_settings().GROQ_MODEL,
+                        "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}],
+                        "response_format": {"type": "json_object"},
+                        "temperature": 0.1
+                    }
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        raw_text = resp.json()["choices"][0]["message"]["content"]
+                        return json.loads(raw_text)
+                    else:
+                        logger.warning(f"Groq rubric eval returned {resp.status_code}; trying fallback providers")
+                except Exception as e:
+                    logger.warning(f"Groq rubric eval failed: {e}; trying fallback providers")
 
-        if openrouter_key:
-            try:
-                url = "https://openrouter.ai/api/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {openrouter_key}", "Content-Type": "application/json"}
-                payload = {
-                    "model": "google/gemini-2.5-flash",
-                    "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}],
-                    "response_format": {"type": "json_object"},
-                    "temperature": 0.1
-                }
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    raw_text = resp.json()["choices"][0]["message"]["content"]
-                    return json.loads(raw_text)
-                else:
-                    logger.warning(f"OpenRouter rubric eval returned {resp.status_code}")
-            except Exception as e:
-                logger.warning(f"OpenRouter rubric eval failed: {e}")
-    return {}
+            elif p == "openrouter" and openrouter_key:
+                try:
+                    url = "https://openrouter.ai/api/v1/chat/completions"
+                    headers = {"Authorization": f"Bearer {openrouter_key}", "Content-Type": "application/json"}
+                    payload = {
+                        "model": get_settings().OPENROUTER_MODEL,
+                        "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}],
+                        "response_format": {"type": "json_object"},
+                        "temperature": 0.1
+                    }
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        raw_text = resp.json()["choices"][0]["message"]["content"]
+                        return json.loads(raw_text)
+                    else:
+                        logger.warning(f"OpenRouter rubric eval returned {resp.status_code}")
+                except Exception as e:
+                    logger.warning(f"OpenRouter rubric eval failed: {e}")
+        return {}
 
 
 def evaluate_short_answer_with_rubric(
@@ -230,7 +238,7 @@ def evaluate_short_answer_with_rubric(
                 eval_res["question_id"] = q_id
                 eval_res["max_marks"] = max_marks
                 if conn is not None:
-                    set_cached_response(conn, prompt_hash, "gemini-2.5-flash", json.dumps(eval_res))
+                    set_cached_response(conn, prompt_hash, get_settings().GEMINI_MODEL, json.dumps(eval_res))
                 return eval_res
         except Exception as e:
             logger.warning(f"LLM rubric grading failed ({e}); falling back to deterministic evaluator.")
@@ -608,85 +616,92 @@ Output pure JSON adhering to this schema:
     try:
         async with httpx.AsyncClient(timeout=35.0) as client:
             llm_qs = []
-            if api_key:
-                try:
-                    model_used = "gemini-2.5-flash"
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent"
-                    _gemini_headers = {"x-goog-api-key": api_key}
-                    payload = {
-                        "contents": [{"parts": [{"text": prompt}]}],
-                        "systemInstruction": {"parts": [{"text": system_instruction}]},
-                        "generationConfig": {
-                            "responseMimeType": "application/json",
+            active_p = (get_settings().ACTIVE_LLM_PROVIDER or "auto").lower()
+            providers = ["gemini", "groq", "openrouter"]
+            if active_p in providers:
+                providers.remove(active_p)
+                providers.insert(0, active_p)
+
+            for p in providers:
+                if p == "gemini" and not llm_qs and api_key:
+                    try:
+                        model_used = get_settings().GEMINI_MODEL
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_used}:generateContent"
+                        _gemini_headers = {"x-goog-api-key": api_key}
+                        payload = {
+                            "contents": [{"parts": [{"text": prompt}]}],
+                            "systemInstruction": {"parts": [{"text": system_instruction}]},
+                            "generationConfig": {
+                                "responseMimeType": "application/json",
+                                "temperature": 0.2
+                            }
+                        }
+                        resp = await client.post(url, json=payload, headers=_gemini_headers)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                            parsed = json.loads(raw_text)
+                            llm_qs = parsed.get("questions", [])
+                        else:
+                            logger.warning(f"Gemini API returned status {resp.status_code}: {resp.text[:200]}; trying fallback")
+                    except Exception as e:
+                        logger.warning(f"Gemini quiz call failed: {e}; trying fallback")
+
+                elif p == "groq" and not llm_qs and groq_key:
+                    try:
+                        model_used = get_settings().GROQ_MODEL
+                        url = "https://api.groq.com/openai/v1/chat/completions"
+                        headers = {
+                            "Authorization": f"Bearer {groq_key}",
+                            "Content-Type": "application/json"
+                        }
+                        payload = {
+                            "model": model_used,
+                            "messages": [
+                                {"role": "system", "content": system_instruction},
+                                {"role": "user", "content": prompt}
+                            ],
+                            "response_format": {"type": "json_object"},
                             "temperature": 0.2
                         }
-                    }
-                    resp = await client.post(url, json=payload, headers=_gemini_headers)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-                        parsed = json.loads(raw_text)
-                        llm_qs = parsed.get("questions", [])
-                    else:
-                        logger.warning(f"Gemini API returned status {resp.status_code}: {resp.text[:200]}; trying fallback")
-                except Exception as e:
-                    logger.warning(f"Gemini quiz call failed: {e}; trying fallback")
+                        resp = await client.post(url, json=payload, headers=headers)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            raw_text = data["choices"][0]["message"]["content"]
+                            parsed = json.loads(raw_text)
+                            llm_qs = parsed.get("questions", [])
+                        else:
+                            logger.warning(f"Groq API returned status {resp.status_code}: {resp.text[:200]}; trying fallback")
+                    except Exception as e:
+                        logger.warning(f"Groq quiz call failed: {e}; trying fallback")
 
-            if not llm_qs and groq_key:
-                try:
-                    model_used = "llama-3.3-70b-versatile"
-                    url = "https://api.groq.com/openai/v1/chat/completions"
-                    headers = {
-                        "Authorization": f"Bearer {groq_key}",
-                        "Content-Type": "application/json"
-                    }
-                    payload = {
-                        "model": model_used,
-                        "messages": [
-                            {"role": "system", "content": system_instruction},
-                            {"role": "user", "content": prompt}
-                        ],
-                        "response_format": {"type": "json_object"},
-                        "temperature": 0.2
-                    }
-                    resp = await client.post(url, json=payload, headers=headers)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        raw_text = data["choices"][0]["message"]["content"]
-                        parsed = json.loads(raw_text)
-                        llm_qs = parsed.get("questions", [])
-                    else:
-                        logger.warning(f"Groq API returned status {resp.status_code}: {resp.text[:200]}; trying fallback")
-                except Exception as e:
-                    logger.warning(f"Groq quiz call failed: {e}; trying fallback")
-
-            if not llm_qs and openrouter_key:
-                try:
-                    model_used = "google/gemini-2.5-flash"
-                    url = "https://openrouter.ai/api/v1/chat/completions"
-                    headers = {
-                        "Authorization": f"Bearer {openrouter_key}",
-                        "Content-Type": "application/json"
-                    }
-                    payload = {
-                        "model": model_used,
-                        "messages": [
-                            {"role": "system", "content": system_instruction},
-                            {"role": "user", "content": prompt}
-                        ],
-                        "response_format": {"type": "json_object"},
-                        "temperature": 0.2
-                    }
-                    resp = await client.post(url, json=payload, headers=headers)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        raw_text = data["choices"][0]["message"]["content"]
-                        parsed = json.loads(raw_text)
-                        llm_qs = parsed.get("questions", [])
-                    else:
-                        logger.warning(f"OpenRouter API returned status {resp.status_code}: {resp.text[:200]}")
-                except Exception as e:
-                    logger.warning(f"OpenRouter quiz call failed: {e}")
+                elif p == "openrouter" and not llm_qs and openrouter_key:
+                    try:
+                        model_used = get_settings().OPENROUTER_MODEL
+                        url = "https://openrouter.ai/api/v1/chat/completions"
+                        headers = {
+                            "Authorization": f"Bearer {openrouter_key}",
+                            "Content-Type": "application/json"
+                        }
+                        payload = {
+                            "model": model_used,
+                            "messages": [
+                                {"role": "system", "content": system_instruction},
+                                {"role": "user", "content": prompt}
+                            ],
+                            "response_format": {"type": "json_object"},
+                            "temperature": 0.2
+                        }
+                        resp = await client.post(url, json=payload, headers=headers)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            raw_text = data["choices"][0]["message"]["content"]
+                            parsed = json.loads(raw_text)
+                            llm_qs = parsed.get("questions", [])
+                        else:
+                            logger.warning(f"OpenRouter API returned status {resp.status_code}: {resp.text[:200]}; trying fallback")
+                    except Exception as e:
+                        logger.warning(f"OpenRouter quiz call failed: {e}; trying fallback")
 
             verified_qs = []
             for idx, q in enumerate(llm_qs):
@@ -807,56 +822,63 @@ async def _generate_diagnostic_questions_llm(
     raw_response = None
     model_used = None
 
+    active_p = (get_settings().ACTIVE_LLM_PROVIDER or "auto").lower()
+    providers = ["gemini", "groq", "openrouter"]
+    if active_p in providers:
+        providers.remove(active_p)
+        providers.insert(0, active_p)
+
     async with httpx.AsyncClient(timeout=25.0) as client:
-        if api_key:
-            try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-                _gemini_headers = {"x-goog-api-key": api_key}
-                payload = {
-                    "contents": [{"parts": [{"text": user_prompt}]}],
-                    "systemInstruction": {"parts": [{"text": system_instruction}]},
-                    "generationConfig": {"responseMimeType": "application/json", "temperature": 0.15}
-                }
-                resp = await client.post(url, json=payload, headers=_gemini_headers)
-                if resp.status_code == 200:
-                    raw_response = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-                    model_used = "gemini-2.5-flash"
-            except Exception as e:
-                logger.warning(f"Gemini diagnostic generation failed: {e}; trying fallback")
+        for p in providers:
+            if p == "gemini" and not raw_response and api_key:
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{get_settings().GEMINI_MODEL}:generateContent"
+                    _gemini_headers = {"x-goog-api-key": api_key}
+                    payload = {
+                        "contents": [{"parts": [{"text": user_prompt}]}],
+                        "systemInstruction": {"parts": [{"text": system_instruction}]},
+                        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.15}
+                    }
+                    resp = await client.post(url, json=payload, headers=_gemini_headers)
+                    if resp.status_code == 200:
+                        raw_response = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                        model_used = get_settings().GEMINI_MODEL
+                except Exception as e:
+                    logger.warning(f"Gemini diagnostic generation failed: {e}; trying fallback")
 
-        if not raw_response and groq_key:
-            try:
-                url = "https://api.groq.com/openai/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
-                payload = {
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_prompt}],
-                    "response_format": {"type": "json_object"},
-                    "temperature": 0.15
-                }
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    raw_response = resp.json()["choices"][0]["message"]["content"]
-                    model_used = "groq-llama-3.3-70b"
-            except Exception as e:
-                logger.warning(f"Groq diagnostic generation failed: {e}; trying fallback")
+            elif p == "groq" and not raw_response and groq_key:
+                try:
+                    url = "https://api.groq.com/openai/v1/chat/completions"
+                    headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+                    payload = {
+                        "model": get_settings().GROQ_MODEL,
+                        "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_prompt}],
+                        "response_format": {"type": "json_object"},
+                        "temperature": 0.15
+                    }
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        raw_response = resp.json()["choices"][0]["message"]["content"]
+                        model_used = f"groq-{get_settings().GROQ_MODEL}"
+                except Exception as e:
+                    logger.warning(f"Groq diagnostic generation failed: {e}; trying fallback")
 
-        if not raw_response and openrouter_key:
-            try:
-                url = "https://openrouter.ai/api/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {openrouter_key}", "Content-Type": "application/json"}
-                payload = {
-                    "model": "google/gemini-2.5-flash",
-                    "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_prompt}],
-                    "response_format": {"type": "json_object"},
-                    "temperature": 0.15
-                }
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    raw_response = resp.json()["choices"][0]["message"]["content"]
-                    model_used = "openrouter-gemini-2.5-flash"
-            except Exception as e:
-                logger.warning(f"OpenRouter diagnostic generation failed: {e}")
+            elif p == "openrouter" and not raw_response and openrouter_key:
+                try:
+                    url = "https://openrouter.ai/api/v1/chat/completions"
+                    headers = {"Authorization": f"Bearer {openrouter_key}", "Content-Type": "application/json"}
+                    payload = {
+                        "model": get_settings().OPENROUTER_MODEL,
+                        "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": user_prompt}],
+                        "response_format": {"type": "json_object"},
+                        "temperature": 0.15
+                    }
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        raw_response = resp.json()["choices"][0]["message"]["content"]
+                        model_used = f"openrouter-{get_settings().OPENROUTER_MODEL}"
+                except Exception as e:
+                    logger.warning(f"OpenRouter diagnostic generation failed: {e}")
 
     if not raw_response:
         return []

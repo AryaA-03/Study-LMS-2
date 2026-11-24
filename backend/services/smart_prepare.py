@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from backend.infra.job_queue import enqueue_job, update_job_progress
 from backend.services.concept_partitioner import partition_video_async
 from backend.services.topic_grouper import cluster_course_topics
-from backend.services.transcription import fetch_youtube_captions
+from backend.services.transcription import fetch_youtube_captions, extract_youtube_chapters
 
 logger = logging.getLogger("learn_lms.smart_prepare")
 
@@ -113,12 +113,17 @@ async def smart_prepare_course(
             update_job_progress(db, job_id, "running", 20 + int((s_idx / total_targets) * 30), f"Fetching subtitles ({s_idx}/{total_targets})...")
 
         transcript_chunks = await fetch_youtube_captions(vid_id or vid_url, start_sec=0, end_sec=total_dur + 600)
-        if not transcript_chunks:
-            logger.info(f"[SmartPrepare] No captions available for {vid_id or vid_url}; skipping repartition.")
+        import asyncio as _aio
+        yt_chapters, detected_dur = await _aio.to_thread(extract_youtube_chapters, vid_id or vid_url)
+        if detected_dur and detected_dur > total_dur:
+            total_dur = detected_dur
+
+        if not transcript_chunks and not yt_chapters:
+            logger.info(f"[SmartPrepare] Neither captions nor chapters available for {vid_id or vid_url}; skipping repartition.")
             continue
 
         if job_id:
-            update_job_progress(db, job_id, "running", 50 + int((s_idx / total_targets) * 25), "Analyzing topic boundaries from subtitles...")
+            update_job_progress(db, job_id, "running", 50 + int((s_idx / total_targets) * 25), "Analyzing topic boundaries from subtitles & chapters...")
 
         video_meta = {
             "id": vid_id,
@@ -126,6 +131,7 @@ async def smart_prepare_course(
             "title": src["title"] or "Lecture",
             "url": vid_url,
             "duration": total_dur,
+            "chapters": yt_chapters,
         }
         clips = await partition_video_async(video_meta, transcript_data=transcript_chunks, mode="auto", db_conn=db)
         if not clips:
@@ -221,7 +227,7 @@ async def smart_prepare_course(
 
             # Store sliced transcript chunks directly for each new semantic clip
             clip_chunks = [
-                ch for ch in transcript_chunks
+                ch for ch in (transcript_chunks or [])
                 if int(ch.get("start_sec", 0)) >= c_start and int(ch.get("start_sec", 0)) < c_end
             ]
             for c_idx, ch in enumerate(clip_chunks):

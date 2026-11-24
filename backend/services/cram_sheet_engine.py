@@ -402,7 +402,17 @@ Assemble the Master Last-Night Exam Cram Sheet with these 6 sections:
         user_secrets=user_secrets,
     )
     if final_md and len(final_md.strip()) >= 150:
-        return _RAW_CHK_RE.sub("", final_md).strip()
+        cleaned_cram = _RAW_CHK_RE.sub("", final_md).strip()
+        cleaned_cram = re.sub(
+            r"^(?:(?:here'?s|sure|certainly|below is|as an expert)[^\n]*\n+)+",
+            "",
+            cleaned_cram,
+            flags=re.IGNORECASE,
+        ).lstrip("- \n")
+        expected_h1 = f"# {course_title} — Last-Night Exam Cram Sheet"
+        if not cleaned_cram.startswith("# "):
+            cleaned_cram = f"{expected_h1}\n\n{cleaned_cram}"
+        return cleaned_cram
     return None
 
 

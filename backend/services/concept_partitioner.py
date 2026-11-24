@@ -691,62 +691,70 @@ RULES:
 }}
 """
 
-    model_name = "gemini-2.5-flash"
+    model_name = settings.GEMINI_MODEL
     raw_clips = None
     try:
+        active_p = (settings.ACTIVE_LLM_PROVIDER or "auto").lower()
+        providers = ["gemini", "groq", "openrouter"]
+        if active_p in providers:
+            providers.remove(active_p)
+            providers.insert(0, active_p)
+
         with httpx.Client(timeout=25.0) as client:
-            if not raw_clips and settings.GEMINI_API_KEY:
-                try:
-                    model_name = "gemini-2.5-flash"
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
-                    _gemini_headers = {"x-goog-api-key": settings.GEMINI_API_KEY}
-                    payload = {
-                        "contents": [{"parts": [{"text": prompt}]}],
-                        "systemInstruction": {"parts": [{"text": system_instruction}]},
-                        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2}
-                    }
-                    resp = client.post(url, json=payload, headers=_gemini_headers)
-                    if resp.status_code == 200:
-                        raw_clips = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-                except Exception as ge:
-                    logger.warning(f"Gemini semantic partition attempt failed: {ge}")
-            if not raw_clips and settings.GROQ_API_KEY:
-                try:
-                    model_name = "llama-3.3-70b-versatile"
-                    url = "https://api.groq.com/openai/v1/chat/completions"
-                    headers = {"Authorization": f"Bearer {settings.GROQ_API_KEY}", "Content-Type": "application/json"}
-                    payload = {
-                        "model": model_name,
-                        "messages": [
-                            {"role": "system", "content": system_instruction},
-                            {"role": "user", "content": prompt}
-                        ],
-                        "temperature": 0.2,
-                        "response_format": {"type": "json_object"}
-                    }
-                    resp = client.post(url, json=payload, headers=headers)
-                    if resp.status_code == 200:
-                        raw_clips = resp.json()["choices"][0]["message"]["content"]
-                except Exception as gqe:
-                    logger.warning(f"Groq semantic partition attempt failed: {gqe}")
-            if not raw_clips and settings.OPENROUTER_API_KEY:
-                try:
-                    model_name = "google/gemini-2.5-flash"
-                    url = "https://openrouter.ai/api/v1/chat/completions"
-                    headers = {"Authorization": f"Bearer {settings.OPENROUTER_API_KEY}", "Content-Type": "application/json"}
-                    payload = {
-                        "model": model_name,
-                        "messages": [
-                            {"role": "system", "content": system_instruction},
-                            {"role": "user", "content": prompt}
-                        ],
-                        "temperature": 0.2
-                    }
-                    resp = client.post(url, json=payload, headers=headers)
-                    if resp.status_code == 200:
-                        raw_clips = resp.json()["choices"][0]["message"]["content"]
-                except Exception as ore:
-                    logger.warning(f"OpenRouter semantic partition attempt failed: {ore}")
+            for p in providers:
+                if p == "gemini" and not raw_clips and settings.GEMINI_API_KEY:
+                    try:
+                        model_name = settings.GEMINI_MODEL
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+                        _gemini_headers = {"x-goog-api-key": settings.GEMINI_API_KEY}
+                        payload = {
+                            "contents": [{"parts": [{"text": prompt}]}],
+                            "systemInstruction": {"parts": [{"text": system_instruction}]},
+                            "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2}
+                        }
+                        resp = client.post(url, json=payload, headers=_gemini_headers)
+                        if resp.status_code == 200:
+                            raw_clips = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    except Exception as ge:
+                        logger.warning(f"Gemini semantic partition attempt failed: {ge}")
+                elif p == "groq" and not raw_clips and settings.GROQ_API_KEY:
+                    try:
+                        model_name = settings.GROQ_MODEL
+                        url = "https://api.groq.com/openai/v1/chat/completions"
+                        headers = {"Authorization": f"Bearer {settings.GROQ_API_KEY}", "Content-Type": "application/json"}
+                        payload = {
+                            "model": model_name,
+                            "messages": [
+                                {"role": "system", "content": system_instruction},
+                                {"role": "user", "content": prompt}
+                            ],
+                            "temperature": 0.2,
+                            "response_format": {"type": "json_object"}
+                        }
+                        resp = client.post(url, json=payload, headers=headers)
+                        if resp.status_code == 200:
+                            raw_clips = resp.json()["choices"][0]["message"]["content"]
+                    except Exception as gqe:
+                        logger.warning(f"Groq semantic partition attempt failed: {gqe}")
+                elif p == "openrouter" and not raw_clips and settings.OPENROUTER_API_KEY:
+                    try:
+                        model_name = settings.OPENROUTER_MODEL
+                        url = "https://openrouter.ai/api/v1/chat/completions"
+                        headers = {"Authorization": f"Bearer {settings.OPENROUTER_API_KEY}", "Content-Type": "application/json"}
+                        payload = {
+                            "model": model_name,
+                            "messages": [
+                                {"role": "system", "content": system_instruction},
+                                {"role": "user", "content": prompt}
+                            ],
+                            "temperature": 0.2
+                        }
+                        resp = client.post(url, json=payload, headers=headers)
+                        if resp.status_code == 200:
+                            msg = resp.json()["choices"][0]["message"]
+                            raw_clips = msg.get("content") or msg.get("reasoning", "")
+                    except Exception as ore:
+                        logger.warning(f"OpenRouter semantic partition attempt failed: {ore}")
 
         if raw_clips:
             cleaned_json = raw_clips.strip()
